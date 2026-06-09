@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
 
 // Update both constants after deploying the backend
-export const API_BASE    = 'https://openpilot.tenlabs.io';
-export const UPGRADE_URL = 'https://openpilot.tenlabs.io/upgrade';
+export const API_BASE    = 'https://openpilot-backend.vercel.app';
+export const UPGRADE_URL = 'https://openpilot-backend.vercel.app/upgrade';
 
 const CACHE_TTL_MS    = 60 * 60 * 1000;          // 1 hour — normal refresh interval
 const OFFLINE_TTL_MS  = 7 * 24 * 60 * 60 * 1000; // 7 days — offline grace period
