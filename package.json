@@ -1,0 +1,127 @@
+{
+  "name": "openpilot",
+  "displayName": "OpenPilot",
+  "description": "Free, open-source AI coding assistant. Reads your codebase, edits files, and pushes to GitHub — powered by Ollama (free/local), Claude, or OpenAI. No Copilot required.",
+  "version": "0.1.0",
+  "publisher": "TenLabs",
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Adilaw12/openpilot-vscode"
+  },
+  "homepage": "https://github.com/Adilaw12/openpilot-vscode#readme",
+  "bugs": {
+    "url": "https://github.com/Adilaw12/openpilot-vscode/issues"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": ["AI", "Chat", "Programming Languages", "Other"],
+  "keywords": ["ai", "copilot", "ollama", "claude", "openai", "free", "chatbot", "coding assistant", "cursor", "agent"],
+  "galleryBanner": {
+    "color": "#1e1e2e",
+    "theme": "dark"
+  },
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "openpilot.openChat",
+        "title": "OpenPilot: Open Chat"
+      },
+      {
+        "command": "openpilot.aiCommit",
+        "title": "OpenPilot: AI Commit"
+      },
+      {
+        "command": "openpilot.configure",
+        "title": "OpenPilot: Configure AI Backend"
+      },
+      {
+        "command": "openpilot.inlineEdit",
+        "title": "OpenPilot: Edit with AI"
+      },
+      {
+        "command": "openpilot.activateLicense",
+        "title": "OpenPilot: Activate Pro License"
+      },
+      {
+        "command": "openpilot.upgradeToPro",
+        "title": "OpenPilot: Upgrade to Pro"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "openpilot.openChat",
+        "key": "ctrl+alt+o",
+        "mac": "cmd+alt+o"
+      },
+      {
+        "command": "openpilot.inlineEdit",
+        "key": "ctrl+alt+k",
+        "mac": "cmd+alt+k",
+        "when": "editorTextFocus && editorHasSelection"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "openpilot.inlineEdit",
+          "when": "editorHasSelection",
+          "group": "1_modification@1"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "OpenPilot",
+      "properties": {
+        "openpilot.backend": {
+          "type": "string",
+          "enum": ["ollama", "anthropic", "openai"],
+          "enumDescriptions": [
+            "Local AI via Ollama — completely free, runs on your machine",
+            "Anthropic Claude API — pay-as-you-go, very cheap",
+            "OpenAI API — pay-as-you-go"
+          ],
+          "default": "ollama",
+          "description": "AI backend to use for OpenPilot"
+        },
+        "openpilot.apiKey": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "API key for cloud AI backends (Anthropic or OpenAI). Leave blank if using Ollama."
+        },
+        "openpilot.model": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Model override. Leave blank for the recommended default per backend:\n- Ollama: `qwen2.5-coder`\n- Anthropic: `claude-haiku-4-5`\n- OpenAI: `gpt-4o-mini`"
+        },
+        "openpilot.ollamaUrl": {
+          "type": "string",
+          "default": "http://localhost:11434",
+          "description": "Ollama server URL (only needed if Ollama runs on a non-default port)"
+        },
+        "openpilot.licenseKey": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "OpenPilot Pro license key (format: `OP-XXXX-XXXX-XXXX-XXXX`). Get one at [openpilot.tenlabs.io/upgrade](https://openpilot.tenlabs.io/upgrade)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.4.0",
+    "@vscode/vsce": "^2.24.0"
+  }
+}

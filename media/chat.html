@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenPilot</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  display: flex; flex-direction: column; height: 100vh;
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  color: var(--vscode-editor-foreground);
+  background: var(--vscode-editor-background);
+}
+/* ── upgrade banner ── */
+#upgrade-banner {
+  display: none; align-items: center; justify-content: space-between;
+  padding: 6px 12px; font-size: 0.82em;
+  background: linear-gradient(90deg, #3a1f6e 0%, #1a3a6e 100%);
+  color: #e8e0ff;
+}
+#upgrade-banner a {
+  color: #c8b8ff; cursor: pointer; text-decoration: underline;
+  background: none; border: none; font-size: inherit; padding: 0;
+}
+#upgrade-banner .banner-close {
+  opacity: 0.6; cursor: pointer; background: none; border: none;
+  color: inherit; font-size: 1em; padding: 0 4px;
+}
+/* ── upgrade hint (after free response) ── */
+.upgrade-hint {
+  font-size: 0.82em; opacity: 0.75; padding: 5px 10px;
+  border-radius: 6px; border: 1px dashed var(--vscode-widget-border, #555);
+  display: flex; align-items: center; gap: 8px;
+}
+.upgrade-hint button {
+  background: none; border: none; color: var(--vscode-textLink-foreground, #6db3f2);
+  cursor: pointer; font-size: inherit; padding: 0; text-decoration: underline;
+}
+#messages {
+  flex: 1; overflow-y: auto; padding: 12px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+/* ── message bubbles ── */
+.msg { display: flex; flex-direction: column; gap: 4px; }
+.msg.user { align-items: flex-end; }
+.msg.assistant { align-items: flex-start; }
+.label { font-size: 0.75em; opacity: 0.6; padding: 0 4px; }
+.bubble { padding: 8px 12px; border-radius: 8px; line-height: 1.5; max-width: 90%; }
+.user .bubble {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  white-space: pre-wrap;
+}
+.assistant .bubble {
+  background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+  border: 1px solid var(--vscode-widget-border, #444);
+}
+/* ── code in bubbles ── */
+pre {
+  background: var(--vscode-textCodeBlock-background);
+  border-radius: 4px; padding: 8px; overflow-x: auto; margin: 6px 0;
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--vscode-editor-font-size);
+  white-space: pre;
+}
+code {
+  font-family: var(--vscode-editor-font-family); font-size: 0.9em;
+  background: var(--vscode-textCodeBlock-background);
+  padding: 1px 4px; border-radius: 3px;
+}
+pre code { background: none; padding: 0; font-size: inherit; }
+strong { font-weight: bold; }
+.typing { opacity: 0.4; }
+/* ── tool status cards ── */
+.tool-card {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 5px 10px; border-radius: 6px; font-size: 0.85em;
+  border-left: 3px solid transparent;
+  background: var(--vscode-editorHoverWidget-background, var(--vscode-sideBar-background));
+  max-width: 90%;
+}
+.tool-card.tool-running { border-color: var(--vscode-progressBar-background, #007acc); opacity: 0.8; }
+.tool-card.tool-done    { border-color: #4caf50; }
+.tool-card.tool-error   { border-color: var(--vscode-errorForeground, #f48771); }
+.tool-header { display: flex; align-items: center; gap: 6px; }
+.tool-icon { font-size: 0.9em; min-width: 14px; }
+.tool-label { opacity: 0.85; }
+.tool-output {
+  font-family: var(--vscode-editor-font-family); font-size: 0.85em;
+  white-space: pre-wrap; opacity: 0.65;
+  max-height: 80px; overflow: hidden;
+  border-top: 1px solid var(--vscode-widget-border, #444);
+  margin-top: 4px; padding-top: 4px;
+}
+/* ── approval cards ── */
+.approval-card {
+  border: 1px solid var(--vscode-widget-border, #444);
+  border-radius: 8px; padding: 10px 12px;
+  background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+  max-width: 90%; display: flex; flex-direction: column; gap: 8px;
+}
+.approval-desc { font-weight: bold; font-size: 0.9em; }
+.approval-preview {
+  font-family: var(--vscode-editor-font-family);
+  font-size: 0.8em; white-space: pre-wrap;
+  background: var(--vscode-textCodeBlock-background);
+  padding: 6px 8px; border-radius: 4px;
+  max-height: 150px; overflow-y: auto;
+}
+.approval-actions { display: flex; gap: 8px; }
+.approve-btn, .reject-btn {
+  border: none; border-radius: 4px; padding: 4px 14px;
+  cursor: pointer; font-size: 0.85em;
+}
+.approve-btn {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+.approve-btn:hover { background: var(--vscode-button-hoverBackground); }
+.reject-btn {
+  background: var(--vscode-button-secondaryBackground, #444);
+  color: var(--vscode-button-secondaryForeground, #ccc);
+}
+.reject-btn:hover { background: var(--vscode-button-secondaryHoverBackground, #555); }
+.approval-result { font-size: 0.85em; opacity: 0.7; }
+/* ── input row ── */
+#input-row {
+  display: flex; gap: 8px; padding: 10px;
+  border-top: 1px solid var(--vscode-widget-border, #444);
+  background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+}
+#input {
+  flex: 1;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: 4px; padding: 6px 10px;
+  font-family: var(--vscode-font-family); font-size: var(--vscode-font-size);
+  resize: none; min-height: 36px; max-height: 120px; overflow-y: auto;
+}
+#input:focus { outline: 1px solid var(--vscode-focusBorder); border-color: var(--vscode-focusBorder); }
+#send {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: none; border-radius: 4px; padding: 6px 16px;
+  cursor: pointer; font-size: var(--vscode-font-size); align-self: flex-end;
+}
+#send:hover { background: var(--vscode-button-hoverBackground); }
+#send:disabled { opacity: 0.5; cursor: not-allowed; }
+/* ── welcome ── */
+.welcome { opacity: 0.7; text-align: center; margin: auto; padding: 24px; }
+.welcome h2 { margin-bottom: 8px; font-size: 1.3em; }
+.welcome p { margin-bottom: 12px; }
+.welcome ul { list-style: none; line-height: 2.2; text-align: left; display: inline-block; }
+.welcome kbd {
+  background: var(--vscode-keybindingLabel-background);
+  border: 1px solid var(--vscode-keybindingLabel-border, #666);
+  border-radius: 3px; padding: 1px 5px; font-size: 0.85em;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinning { display: inline-block; animation: spin 1s linear infinite; }
+</style>
+</head>
+<body>
+<div id="upgrade-banner">
+  <span>&#x26A1; <strong>OpenPilot Free</strong> &mdash; agent tools (multi-file edits, codebase search, terminal) require Pro</span>
+  <span>
+    <button onclick="vscode.postMessage({type:'upgrade'})">Upgrade $6/mo</button>
+    &nbsp;&nbsp;
+    <button onclick="vscode.postMessage({type:'activate-license'})">Enter key</button>
+    &nbsp;&nbsp;
+    <button class="banner-close" onclick="document.getElementById('upgrade-banner').style.display='none'" title="Dismiss">&times;</button>
+  </span>
+</div>
+<div id="messages">
+  <div class="welcome" id="welcome">
+    <h2>&#x1F680; OpenPilot</h2>
+    <p>Free AI coding assistant &mdash; no Copilot required</p>
+    <ul>
+      <li>Ask anything about your code</li>
+      <li>AI reads files, edits code, and pushes to GitHub</li>
+      <li><code>/commit</code> &mdash; AI-generate a commit message</li>
+      <li><code>/push</code> &mdash; push to remote</li>
+      <li><code>/status</code> &mdash; git status</li>
+      <li>Select code + <kbd>Ctrl+Alt+K</kbd> for inline edit</li>
+    </ul>
+  </div>
+</div>
+<div id="input-row">
+  <textarea id="input" rows="1" placeholder="Ask anything… (Shift+Enter for newline)"></textarea>
+  <button id="send">Send</button>
+</div>
+<script>
+const vscode = acquireVsCodeApi();
+const msgsEl = document.getElementById('messages');
+const inputEl = document.getElementById('input');
+const sendBtn = document.getElementById('send');
+let busy = false;
+let currentBubble = null;
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function renderMarkdown(text) {
+  // Split on triple-backtick fences without using backtick literals in source
+  var FENCE = String.fromCharCode(96, 96, 96);
+  var TICK  = String.fromCharCode(96);
+  var parts = text.split(FENCE);
+  var html  = '';
+  for (var i = 0; i < parts.length; i++) {
+    if (i % 2 === 0) {
+      var t = escHtml(parts[i]);
+      // **bold**
+      t = t.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+      // `inline code` — build regex dynamically to avoid literal backtick in source
+      var inlineRe = new RegExp(TICK + '([^' + TICK + '\\n]+)' + TICK, 'g');
+      t = t.replace(inlineRe, '<code>$1</code>');
+      // ### headings
+      t = t.replace(/^#{1,3} (.+)$/gm, '<strong>$1</strong>');
+      // newlines → <br>
+      t = t.replace(/\n/g, '<br>');
+      html += t;
+    } else {
+      var nl   = parts[i].indexOf('\n');
+      var code = nl >= 0 ? parts[i].slice(nl + 1) : parts[i];
+      html += '<pre><code>' + escHtml(code) + '</code></pre>';
+    }
+  }
+  return html;
+}
+
+function removeWelcome() {
+  var w = document.getElementById('welcome');
+  if (w) w.remove();
+}
+
+function addUserMsg(text) {
+  removeWelcome();
+  var div = document.createElement('div');
+  div.className = 'msg user';
+  var label = document.createElement('span');
+  label.className = 'label';
+  label.textContent = 'You';
+  var bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.textContent = text;
+  div.appendChild(label);
+  div.appendChild(bubble);
+  msgsEl.appendChild(div);
+  scroll();
+}
+
+function startAssistantMsg() {
+  removeWelcome();
+  var div = document.createElement('div');
+  div.className = 'msg assistant';
+  var label = document.createElement('span');
+  label.className = 'label';
+  label.textContent = 'OpenPilot';
+  var bubble = document.createElement('div');
+  bubble.className = 'bubble typing';
+  bubble.innerHTML = '<span class="spinning">&#x21BB;</span> thinking&hellip;';
+  div.appendChild(label);
+  div.appendChild(bubble);
+  msgsEl.appendChild(div);
+  scroll();
+  currentBubble = bubble;
+}
+
+function setCurrentText(text) {
+  if (!currentBubble) return;
+  currentBubble.classList.remove('typing');
+  if (text && text.trim()) {
+    currentBubble.innerHTML = renderMarkdown(text);
+  } else {
+    currentBubble.innerHTML = '<span class="spinning">&#x21BB;</span> thinking&hellip;';
+    currentBubble.classList.add('typing');
+  }
+  scroll();
+}
+
+function addToolStatus(id, state, label) {
+  var card = document.createElement('div');
+  card.id = 'tool-' + id;
+  card.className = 'tool-card tool-' + state;
+  var header = document.createElement('div');
+  header.className = 'tool-header';
+  var icon = document.createElement('span');
+  icon.className = 'tool-icon';
+  icon.textContent = state === 'running' ? '⟳' : state === 'done' ? '✓' : '✗';
+  if (state === 'running') icon.classList.add('spinning');
+  var lbl = document.createElement('span');
+  lbl.className = 'tool-label';
+  lbl.textContent = label;
+  header.appendChild(icon);
+  header.appendChild(lbl);
+  card.appendChild(header);
+  msgsEl.appendChild(card);
+  scroll();
+}
+
+function updateToolStatus(id, state, output) {
+  var card = document.getElementById('tool-' + id);
+  if (!card) return;
+  card.className = 'tool-card tool-' + state;
+  var icon = card.querySelector('.tool-icon');
+  if (icon) {
+    icon.classList.remove('spinning');
+    icon.textContent = state === 'done' ? '✓' : '✗';
+  }
+  if (output) {
+    var detail = document.createElement('div');
+    detail.className = 'tool-output';
+    detail.textContent = output;
+    card.appendChild(detail);
+  }
+  scroll();
+}
+
+function addApprovalCard(id, description, preview) {
+  var card = document.createElement('div');
+  card.className = 'approval-card';
+  card.id = 'approval-' + id;
+
+  var desc = document.createElement('div');
+  desc.className = 'approval-desc';
+  desc.textContent = description;
+
+  var pre = document.createElement('pre');
+  pre.className = 'approval-preview';
+  pre.textContent = preview;
+
+  var actions = document.createElement('div');
+  actions.className = 'approval-actions';
+  actions.id = 'approval-actions-' + id;
+
+  var approveBtn = document.createElement('button');
+  approveBtn.className = 'approve-btn';
+  approveBtn.textContent = 'Approve';
+  approveBtn.onclick = function() { respondApproval(id, true); };
+
+  var rejectBtn = document.createElement('button');
+  rejectBtn.className = 'reject-btn';
+  rejectBtn.textContent = 'Reject';
+  rejectBtn.onclick = function() { respondApproval(id, false); };
+
+  actions.appendChild(approveBtn);
+  actions.appendChild(rejectBtn);
+
+  card.appendChild(desc);
+  card.appendChild(pre);
+  card.appendChild(actions);
+  msgsEl.appendChild(card);
+  scroll();
+}
+
+function respondApproval(id, approved) {
+  var actions = document.getElementById('approval-actions-' + id);
+  if (actions) {
+    var result = document.createElement('span');
+    result.className = 'approval-result';
+    result.textContent = approved ? '✓ Approved' : '✗ Rejected';
+    actions.replaceWith(result);
+  }
+  vscode.postMessage({ type: 'approval-response', id: id, approved: approved });
+}
+
+function endMsg() {
+  currentBubble = null;
+  setBusy(false);
+}
+
+function setBusy(val) {
+  busy = val;
+  sendBtn.disabled = val;
+  inputEl.disabled = val;
+  if (!val) inputEl.focus();
+}
+
+function scroll() {
+  msgsEl.scrollTop = msgsEl.scrollHeight;
+}
+
+function send() {
+  var text = inputEl.value.trim();
+  if (!text || busy) return;
+  inputEl.value = '';
+  inputEl.style.height = '';
+  setBusy(true);
+  vscode.postMessage({ type: 'send', text: text });
+}
+
+sendBtn.addEventListener('click', send);
+inputEl.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+});
+inputEl.addEventListener('input', function() {
+  inputEl.style.height = '';
+  inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px';
+});
+
+function showUpgradeHint() {
+  var hint = document.createElement('div');
+  hint.className = 'upgrade-hint';
+  hint.innerHTML =
+    '&#x26A1; Want AI to read your codebase &amp; edit files? &nbsp;' +
+    '<button onclick="vscode.postMessage({type:\'upgrade\'})">Upgrade to Pro &mdash; $6/mo</button>' +
+    ' &nbsp;or&nbsp; ' +
+    '<button onclick="vscode.postMessage({type:\'activate-license\'})">Enter license key</button>';
+  msgsEl.appendChild(hint);
+  scroll();
+}
+
+window.addEventListener('message', function(e) {
+  var msg = e.data;
+  switch (msg.type) {
+    case 'user':             addUserMsg(msg.text); break;
+    case 'assistant-start':  startAssistantMsg(); break;
+    case 'set-text':         setCurrentText(msg.text); break;
+    case 'tool-status':      addToolStatus(msg.id, msg.state, msg.label); break;
+    case 'tool-update':      updateToolStatus(msg.id, msg.state, msg.output); break;
+    case 'approval-request': addApprovalCard(msg.id, msg.description, msg.preview); break;
+    case 'assistant-end':    endMsg(); break;
+    case 'show-upgrade-hint': showUpgradeHint(); break;
+    case 'license-status': {
+      var banner = document.getElementById('upgrade-banner');
+      if (msg.isPro) {
+        if (banner) banner.style.display = 'none';
+      } else {
+        if (banner) banner.style.display = 'flex';
+      }
+      break;
+    }
+  }
+});
+</script>
+</body>
+</html>
