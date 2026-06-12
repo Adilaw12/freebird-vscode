@@ -1,11 +1,10 @@
 import * as vscode from 'vscode';
 
-// Update both constants after deploying the backend
 export const API_BASE    = 'https://openpilot-backend.vercel.app';
-export const UPGRADE_URL = 'https://openpilot-backend.vercel.app/upgrade';
+export const UPGRADE_URL = 'https://buy.stripe.com/4gMeVf1K51ZA2604KxfAc02';
 
-const CACHE_TTL_MS    = 60 * 60 * 1000;          // 1 hour — normal refresh interval
-const OFFLINE_TTL_MS  = 7 * 24 * 60 * 60 * 1000; // 7 days — offline grace period
+const CACHE_TTL_MS   = 60 * 60 * 1000;          // 1 hour
+const OFFLINE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days offline grace
 
 export interface LicenseStatus {
     isPro: boolean;
@@ -17,7 +16,12 @@ interface CacheEntry {
     status: LicenseStatus;
     ts: number;
     key: string;
+    everValidated: boolean;
 }
+
+// ── In-memory cache: survives for the VS Code session ────────────────────────
+// Avoids hitting globalState (async) or the network on every message send.
+let _memCache: { status: LicenseStatus; ts: number; key: string } | null = null;
 
 export async function getLicenseStatus(context: vscode.ExtensionContext): Promise<LicenseStatus> {
     const key = vscode.workspace
@@ -28,22 +32,28 @@ export async function getLicenseStatus(context: vscode.ExtensionContext): Promis
 
     if (!key) return { isPro: false };
 
-    const cached = context.globalState.get<CacheEntry>('licenseCache');
-
-    // Return cached result if it's fresh and the key hasn't changed
-    if (cached && cached.key === key && Date.now() - cached.ts < CACHE_TTL_MS) {
-        return cached.status;
+    // 1. In-memory cache — zero I/O, sub-millisecond
+    if (_memCache && _memCache.key === key && Date.now() - _memCache.ts < CACHE_TTL_MS) {
+        return _memCache.status;
     }
 
+    // 2. Persistent cache (globalState) — fast local read, no network
+    const persisted = context.globalState.get<CacheEntry>('licenseCache');
+    if (persisted && persisted.key === key && Date.now() - persisted.ts < CACHE_TTL_MS) {
+        _memCache = { status: persisted.status, ts: persisted.ts, key };
+        return persisted.status;
+    }
+
+    // 3. Network validation — only when cache is stale
     try {
         const res = await fetch(`${API_BASE}/api/validate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ key }),
-            signal: AbortSignal.timeout(5000)
+            signal: AbortSignal.timeout(6000)
         });
 
-        if (!res.ok) return { isPro: false };
+        if (!res.ok) return fallbackToCache(persisted, key);
 
         const data = await res.json() as { valid: boolean; email?: string; expiresAt?: string };
         const status: LicenseStatus = {
@@ -52,16 +62,39 @@ export async function getLicenseStatus(context: vscode.ExtensionContext): Promis
             expiresAt: data.expiresAt
         };
 
-        await context.globalState.update('licenseCache', { status, ts: Date.now(), key } satisfies CacheEntry);
+        if (status.isPro) {
+            const entry: CacheEntry = { status, ts: Date.now(), key, everValidated: true };
+            await context.globalState.update('licenseCache', entry);
+            _memCache = { status, ts: Date.now(), key };
+        } else {
+            await context.globalState.update('licenseCache', undefined);
+            _memCache = null;
+        }
+
         return status;
 
     } catch {
-        // Network failure — use stale cache within the 7-day grace period
-        if (cached && cached.key === key && Date.now() - cached.ts < OFFLINE_TTL_MS) {
-            return cached.status;
-        }
-        return { isPro: false };
+        return fallbackToCache(persisted, key);
     }
+}
+
+function fallbackToCache(cached: CacheEntry | null | undefined, key: string): LicenseStatus {
+    if (
+        cached &&
+        cached.key === key &&
+        cached.everValidated === true &&
+        cached.status.isPro === true &&
+        Date.now() - cached.ts < OFFLINE_TTL_MS
+    ) {
+        _memCache = { status: cached.status, ts: cached.ts, key };
+        return cached.status;
+    }
+    return { isPro: false };
+}
+
+export async function warmLicenseCache(context: vscode.ExtensionContext): Promise<void> {
+    // Called at extension activation — runs in background, never blocks startup
+    getLicenseStatus(context).catch(() => {});
 }
 
 export async function activateLicense(
@@ -70,10 +103,12 @@ export async function activateLicense(
 ): Promise<LicenseStatus> {
     const normalised = key.trim().toUpperCase();
     await vscode.workspace.getConfiguration('openpilot').update('licenseKey', normalised, true);
-    await context.globalState.update('licenseCache', undefined); // force re-check
+    await context.globalState.update('licenseCache', undefined);
+    _memCache = null; // clear in-memory cache too
     return getLicenseStatus(context);
 }
 
 export function clearLicenseCache(context: vscode.ExtensionContext): void {
     context.globalState.update('licenseCache', undefined);
+    _memCache = null;
 }

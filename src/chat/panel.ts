@@ -5,8 +5,14 @@ import { getProvider } from '../ai';
 import { GitService } from '../git/service';
 import { Message } from '../ai/provider';
 import { runAgentLoop, AgentEvent, stripToolBlocks } from '../agent/loop';
-import { buildFileContext } from './contextBuilder';
+import { buildFileContext, resolveMentions, listWorkspaceFiles } from './contextBuilder';
 import { getLicenseStatus, UPGRADE_URL } from '../license/validator';
+
+// Keep history to this many message pairs before trimming oldest turns
+const MAX_HISTORY_PAIRS = 20;
+
+// How many upgrade hints to show before going quiet
+const MAX_UPGRADE_HINTS = 2;
 
 const FREE_SYSTEM: Message[] = [
     {
@@ -17,9 +23,8 @@ const FREE_SYSTEM: Message[] = [
             'Use markdown with language-tagged code blocks. Be concise but thorough.\n\n' +
             'IMPORTANT: You are running in free mode and cannot access files or run commands. ' +
             'When the user asks you to read files, edit across multiple files, search the codebase, ' +
-            'or run terminal commands, explain that OpenPilot Pro enables these capabilities and ' +
-            'encourage them to upgrade. In the meantime, ask them to paste the relevant code ' +
-            'directly into the chat so you can still help.'
+            'or run terminal commands, explain that OpenPilot Pro enables these capabilities. ' +
+            'In the meantime, ask them to paste the relevant code directly into the chat.'
     },
     {
         role: 'assistant',
@@ -35,6 +40,7 @@ export class ChatPanel {
     private readonly disposables: vscode.Disposable[] = [];
     private readonly pendingApprovals = new Map<string, (approved: boolean) => void>();
     private rawBuffer = '';
+    private upgradeHintsShown = 0;
 
     static open(context: vscode.ExtensionContext, git: GitService, initialCommand?: string) {
         if (ChatPanel.current) {
@@ -53,15 +59,23 @@ export class ChatPanel {
             vscode.ViewColumn.Beside,
             { enableScripts: true, retainContextWhenHidden: true }
         );
-        this.panel.iconPath = new vscode.ThemeIcon('rocket');
+        this.panel.iconPath = vscode.Uri.joinPath(context.extensionUri, 'media', 'icon.png');
         this.panel.webview.html = fs.readFileSync(
             path.join(context.extensionPath, 'media', 'chat.html'), 'utf8'
         );
+
+        // Send workspace file list so the UI can power @ autocomplete
+        this.sendWorkspaceFiles();
 
         this.panel.webview.onDidReceiveMessage(async (msg: any) => {
             switch (msg.type) {
                 case 'send':
                     await this.handleMessage(msg.text, git);
+                    break;
+                case 'clear':
+                    this.history = [];
+                    this.upgradeHintsShown = 0;
+                    this.post({ type: 'cleared' });
                     break;
                 case 'approval-response': {
                     const resolve = this.pendingApprovals.get(msg.id);
@@ -99,31 +113,79 @@ export class ChatPanel {
         if (command === 'commit') this.handleCommit(git);
     }
 
+    private async sendWorkspaceFiles() {
+        try {
+            const files = await listWorkspaceFiles(300);
+            this.post({ type: 'workspace-files', files });
+        } catch { /* no workspace open */ }
+    }
+
     private async handleMessage(text: string, git: GitService) {
         const trimmed = text.trim();
 
+        // Slash commands
         if (trimmed === '/commit') { await this.handleCommit(git); return; }
         if (trimmed === '/push')   { await this.handlePush(git);   return; }
         if (trimmed === '/status') { await this.handleStatus(git); return; }
+        if (trimmed === '/clear')  {
+            this.history = [];
+            this.upgradeHintsShown = 0;
+            this.post({ type: 'cleared' });
+            return;
+        }
+        if (trimmed === '/help') {
+            this.post({ type: 'user', text: '/help' });
+            this.post({ type: 'assistant-start' });
+            this.post({
+                type: 'set-text',
+                text: [
+                    '**Available commands:**',
+                    '',
+                    '`/commit` — AI-generate a git commit message',
+                    '`/push` — push current branch to remote',
+                    '`/status` — show git status',
+                    '`/clear` — clear conversation history',
+                    '`/help` — show this message',
+                    '',
+                    '**@ mentions:**',
+                    'Type `@filename` to inject a file into your message.',
+                    'Example: `explain the logic in @src/utils/parser.ts`',
+                    '',
+                    '**Keyboard shortcuts:**',
+                    '`Ctrl+Alt+O` — open chat',
+                    '`Ctrl+Alt+K` — inline edit selected code (Pro)',
+                ].join('\n')
+            });
+            this.post({ type: 'assistant-end' });
+            return;
+        }
 
-        this.post({ type: 'user', text });
+        // Resolve @mentions before displaying or sending
+        const { cleanText, mentionContext } = await resolveMentions(trimmed);
+        const displayText = trimmed; // show original (with @mentions) in UI
+        this.post({ type: 'user', text: displayText });
 
         const license = await getLicenseStatus(this.context);
 
         if (license.isPro) {
-            await this.runProChat(text, git);
+            await this.runProChat(cleanText, mentionContext, git);
         } else {
-            await this.runFreeChat(text);
+            await this.runFreeChat(cleanText, mentionContext);
         }
     }
 
     // ── Pro: full agentic loop ────────────────────────────────────────────────
 
-    private async runProChat(text: string, git: GitService) {
+    private async runProChat(text: string, mentionContext: string, git: GitService) {
+        // Inject active file context + mention context on first message or when relevant
+        const fileCtx = buildFileContext();
+        const contextPrefix = [mentionContext, fileCtx].filter(Boolean).join('\n');
+        const fullText = contextPrefix ? `${contextPrefix}\n\n${text}` : text;
+
         try {
             const newHistory = await runAgentLoop({
-                userMessage: text,
-                history: this.history,
+                userMessage: fullText,
+                history: this.trimHistory(this.history),
                 provider: getProvider(),
                 git,
                 onEvent: (event: AgentEvent) => this.handleAgentEvent(event),
@@ -133,7 +195,7 @@ export class ChatPanel {
                         this.post({ type: 'approval-request', id, description, preview });
                     })
             });
-            this.history = newHistory;
+            this.history = this.trimHistory(newHistory);
         } catch (err: any) {
             this.post({ type: 'assistant-start' });
             this.post({
@@ -173,13 +235,14 @@ export class ChatPanel {
 
     // ── Free: simple chat, no tools ───────────────────────────────────────────
 
-    private async runFreeChat(text: string) {
-        const fileContext = buildFileContext();
-        const userContent = fileContext ? `${fileContext}\n\n${text}` : text;
+    private async runFreeChat(text: string, mentionContext: string) {
+        const fileContext  = buildFileContext();
+        const contextParts = [mentionContext, fileContext].filter(Boolean).join('\n');
+        const userContent  = contextParts ? `${contextParts}\n\n${text}` : text;
 
         const messages: Message[] = [
             ...FREE_SYSTEM,
-            ...this.history,
+            ...this.trimHistory(this.history),
             { role: 'user', content: userContent }
         ];
 
@@ -196,14 +259,29 @@ export class ChatPanel {
             this.post({ type: 'set-text', text: response });
         }
 
-        this.history = [
+        this.history = this.trimHistory([
             ...this.history,
-            { role: 'user', content: text },
+            { role: 'user', content: text },      // store clean text (no context blob)
             { role: 'assistant', content: response }
-        ];
+        ]);
 
         this.post({ type: 'assistant-end' });
-        this.post({ type: 'show-upgrade-hint' });
+
+        // Show upgrade hint, but not on every single message
+        if (this.upgradeHintsShown < MAX_UPGRADE_HINTS) {
+            this.upgradeHintsShown++;
+            this.post({ type: 'show-upgrade-hint' });
+        }
+    }
+
+    // ── Trim history to avoid blowing context window ──────────────────────────
+
+    private trimHistory(messages: Message[]): Message[] {
+        // Each pair = 1 user + 1 assistant message
+        const maxMessages = MAX_HISTORY_PAIRS * 2;
+        if (messages.length <= maxMessages) return messages;
+        // Always keep the most recent messages; drop oldest pairs
+        return messages.slice(messages.length - maxMessages);
     }
 
     // ── Shared git commands ───────────────────────────────────────────────────

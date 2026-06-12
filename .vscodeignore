@@ -8,3 +8,5 @@ package-lock.json
 generate-icon.js
 .gitignore
 **/*.vsix
+backend/**
+.claude/**

@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0]
+
+### Added
+- `@file` mentions in chat — reference workspace files by name to inject their content into context
+- Workspace file list sent to the chat UI for `@` autocomplete
+- Workspace file-tree caching with file-watcher invalidation for faster agent responses
+
+### Changed
+- "AI Commit" and "Inline Edit" are now Pro features, with in-editor prompts to upgrade or activate a license
+- Faster license checks via an in-memory cache layer, with a stricter offline grace period (only for keys previously validated as Pro)
+- Rebranded UI strings from "OpenPilot" to "OpenPilot AI"
+
 ## [0.1.0] — 2025
 
 ### Added

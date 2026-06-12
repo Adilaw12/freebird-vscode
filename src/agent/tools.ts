@@ -52,19 +52,40 @@ export function parseToolCalls(text: string): ToolCall[] {
 
 export function stripToolBlocks(text: string): string {
     let result = text.replace(/```tool\s*\n[\s\S]*?```/g, '');
-    // Remove an unclosed tool block still streaming at the end
     result = result.replace(/```tool[\s\S]*$/, '');
     return result.trim();
 }
 
+// ── Workspace tree cache ──────────────────────────────────────────────────────
+// One scan per VS Code session; invalidated when files are created/deleted.
+let _workspaceTreeCache: string | null = null;
+let _cacheWatcher: vscode.FileSystemWatcher | undefined;
+
+export function initWorkspaceTreeCache(context: vscode.ExtensionContext): void {
+    // Warm the cache immediately in the background — don't block activation
+    getWorkspaceTree();
+
+    // Invalidate cache on file create/delete (not on every save — too noisy)
+    _cacheWatcher = vscode.workspace.createFileSystemWatcher('**/*', false, true, false);
+    _cacheWatcher.onDidCreate(() => { _workspaceTreeCache = null; });
+    _cacheWatcher.onDidDelete(() => { _workspaceTreeCache = null; });
+    context.subscriptions.push(_cacheWatcher);
+}
+
 export async function getWorkspaceTree(): Promise<string> {
+    if (_workspaceTreeCache !== null) return _workspaceTreeCache;
     try {
-        const uris = await vscode.workspace.findFiles('**/*', '{**/node_modules/**,**/.git/**}', 500);
-        return uris
+        const uris = await vscode.workspace.findFiles(
+            '**/*',
+            '{**/node_modules/**,**/.git/**,**/dist/**,**/out/**,**/build/**}',
+            500
+        );
+        _workspaceTreeCache = uris
             .map(u => vscode.workspace.asRelativePath(u))
             .filter(p => !p.startsWith('.'))
             .sort()
             .join('\n');
+        return _workspaceTreeCache;
     } catch {
         return '';
     }

@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>OpenPilot</title>
+<title>OpenPilot AI</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -13,428 +13,694 @@ body {
   font-size: var(--vscode-font-size);
   color: var(--vscode-editor-foreground);
   background: var(--vscode-editor-background);
+  overflow: hidden;
 }
+
+/* ── top bar ── */
+#top-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 12px; height: 38px; flex-shrink: 0;
+  border-bottom: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.08));
+  background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+}
+#top-bar-left { display: flex; align-items: center; gap: 8px; }
+#wordmark {
+  font-size: 0.88em; font-weight: 600; letter-spacing: 0.02em;
+  color: var(--vscode-editor-foreground); opacity: 0.9;
+}
+#pro-badge {
+  display: none;
+  font-size: 0.68em; font-weight: 700; letter-spacing: 0.06em;
+  padding: 2px 7px; border-radius: 20px;
+  background: rgba(108, 99, 255, 0.18); color: #a89aff;
+  border: 1px solid rgba(108,99,255,0.35);
+}
+#top-bar-right { display: flex; gap: 2px; }
+.icon-btn {
+  background: none; border: none; cursor: pointer;
+  color: var(--vscode-editor-foreground); opacity: 0.45;
+  font-size: 0.78em; padding: 4px 8px; border-radius: 4px;
+  display: flex; align-items: center; gap: 4px;
+  transition: opacity 0.15s, background 0.15s;
+}
+.icon-btn:hover { opacity: 0.85; background: var(--vscode-toolbar-hoverBackground, rgba(255,255,255,0.07)); }
+.icon-btn svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+
 /* ── upgrade banner ── */
 #upgrade-banner {
   display: none; align-items: center; justify-content: space-between;
-  padding: 6px 12px; font-size: 0.82em;
-  background: linear-gradient(90deg, #3a1f6e 0%, #1a3a6e 100%);
-  color: #e8e0ff;
+  padding: 7px 14px; font-size: 0.79em; flex-shrink: 0;
+  background: rgba(108, 99, 255, 0.10);
+  border-bottom: 1px solid rgba(108,99,255,0.2);
+  color: var(--vscode-editor-foreground);
 }
-#upgrade-banner a {
-  color: #c8b8ff; cursor: pointer; text-decoration: underline;
-  background: none; border: none; font-size: inherit; padding: 0;
+.banner-links { display: flex; align-items: center; gap: 12px; }
+.link-btn {
+  background: none; border: none; cursor: pointer; padding: 0;
+  color: #a89aff; font-size: inherit; text-decoration: underline;
+  text-underline-offset: 2px;
 }
-#upgrade-banner .banner-close {
-  opacity: 0.6; cursor: pointer; background: none; border: none;
-  color: inherit; font-size: 1em; padding: 0 4px;
+.banner-close {
+  background: none; border: none; cursor: pointer; opacity: 0.45;
+  color: var(--vscode-editor-foreground); font-size: 1em; padding: 0 2px; line-height: 1;
 }
-/* ── upgrade hint (after free response) ── */
-.upgrade-hint {
-  font-size: 0.82em; opacity: 0.75; padding: 5px 10px;
-  border-radius: 6px; border: 1px dashed var(--vscode-widget-border, #555);
-  display: flex; align-items: center; gap: 8px;
-}
-.upgrade-hint button {
-  background: none; border: none; color: var(--vscode-textLink-foreground, #6db3f2);
-  cursor: pointer; font-size: inherit; padding: 0; text-decoration: underline;
-}
+.banner-close:hover { opacity: 0.8; }
+
+/* ── messages ── */
 #messages {
-  flex: 1; overflow-y: auto; padding: 12px;
-  display: flex; flex-direction: column; gap: 10px;
+  flex: 1; overflow-y: auto; padding: 16px 14px 8px;
+  display: flex; flex-direction: column; gap: 12px;
+  scrollbar-width: thin;
 }
+#messages::-webkit-scrollbar { width: 4px; }
+#messages::-webkit-scrollbar-track { background: transparent; }
+#messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
+
+/* ── welcome screen ── */
+.welcome {
+  margin: auto; text-align: center; padding: 32px 24px;
+  display: flex; flex-direction: column; align-items: center; gap: 0;
+}
+.welcome-logo {
+  width: 52px; height: 52px; margin-bottom: 16px;
+}
+.welcome-title {
+  font-size: 1.2em; font-weight: 600; letter-spacing: 0.01em;
+  color: var(--vscode-editor-foreground); margin-bottom: 5px;
+}
+.welcome-sub {
+  font-size: 0.82em; opacity: 0.5; margin-bottom: 24px;
+}
+.welcome-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  width: 100%; max-width: 320px; text-align: left;
+}
+.welcome-card {
+  background: var(--vscode-editorWidget-background, rgba(255,255,255,0.04));
+  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.08));
+  border-radius: 8px; padding: 10px 12px;
+}
+.welcome-card-icon {
+  width: 16px; height: 16px; margin-bottom: 7px; opacity: 0.7;
+  stroke: var(--vscode-editor-foreground); fill: none; stroke-width: 1.8;
+  stroke-linecap: round; stroke-linejoin: round; display: block;
+}
+.welcome-card-label {
+  font-size: 0.79em; font-weight: 600; margin-bottom: 2px;
+  color: var(--vscode-editor-foreground);
+}
+.welcome-card-desc {
+  font-size: 0.73em; opacity: 0.5; line-height: 1.4;
+}
+.welcome-hint {
+  margin-top: 20px; font-size: 0.75em; opacity: 0.35;
+  display: flex; align-items: center; gap: 6px;
+}
+kbd {
+  background: var(--vscode-keybindingLabel-background, rgba(255,255,255,0.1));
+  border: 1px solid var(--vscode-keybindingLabel-border, rgba(255,255,255,0.2));
+  border-radius: 3px; padding: 1px 5px; font-family: var(--vscode-editor-font-family);
+  font-size: 0.9em;
+}
+
 /* ── message bubbles ── */
-.msg { display: flex; flex-direction: column; gap: 4px; }
+.msg { display: flex; flex-direction: column; gap: 3px; }
 .msg.user { align-items: flex-end; }
 .msg.assistant { align-items: flex-start; }
-.label { font-size: 0.75em; opacity: 0.6; padding: 0 4px; }
-.bubble { padding: 8px 12px; border-radius: 8px; line-height: 1.5; max-width: 90%; }
+.label {
+  font-size: 0.71em; opacity: 0.4; padding: 0 4px;
+  letter-spacing: 0.04em; text-transform: uppercase; font-weight: 600;
+}
+.bubble { padding: 9px 13px; border-radius: 10px; line-height: 1.6; max-width: 93%; }
 .user .bubble {
   background: var(--vscode-button-background);
   color: var(--vscode-button-foreground);
-  white-space: pre-wrap;
+  white-space: pre-wrap; border-radius: 10px 10px 3px 10px;
 }
 .assistant .bubble {
-  background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
-  border: 1px solid var(--vscode-widget-border, #444);
+  background: var(--vscode-editorWidget-background, rgba(255,255,255,0.04));
+  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.08));
+  border-radius: 3px 10px 10px 10px;
 }
-/* ── code in bubbles ── */
+
+/* ── markdown ── */
+.assistant .bubble h1, .assistant .bubble h2, .assistant .bubble h3 {
+  font-weight: 600; margin: 12px 0 5px; line-height: 1.3;
+  padding-bottom: 4px; border-bottom: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.08));
+}
+.assistant .bubble h1 { font-size: 1.15em; }
+.assistant .bubble h2 { font-size: 1.05em; }
+.assistant .bubble h3 { font-size: 0.97em; border-bottom: none; }
+.assistant .bubble p { margin: 5px 0; }
+.assistant .bubble ul, .assistant .bubble ol { padding-left: 18px; margin: 5px 0; }
+.assistant .bubble li { margin: 3px 0; line-height: 1.5; }
+.assistant .bubble blockquote {
+  border-left: 2px solid rgba(108,99,255,0.5); padding-left: 10px;
+  opacity: 0.75; margin: 8px 0; font-style: italic;
+}
+.assistant .bubble hr { border: none; border-top: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.08)); margin: 10px 0; }
+.assistant .bubble a { color: var(--vscode-textLink-foreground, #6db3f2); }
 pre {
-  background: var(--vscode-textCodeBlock-background);
-  border-radius: 4px; padding: 8px; overflow-x: auto; margin: 6px 0;
+  background: var(--vscode-textCodeBlock-background, rgba(0,0,0,0.3));
+  border-radius: 6px; padding: 10px 12px; overflow-x: auto; margin: 8px 0;
   font-family: var(--vscode-editor-font-family);
-  font-size: var(--vscode-editor-font-size);
-  white-space: pre;
+  font-size: calc(var(--vscode-editor-font-size) * 0.92);
+  white-space: pre; position: relative;
+  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.06));
 }
+.copy-code-btn {
+  position: absolute; top: 6px; right: 6px;
+  background: var(--vscode-button-secondaryBackground, rgba(255,255,255,0.08));
+  color: var(--vscode-editor-foreground);
+  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.12));
+  border-radius: 4px; padding: 2px 8px;
+  font-size: 0.72em; cursor: pointer; opacity: 0;
+  transition: opacity 0.15s; font-family: var(--vscode-font-family);
+}
+pre:hover .copy-code-btn { opacity: 0.7; }
+.copy-code-btn:hover { opacity: 1 !important; }
 code {
-  font-family: var(--vscode-editor-font-family); font-size: 0.9em;
-  background: var(--vscode-textCodeBlock-background);
-  padding: 1px 4px; border-radius: 3px;
+  font-family: var(--vscode-editor-font-family);
+  font-size: 0.88em;
+  background: var(--vscode-textCodeBlock-background, rgba(0,0,0,0.25));
+  padding: 1px 5px; border-radius: 3px;
+  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.07));
 }
-pre code { background: none; padding: 0; font-size: inherit; }
-strong { font-weight: bold; }
-.typing { opacity: 0.4; }
-/* ── tool status cards ── */
+pre code { background: none; padding: 0; font-size: inherit; border: none; }
+strong { font-weight: 600; }
+em { font-style: italic; }
+.typing { opacity: 0.45; font-style: italic; }
+
+/* ── tool cards ── */
 .tool-card {
   display: flex; flex-direction: column; gap: 4px;
-  padding: 5px 10px; border-radius: 6px; font-size: 0.85em;
-  border-left: 3px solid transparent;
-  background: var(--vscode-editorHoverWidget-background, var(--vscode-sideBar-background));
-  max-width: 90%;
+  padding: 6px 10px; border-radius: 6px; font-size: 0.82em;
+  border-left: 2px solid transparent;
+  background: var(--vscode-editorWidget-background, rgba(255,255,255,0.03));
+  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.07));
+  border-left-width: 2px; max-width: 93%;
 }
-.tool-card.tool-running { border-color: var(--vscode-progressBar-background, #007acc); opacity: 0.8; }
-.tool-card.tool-done    { border-color: #4caf50; }
-.tool-card.tool-error   { border-color: var(--vscode-errorForeground, #f48771); }
-.tool-header { display: flex; align-items: center; gap: 6px; }
-.tool-icon { font-size: 0.9em; min-width: 14px; }
-.tool-label { opacity: 0.85; }
+.tool-card.tool-running { border-left-color: #6c63ff; }
+.tool-card.tool-done    { border-left-color: #4caf50; }
+.tool-card.tool-error   { border-left-color: #f48771; }
+.tool-header { display: flex; align-items: center; gap: 7px; }
+.tool-icon { min-width: 14px; opacity: 0.7; }
+.tool-icon svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tool-label { opacity: 0.8; }
 .tool-output {
   font-family: var(--vscode-editor-font-family); font-size: 0.85em;
-  white-space: pre-wrap; opacity: 0.65;
-  max-height: 80px; overflow: hidden;
-  border-top: 1px solid var(--vscode-widget-border, #444);
+  white-space: pre-wrap; opacity: 0.5;
+  max-height: 70px; overflow: hidden;
+  border-top: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.07));
   margin-top: 4px; padding-top: 4px;
 }
+
 /* ── approval cards ── */
 .approval-card {
-  border: 1px solid var(--vscode-widget-border, #444);
-  border-radius: 8px; padding: 10px 12px;
-  background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
-  max-width: 90%; display: flex; flex-direction: column; gap: 8px;
+  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.1));
+  border-radius: 8px; padding: 12px 14px;
+  background: var(--vscode-editorWidget-background, rgba(255,255,255,0.04));
+  max-width: 93%; display: flex; flex-direction: column; gap: 10px;
 }
-.approval-desc { font-weight: bold; font-size: 0.9em; }
+.approval-desc { font-weight: 600; font-size: 0.88em; }
 .approval-preview {
   font-family: var(--vscode-editor-font-family);
-  font-size: 0.8em; white-space: pre-wrap;
-  background: var(--vscode-textCodeBlock-background);
-  padding: 6px 8px; border-radius: 4px;
-  max-height: 150px; overflow-y: auto;
+  font-size: 0.78em; white-space: pre-wrap;
+  background: var(--vscode-textCodeBlock-background, rgba(0,0,0,0.25));
+  padding: 8px 10px; border-radius: 5px;
+  max-height: 140px; overflow-y: auto;
 }
 .approval-actions { display: flex; gap: 8px; }
 .approve-btn, .reject-btn {
-  border: none; border-radius: 4px; padding: 4px 14px;
-  cursor: pointer; font-size: 0.85em;
+  border: none; border-radius: 5px; padding: 5px 16px;
+  cursor: pointer; font-size: 0.83em; font-family: var(--vscode-font-family);
 }
-.approve-btn {
-  background: var(--vscode-button-background);
-  color: var(--vscode-button-foreground);
-}
+.approve-btn { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
 .approve-btn:hover { background: var(--vscode-button-hoverBackground); }
-.reject-btn {
-  background: var(--vscode-button-secondaryBackground, #444);
-  color: var(--vscode-button-secondaryForeground, #ccc);
+.reject-btn  { background: var(--vscode-button-secondaryBackground, rgba(255,255,255,0.08)); color: var(--vscode-editor-foreground); border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.12)); }
+.reject-btn:hover { background: var(--vscode-button-secondaryHoverBackground, rgba(255,255,255,0.13)); }
+.approval-result { font-size: 0.82em; opacity: 0.6; }
+
+/* ── upgrade hint ── */
+.upgrade-hint {
+  font-size: 0.79em; padding: 8px 12px; border-radius: 7px;
+  border: 1px dashed var(--vscode-widget-border, rgba(255,255,255,0.15));
+  display: flex; align-items: center; gap: 10px; opacity: 0.75;
 }
-.reject-btn:hover { background: var(--vscode-button-secondaryHoverBackground, #555); }
-.approval-result { font-size: 0.85em; opacity: 0.7; }
+.upgrade-hint button {
+  background: none; border: none; color: #a89aff;
+  cursor: pointer; font-size: inherit; padding: 0; text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* ── divider ── */
+.divider {
+  text-align: center; font-size: 0.73em; opacity: 0.3;
+  position: relative; margin: 4px 0;
+}
+.divider::before, .divider::after {
+  content: ''; position: absolute; top: 50%;
+  width: 38%; height: 1px;
+  background: var(--vscode-widget-border, rgba(255,255,255,0.1));
+}
+.divider::before { left: 0; }
+.divider::after  { right: 0; }
+
 /* ── input row ── */
 #input-row {
-  display: flex; gap: 8px; padding: 10px;
-  border-top: 1px solid var(--vscode-widget-border, #444);
-  background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+  display: flex; flex-direction: column; flex-shrink: 0;
+  border-top: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.08));
+  background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+}
+#input-hints {
+  display: flex; align-items: center; gap: 14px;
+  padding: 6px 14px 2px; font-size: 0.72em; opacity: 0.3;
+}
+#input-area {
+  display: flex; gap: 8px; padding: 6px 12px 10px; align-items: flex-end;
 }
 #input {
   flex: 1;
   background: var(--vscode-input-background);
   color: var(--vscode-input-foreground);
-  border: 1px solid var(--vscode-input-border, transparent);
-  border-radius: 4px; padding: 6px 10px;
+  border: 1px solid var(--vscode-input-border, rgba(255,255,255,0.1));
+  border-radius: 6px; padding: 7px 11px;
   font-family: var(--vscode-font-family); font-size: var(--vscode-font-size);
-  resize: none; min-height: 36px; max-height: 120px; overflow-y: auto;
+  resize: none; min-height: 36px; max-height: 160px; overflow-y: auto;
+  line-height: 1.5;
 }
-#input:focus { outline: 1px solid var(--vscode-focusBorder); border-color: var(--vscode-focusBorder); }
+#input:focus { outline: 1px solid var(--vscode-focusBorder, rgba(108,99,255,0.6)); border-color: var(--vscode-focusBorder, rgba(108,99,255,0.6)); }
 #send {
   background: var(--vscode-button-background);
   color: var(--vscode-button-foreground);
-  border: none; border-radius: 4px; padding: 6px 16px;
-  cursor: pointer; font-size: var(--vscode-font-size); align-self: flex-end;
+  border: none; border-radius: 6px; padding: 7px 15px;
+  cursor: pointer; font-size: var(--vscode-font-size);
+  font-family: var(--vscode-font-family); align-self: flex-end;
+  display: flex; align-items: center; gap: 5px;
 }
 #send:hover { background: var(--vscode-button-hoverBackground); }
-#send:disabled { opacity: 0.5; cursor: not-allowed; }
-/* ── welcome ── */
-.welcome { opacity: 0.7; text-align: center; margin: auto; padding: 24px; }
-.welcome h2 { margin-bottom: 8px; font-size: 1.3em; }
-.welcome p { margin-bottom: 12px; }
-.welcome ul { list-style: none; line-height: 2.2; text-align: left; display: inline-block; }
-.welcome kbd {
-  background: var(--vscode-keybindingLabel-background);
-  border: 1px solid var(--vscode-keybindingLabel-border, #666);
-  border-radius: 3px; padding: 1px 5px; font-size: 0.85em;
+#send:disabled { opacity: 0.4; cursor: not-allowed; }
+#send svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ── autocomplete ── */
+#autocomplete {
+  display: none; position: fixed;
+  background: var(--vscode-editorWidget-background, #252526);
+  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.15));
+  border-radius: 7px; max-height: 210px; overflow-y: auto;
+  z-index: 1000; min-width: 270px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.35);
 }
+.ac-item {
+  padding: 6px 12px; cursor: pointer; font-size: 0.84em;
+  display: flex; align-items: center; gap: 9px;
+  border-left: 2px solid transparent;
+}
+.ac-item:hover, .ac-item.selected {
+  background: var(--vscode-list-hoverBackground, rgba(255,255,255,0.07));
+  border-left-color: #6c63ff;
+}
+.ac-icon { opacity: 0.45; min-width: 15px; display: flex; align-items: center; }
+.ac-icon svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ac-label { flex: 1; }
+.ac-detail { opacity: 0.4; font-size: 0.85em; }
+.ac-section {
+  padding: 5px 12px 3px; font-size: 0.7em; letter-spacing: 0.07em;
+  text-transform: uppercase; opacity: 0.35; font-weight: 600;
+  border-top: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.07));
+}
+
 @keyframes spin { to { transform: rotate(360deg); } }
 .spinning { display: inline-block; animation: spin 1s linear infinite; }
 </style>
 </head>
 <body>
-<div id="upgrade-banner">
-  <span>&#x26A1; <strong>OpenPilot Free</strong> &mdash; agent tools (multi-file edits, codebase search, terminal) require Pro</span>
-  <span>
-    <button onclick="vscode.postMessage({type:'upgrade'})">Upgrade $6/mo</button>
-    &nbsp;&nbsp;
-    <button onclick="vscode.postMessage({type:'activate-license'})">Enter key</button>
-    &nbsp;&nbsp;
-    <button class="banner-close" onclick="document.getElementById('upgrade-banner').style.display='none'" title="Dismiss">&times;</button>
-  </span>
-</div>
-<div id="messages">
-  <div class="welcome" id="welcome">
-    <h2>&#x1F680; OpenPilot</h2>
-    <p>Free AI coding assistant &mdash; no Copilot required</p>
-    <ul>
-      <li>Ask anything about your code</li>
-      <li>AI reads files, edits code, and pushes to GitHub</li>
-      <li><code>/commit</code> &mdash; AI-generate a commit message</li>
-      <li><code>/push</code> &mdash; push to remote</li>
-      <li><code>/status</code> &mdash; git status</li>
-      <li>Select code + <kbd>Ctrl+Alt+K</kbd> for inline edit</li>
-    </ul>
+
+<!-- Top bar -->
+<div id="top-bar">
+  <div id="top-bar-left">
+    <svg width="20" height="20" viewBox="0 0 52 52" fill="none" aria-hidden="true">
+      <circle cx="26" cy="26" r="24" stroke="currentColor" stroke-width="1.5" opacity="0.25"/>
+      <polygon points="14,18 38,26 14,34 20,26" fill="currentColor" opacity="0.9"/>
+      <polygon points="22,22 38,26 22,30 26,26" fill="currentColor" opacity="0.45"/>
+    </svg>
+    <span id="wordmark">OpenPilot AI</span>
+    <span id="pro-badge">PRO</span>
+  </div>
+  <div id="top-bar-right">
+    <button class="icon-btn" id="clear-btn" title="Clear conversation (/clear)">
+      <svg viewBox="0 0 16 16"><path d="M2 4h12M5 4V2h6v2M6 7v5M10 7v5M3 4l1 10h8l1-10"/></svg>
+      Clear
+    </button>
   </div>
 </div>
-<div id="input-row">
-  <textarea id="input" rows="1" placeholder="Ask anything… (Shift+Enter for newline)"></textarea>
-  <button id="send">Send</button>
-</div>
-<script>
-const vscode = acquireVsCodeApi();
-const msgsEl = document.getElementById('messages');
-const inputEl = document.getElementById('input');
-const sendBtn = document.getElementById('send');
-let busy = false;
-let currentBubble = null;
 
-function escHtml(s) {
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+<!-- Upgrade banner -->
+<div id="upgrade-banner">
+  <span>Agent tools, multi-file edits &amp; codebase search require Pro</span>
+  <div class="banner-links">
+    <button class="link-btn" onclick="vscode.postMessage({type:'upgrade'})">Upgrade — $6/mo</button>
+    <button class="link-btn" onclick="vscode.postMessage({type:'activate-license'})">Enter license key</button>
+    <button class="banner-close" onclick="document.getElementById('upgrade-banner').style.display='none'" title="Dismiss">&#x2715;</button>
+  </div>
+</div>
+
+<!-- Messages -->
+<div id="messages">
+  <div class="welcome" id="welcome">
+    <!-- Custom SVG logo — clean geometric mark, no rocket emoji -->
+    <svg class="welcome-logo" viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <circle cx="26" cy="26" r="24" stroke="currentColor" stroke-width="1.5" opacity="0.18"/>
+      <circle cx="26" cy="26" r="18" stroke="currentColor" stroke-width="1" opacity="0.08"/>
+      <!-- Angular right-pointing arrow matching the actual icon -->
+      <polygon points="11,17 42,26 11,35 18,26" fill="currentColor" opacity="0.88"/>
+      <polygon points="20,22 42,26 20,30 25,26" fill="currentColor" opacity="0.35"/>
+    </svg>
+    <div class="welcome-title">OpenPilot AI</div>
+    <div class="welcome-sub">AI coding assistant for VS Code</div>
+    <div class="welcome-grid">
+      <div class="welcome-card">
+        <svg class="welcome-card-icon" viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="10" rx="1.5"/><path d="M5 6h6M5 9h4"/></svg>
+        <div class="welcome-card-label">Chat</div>
+        <div class="welcome-card-desc">Ask anything about your code</div>
+      </div>
+      <div class="welcome-card">
+        <svg class="welcome-card-icon" viewBox="0 0 16 16"><path d="M4 4l3 3-3 3M9 10h3"/></svg>
+        <div class="welcome-card-label">@ Files</div>
+        <div class="welcome-card-desc">Type @ to inject any file</div>
+      </div>
+      <div class="welcome-card">
+        <svg class="welcome-card-icon" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 1.5"/></svg>
+        <div class="welcome-card-label">Inline edit</div>
+        <div class="welcome-card-desc">Select + <kbd>Ctrl+Alt+K</kbd></div>
+      </div>
+      <div class="welcome-card">
+        <svg class="welcome-card-icon" viewBox="0 0 16 16"><circle cx="5" cy="12" r="1.5"/><circle cx="11" cy="12" r="1.5"/><path d="M2 4h1.5l2 6h5l1.5-4H6"/></svg>
+        <div class="welcome-card-label">Git</div>
+        <div class="welcome-card-desc">/commit /push /status</div>
+      </div>
+    </div>
+    <div class="welcome-hint">Type <kbd>/</kbd> for commands &nbsp;·&nbsp; <kbd>@</kbd> for files</div>
+  </div>
+</div>
+
+<!-- Autocomplete dropdown -->
+<div id="autocomplete"></div>
+
+<!-- Input -->
+<div id="input-row">
+  <div id="input-hints">
+    <span>/ commands</span>
+    <span>@ files</span>
+    <span>&#x21E7;&#x23CE; newline</span>
+  </div>
+  <div id="input-area">
+    <textarea id="input" rows="1" placeholder="Ask anything…"></textarea>
+    <button id="send">
+      <svg viewBox="0 0 14 14"><path d="M1 7h12M8 3l5 4-5 4"/></svg>
+      Send
+    </button>
+  </div>
+</div>
+
+<script>
+const vscode      = acquireVsCodeApi();
+const msgsEl      = document.getElementById('messages');
+const inputEl     = document.getElementById('input');
+const sendBtn     = document.getElementById('send');
+const acEl        = document.getElementById('autocomplete');
+const clearBtn    = document.getElementById('clear-btn');
+
+let busy          = false;
+let currentBubble = null;
+let workspaceFiles= [];
+let acItems       = [];
+let acIndex       = -1;
+let acMode        = null;
+
+const SLASH_COMMANDS = [
+  { cmd:'/commit', detail:'AI-generate a commit message',  iconPath:'M8 3l-5 5 2.5 2.5L11 5M6 10l-3 3' },
+  { cmd:'/push',   detail:'Push branch to remote',         iconPath:'M7 11V3M3 7l4-4 4 4' },
+  { cmd:'/status', detail:'Show git status',               iconPath:'M2 8h12M8 3v10' },
+  { cmd:'/clear',  detail:'Clear conversation history',    iconPath:'M2 4h12M5 4V2h6v2M3 4l1 10h8l1-10' },
+  { cmd:'/help',   detail:'Show available commands',       iconPath:'M8 3a5 5 0 100 10A5 5 0 008 3zM8 11v1M8 7a1.5 1.5 0 011.5 1.5c0 1-1.5 1.5-1.5 1.5' },
+];
+
+function svgIcon(path) {
+  return '<svg viewBox="0 0 16 16" style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"><path d="' + path + '"/></svg>';
 }
 
+// ── Markdown ──────────────────────────────────────────────────────────────────
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
 function renderMarkdown(text) {
-  // Split on triple-backtick fences without using backtick literals in source
-  var FENCE = String.fromCharCode(96, 96, 96);
-  var TICK  = String.fromCharCode(96);
-  var parts = text.split(FENCE);
-  var html  = '';
-  for (var i = 0; i < parts.length; i++) {
-    if (i % 2 === 0) {
-      var t = escHtml(parts[i]);
-      // **bold**
-      t = t.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
-      // `inline code` — build regex dynamically to avoid literal backtick in source
-      var inlineRe = new RegExp(TICK + '([^' + TICK + '\\n]+)' + TICK, 'g');
-      t = t.replace(inlineRe, '<code>$1</code>');
-      // ### headings
-      t = t.replace(/^#{1,3} (.+)$/gm, '<strong>$1</strong>');
-      // newlines → <br>
-      t = t.replace(/\n/g, '<br>');
+  var F = String.fromCharCode(96,96,96), T = String.fromCharCode(96);
+  var parts = text.split(F), html = '';
+  for (var i=0; i<parts.length; i++) {
+    if (i%2===0) {
+      var t = parts[i];
+      t = t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      t = t.replace(/^### (.+)$/gm,'<h3>$1</h3>');
+      t = t.replace(/^## (.+)$/gm,'<h2>$1</h2>');
+      t = t.replace(/^# (.+)$/gm,'<h1>$1</h1>');
+      t = t.replace(/\*\*\*([^*\n]+)\*\*\*/g,'<strong><em>$1</em></strong>');
+      t = t.replace(/\*\*([^*\n]+)\*\*/g,'<strong>$1</strong>');
+      t = t.replace(/\*([^*\n]+)\*/g,'<em>$1</em>');
+      t = t.replace(new RegExp(T+'([^'+T+'\\n]+)'+T,'g'),'<code>$1</code>');
+      t = t.replace(/^&gt; (.+)$/gm,'<blockquote>$1</blockquote>');
+      t = t.replace(/^---+$/gm,'<hr>');
+      t = t.replace(/((?:^[*\-] .+\n?)+)/gm,function(b){
+        return '<ul>'+b.trim().split('\n').map(function(l){return '<li>'+l.replace(/^[*\-] /,'')+'</li>';}).join('')+'</ul>';
+      });
+      t = t.replace(/((?:^\d+\. .+\n?)+)/gm,function(b){
+        return '<ol>'+b.trim().split('\n').map(function(l){return '<li>'+l.replace(/^\d+\. /,'')+'</li>';}).join('')+'</ol>';
+      });
+      t = t.replace(/\n\n+/g,'</p><p>').replace(/\n/g,'<br>');
+      if (t && !t.match(/^<[houpb]/)) t = '<p>'+t+'</p>';
       html += t;
     } else {
-      var nl   = parts[i].indexOf('\n');
-      var code = nl >= 0 ? parts[i].slice(nl + 1) : parts[i];
-      html += '<pre><code>' + escHtml(code) + '</code></pre>';
+      var nl = parts[i].indexOf('\n');
+      var code = nl>=0 ? parts[i].slice(nl+1) : parts[i];
+      var id = 'c'+Math.random().toString(36).slice(2,8);
+      html += '<pre id="'+id+'"><button class="copy-code-btn" onclick="copyCode(\''+id+'\')">Copy</button><code>'+escHtml(code)+'</code></pre>';
     }
   }
   return html;
 }
 
-function removeWelcome() {
-  var w = document.getElementById('welcome');
-  if (w) w.remove();
+function copyCode(id) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  navigator.clipboard.writeText(el.querySelector('code').textContent||'').then(function(){
+    var b = el.querySelector('.copy-code-btn');
+    if (b) { b.textContent='Copied!'; setTimeout(function(){b.textContent='Copy';},1500); }
+  });
 }
+
+// ── DOM helpers ───────────────────────────────────────────────────────────────
+function removeWelcome() { var w=document.getElementById('welcome'); if(w) w.remove(); }
 
 function addUserMsg(text) {
   removeWelcome();
-  var div = document.createElement('div');
-  div.className = 'msg user';
-  var label = document.createElement('span');
-  label.className = 'label';
-  label.textContent = 'You';
-  var bubble = document.createElement('div');
-  bubble.className = 'bubble';
-  bubble.textContent = text;
-  div.appendChild(label);
-  div.appendChild(bubble);
-  msgsEl.appendChild(div);
-  scroll();
+  var div=document.createElement('div'); div.className='msg user';
+  var lbl=document.createElement('span'); lbl.className='label'; lbl.textContent='You';
+  var bbl=document.createElement('div'); bbl.className='bubble'; bbl.textContent=text;
+  div.appendChild(lbl); div.appendChild(bbl); msgsEl.appendChild(div); scroll();
 }
 
 function startAssistantMsg() {
   removeWelcome();
-  var div = document.createElement('div');
-  div.className = 'msg assistant';
-  var label = document.createElement('span');
-  label.className = 'label';
-  label.textContent = 'OpenPilot';
-  var bubble = document.createElement('div');
-  bubble.className = 'bubble typing';
-  bubble.innerHTML = '<span class="spinning">&#x21BB;</span> thinking&hellip;';
-  div.appendChild(label);
-  div.appendChild(bubble);
-  msgsEl.appendChild(div);
-  scroll();
-  currentBubble = bubble;
+  var div=document.createElement('div'); div.className='msg assistant';
+  var lbl=document.createElement('span'); lbl.className='label'; lbl.textContent='OpenPilot AI';
+  var bbl=document.createElement('div'); bbl.className='bubble typing';
+  bbl.innerHTML='<span class="spinning" style="display:inline-block;width:12px;height:12px;margin-right:6px"><svg viewBox="0 0 12 12" style="width:100%;height:100%;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round"><path d="M6 1v3M6 8v3M1 6h3M8 6h3"/></svg></span>Thinking…';
+  div.appendChild(lbl); div.appendChild(bbl); msgsEl.appendChild(div); scroll();
+  currentBubble=bbl;
 }
 
 function setCurrentText(text) {
   if (!currentBubble) return;
   currentBubble.classList.remove('typing');
-  if (text && text.trim()) {
-    currentBubble.innerHTML = renderMarkdown(text);
-  } else {
-    currentBubble.innerHTML = '<span class="spinning">&#x21BB;</span> thinking&hellip;';
-    currentBubble.classList.add('typing');
-  }
+  if (text && text.trim()) { currentBubble.innerHTML=renderMarkdown(text); }
+  else { currentBubble.innerHTML='<span class="spinning" style="opacity:0.5">↻</span> Thinking…'; currentBubble.classList.add('typing'); }
   scroll();
+}
+
+function addDivider(label) {
+  var d=document.createElement('div'); d.className='divider'; d.textContent=label; msgsEl.appendChild(d);
 }
 
 function addToolStatus(id, state, label) {
-  var card = document.createElement('div');
-  card.id = 'tool-' + id;
-  card.className = 'tool-card tool-' + state;
-  var header = document.createElement('div');
-  header.className = 'tool-header';
-  var icon = document.createElement('span');
-  icon.className = 'tool-icon';
-  icon.textContent = state === 'running' ? '⟳' : state === 'done' ? '✓' : '✗';
-  if (state === 'running') icon.classList.add('spinning');
-  var lbl = document.createElement('span');
-  lbl.className = 'tool-label';
-  lbl.textContent = label;
-  header.appendChild(icon);
-  header.appendChild(lbl);
-  card.appendChild(header);
-  msgsEl.appendChild(card);
-  scroll();
+  var card=document.createElement('div'); card.id='tool-'+id; card.className='tool-card tool-'+state;
+  var hdr=document.createElement('div'); hdr.className='tool-header';
+  var ic=document.createElement('span'); ic.className='tool-icon';
+  ic.innerHTML = state==='running'
+    ? '<span class="spinning">'+svgIcon('M6 1v2M6 9v2M1 6h2M9 6h2M2.2 2.2l1.4 1.4M7.4 7.4l1.4 1.4M2.2 9.8l1.4-1.4M7.4 4.6l1.4-1.4')+'</span>'
+    : state==='done' ? svgIcon('M2 8l3 3 6-6') : svgIcon('M3 3l6 6M9 3l-6 6');
+  var lbl=document.createElement('span'); lbl.className='tool-label'; lbl.textContent=label;
+  hdr.appendChild(ic); hdr.appendChild(lbl); card.appendChild(hdr); msgsEl.appendChild(card); scroll();
 }
 
 function updateToolStatus(id, state, output) {
-  var card = document.getElementById('tool-' + id);
-  if (!card) return;
-  card.className = 'tool-card tool-' + state;
-  var icon = card.querySelector('.tool-icon');
-  if (icon) {
-    icon.classList.remove('spinning');
-    icon.textContent = state === 'done' ? '✓' : '✗';
-  }
+  var card=document.getElementById('tool-'+id); if (!card) return;
+  card.className='tool-card tool-'+state;
+  var ic=card.querySelector('.tool-icon');
+  if (ic) ic.innerHTML = state==='done' ? svgIcon('M2 8l3 3 6-6') : svgIcon('M3 3l6 6M9 3l-6 6');
   if (output) {
-    var detail = document.createElement('div');
-    detail.className = 'tool-output';
-    detail.textContent = output;
-    card.appendChild(detail);
+    var d=document.createElement('div'); d.className='tool-output'; d.textContent=output; card.appendChild(d);
   }
   scroll();
 }
 
-function addApprovalCard(id, description, preview) {
-  var card = document.createElement('div');
-  card.className = 'approval-card';
-  card.id = 'approval-' + id;
-
-  var desc = document.createElement('div');
-  desc.className = 'approval-desc';
-  desc.textContent = description;
-
-  var pre = document.createElement('pre');
-  pre.className = 'approval-preview';
-  pre.textContent = preview;
-
-  var actions = document.createElement('div');
-  actions.className = 'approval-actions';
-  actions.id = 'approval-actions-' + id;
-
-  var approveBtn = document.createElement('button');
-  approveBtn.className = 'approve-btn';
-  approveBtn.textContent = 'Approve';
-  approveBtn.onclick = function() { respondApproval(id, true); };
-
-  var rejectBtn = document.createElement('button');
-  rejectBtn.className = 'reject-btn';
-  rejectBtn.textContent = 'Reject';
-  rejectBtn.onclick = function() { respondApproval(id, false); };
-
-  actions.appendChild(approveBtn);
-  actions.appendChild(rejectBtn);
-
-  card.appendChild(desc);
-  card.appendChild(pre);
-  card.appendChild(actions);
-  msgsEl.appendChild(card);
-  scroll();
+function addApprovalCard(id, desc, preview) {
+  var card=document.createElement('div'); card.className='approval-card'; card.id='approval-'+id;
+  var dv=document.createElement('div'); dv.className='approval-desc'; dv.textContent=desc;
+  var pre=document.createElement('pre'); pre.className='approval-preview'; pre.textContent=preview;
+  var acts=document.createElement('div'); acts.className='approval-actions'; acts.id='approval-actions-'+id;
+  var ab=document.createElement('button'); ab.className='approve-btn'; ab.textContent='Approve'; ab.onclick=function(){respondApproval(id,true);};
+  var rb=document.createElement('button'); rb.className='reject-btn'; rb.textContent='Reject'; rb.onclick=function(){respondApproval(id,false);};
+  acts.appendChild(ab); acts.appendChild(rb);
+  card.appendChild(dv); card.appendChild(pre); card.appendChild(acts);
+  msgsEl.appendChild(card); scroll();
 }
 
 function respondApproval(id, approved) {
-  var actions = document.getElementById('approval-actions-' + id);
-  if (actions) {
-    var result = document.createElement('span');
-    result.className = 'approval-result';
-    result.textContent = approved ? '✓ Approved' : '✗ Rejected';
-    actions.replaceWith(result);
+  var acts=document.getElementById('approval-actions-'+id);
+  if (acts) {
+    var r=document.createElement('span'); r.className='approval-result';
+    r.textContent=approved?'&#x2713; Approved':'&#x2715; Rejected'; acts.replaceWith(r);
   }
-  vscode.postMessage({ type: 'approval-response', id: id, approved: approved });
+  vscode.postMessage({type:'approval-response',id:id,approved:approved});
 }
 
-function endMsg() {
-  currentBubble = null;
-  setBusy(false);
-}
-
-function setBusy(val) {
-  busy = val;
-  sendBtn.disabled = val;
-  inputEl.disabled = val;
-  if (!val) inputEl.focus();
-}
-
-function scroll() {
-  msgsEl.scrollTop = msgsEl.scrollHeight;
-}
-
-function send() {
-  var text = inputEl.value.trim();
-  if (!text || busy) return;
-  inputEl.value = '';
-  inputEl.style.height = '';
-  setBusy(true);
-  vscode.postMessage({ type: 'send', text: text });
-}
-
-sendBtn.addEventListener('click', send);
-inputEl.addEventListener('keydown', function(e) {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
-});
-inputEl.addEventListener('input', function() {
-  inputEl.style.height = '';
-  inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px';
-});
+function endMsg() { currentBubble=null; setBusy(false); }
+function setBusy(v) { busy=v; sendBtn.disabled=v; inputEl.disabled=v; if(!v) inputEl.focus(); }
+function scroll() { msgsEl.scrollTop=msgsEl.scrollHeight; }
 
 function showUpgradeHint() {
-  var hint = document.createElement('div');
-  hint.className = 'upgrade-hint';
-  hint.innerHTML =
-    '&#x26A1; Want AI to read your codebase &amp; edit files? &nbsp;' +
-    '<button onclick="vscode.postMessage({type:\'upgrade\'})">Upgrade to Pro &mdash; $6/mo</button>' +
-    ' &nbsp;or&nbsp; ' +
-    '<button onclick="vscode.postMessage({type:\'activate-license\'})">Enter license key</button>';
-  msgsEl.appendChild(hint);
-  scroll();
+  var h=document.createElement('div'); h.className='upgrade-hint';
+  h.innerHTML='Want AI to read files &amp; edit your codebase? &nbsp;' +
+    '<button onclick="vscode.postMessage({type:\'upgrade\'})">Upgrade to Pro — $6/mo</button>' +
+    ' &nbsp;or&nbsp; <button onclick="vscode.postMessage({type:\'activate-license\'})">Enter license key</button>';
+  msgsEl.appendChild(h); scroll();
 }
 
-window.addEventListener('message', function(e) {
-  var msg = e.data;
-  switch (msg.type) {
-    case 'user':             addUserMsg(msg.text); break;
+// ── Autocomplete ──────────────────────────────────────────────────────────────
+function showAC(items, mode, sectionLabel) {
+  acItems=items; acIndex=-1; acMode=mode;
+  acEl.innerHTML='';
+  if (!items.length) { hideAC(); return; }
+  if (sectionLabel) {
+    var sec=document.createElement('div'); sec.className='ac-section'; sec.textContent=sectionLabel; acEl.appendChild(sec);
+  }
+  items.forEach(function(item,i){
+    var div=document.createElement('div'); div.className='ac-item'; div.dataset.index=i;
+    var ic=document.createElement('span'); ic.className='ac-icon';
+    ic.innerHTML = item.iconPath ? svgIcon(item.iconPath) : svgIcon('M4 2h8a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1zM7 6h2M7 9h4');
+    var lbl=document.createElement('span'); lbl.className='ac-label'; lbl.textContent=item.label;
+    var det=document.createElement('span'); det.className='ac-detail'; det.textContent=item.detail||'';
+    div.appendChild(ic); div.appendChild(lbl); div.appendChild(det);
+    div.addEventListener('mousedown',function(e){e.preventDefault();selectAC(i);});
+    acEl.appendChild(div);
+  });
+  var rect=inputEl.getBoundingClientRect();
+  acEl.style.display='block';
+  acEl.style.left=rect.left+'px';
+  acEl.style.width=(rect.width-60)+'px';
+  acEl.style.bottom=(window.innerHeight-rect.top+4)+'px';
+  acEl.style.top='auto';
+}
+
+function hideAC() { acEl.style.display='none'; acItems=[]; acIndex=-1; acMode=null; }
+
+function moveAC(dir) {
+  if (!acItems.length) return;
+  acIndex=(acIndex+dir+acItems.length)%acItems.length;
+  acEl.querySelectorAll('.ac-item').forEach(function(n,i){ n.classList.toggle('selected',i===acIndex); });
+  var sel=acEl.querySelector('.ac-item.selected'); if (sel) sel.scrollIntoView({block:'nearest'});
+}
+
+function selectAC(i) {
+  var item=acItems[i]; if (!item) return;
+  hideAC();
+  if (acMode==='cmd') { inputEl.value=item.label+' '; }
+  else { var v=inputEl.value, at=v.lastIndexOf('@'); if (at>=0) inputEl.value=v.slice(0,at)+'@'+item.label+' '; }
+  inputEl.style.height='';
+  inputEl.style.height=Math.min(inputEl.scrollHeight,160)+'px';
+  inputEl.focus();
+}
+
+function updateAC() {
+  var v=inputEl.value, c=inputEl.selectionStart||0, before=v.slice(0,c);
+  var trimmed=before.trim();
+  if (/^\/$/.test(trimmed)||/^\/\w*$/.test(trimmed)) {
+    var q=trimmed.slice(1).toLowerCase();
+    var m=SLASH_COMMANDS.filter(function(x){return x.cmd.slice(1).startsWith(q);});
+    showAC(m.map(function(x){return {label:x.cmd,detail:x.detail,iconPath:x.iconPath};}), 'cmd', 'Commands');
+    return;
+  }
+  var at=before.match(/@([\w./\\-]*)$/);
+  if (at) {
+    var q=at[1].toLowerCase();
+    var m=workspaceFiles.filter(function(f){return f.toLowerCase().includes(q);}).slice(0,12)
+      .map(function(f){return {label:f, detail:'', iconPath:'M4 2h6l3 3v9a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z'};});
+    showAC(m, 'file', 'Files');
+    return;
+  }
+  hideAC();
+}
+
+// ── Send ──────────────────────────────────────────────────────────────────────
+function send() {
+  var t=inputEl.value.trim(); if (!t||busy) return;
+  inputEl.value=''; inputEl.style.height='';
+  hideAC(); setBusy(true);
+  vscode.postMessage({type:'send',text:t});
+}
+
+sendBtn.addEventListener('click',send);
+clearBtn.addEventListener('click',function(){vscode.postMessage({type:'clear'});});
+
+inputEl.addEventListener('keydown',function(e){
+  if (acEl.style.display!=='none') {
+    if (e.key==='ArrowDown'){e.preventDefault();moveAC(1);return;}
+    if (e.key==='ArrowUp'){e.preventDefault();moveAC(-1);return;}
+    if ((e.key==='Tab')||(e.key==='Enter'&&acIndex>=0)){e.preventDefault();selectAC(acIndex>=0?acIndex:0);return;}
+    if (e.key==='Escape'){hideAC();return;}
+  }
+  if (e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}
+});
+inputEl.addEventListener('input',function(){
+  inputEl.style.height='';
+  inputEl.style.height=Math.min(inputEl.scrollHeight,160)+'px';
+  updateAC();
+});
+inputEl.addEventListener('keyup',updateAC);
+inputEl.addEventListener('blur',function(){setTimeout(hideAC,150);});
+
+// ── Message handler ───────────────────────────────────────────────────────────
+window.addEventListener('message',function(e){
+  var m=e.data;
+  switch(m.type){
+    case 'user':             addUserMsg(m.text); break;
     case 'assistant-start':  startAssistantMsg(); break;
-    case 'set-text':         setCurrentText(msg.text); break;
-    case 'tool-status':      addToolStatus(msg.id, msg.state, msg.label); break;
-    case 'tool-update':      updateToolStatus(msg.id, msg.state, msg.output); break;
-    case 'approval-request': addApprovalCard(msg.id, msg.description, msg.preview); break;
+    case 'set-text':         setCurrentText(m.text); break;
+    case 'tool-status':      addToolStatus(m.id,m.state,m.label); break;
+    case 'tool-update':      updateToolStatus(m.id,m.state,m.output); break;
+    case 'approval-request': addApprovalCard(m.id,m.description,m.preview); break;
     case 'assistant-end':    endMsg(); break;
-    case 'show-upgrade-hint': showUpgradeHint(); break;
+    case 'show-upgrade-hint':showUpgradeHint(); break;
+    case 'cleared':          msgsEl.innerHTML=''; addDivider('conversation cleared'); break;
+    case 'workspace-files':  workspaceFiles=m.files||[]; break;
     case 'license-status': {
-      var banner = document.getElementById('upgrade-banner');
-      if (msg.isPro) {
-        if (banner) banner.style.display = 'none';
+      var banner=document.getElementById('upgrade-banner');
+      var badge=document.getElementById('pro-badge');
+      if (m.isPro) {
+        if (banner) banner.style.display='none';
+        if (badge)  badge.style.display='inline';
       } else {
-        if (banner) banner.style.display = 'flex';
+        if (banner) banner.style.display='flex';
+        if (badge)  badge.style.display='none';
       }
       break;
     }
