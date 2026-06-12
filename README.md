@@ -1,5 +1,7 @@
 # OpenPilot — Free AI Coding Assistant
 
+> ⚠️ **This extension has been renamed to Freebird AI.** Development continues under the new name — please install [Freebird AI](https://marketplace.visualstudio.com/items?itemName=TenLabs.freebird-ai) for future updates. This page is kept for existing users; the content below reflects the last release under the OpenPilot AI name.
+
 > A fully open-source, Copilot-free AI assistant for VS Code. Reads your entire codebase, edits files, runs commands, and pushes to GitHub — powered by Ollama, Claude, or OpenAI.
 
 ---

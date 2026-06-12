@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.1]
+
+### Changed
+- Final release under the OpenPilot AI name — development continues as **Freebird AI** (`TenLabs.freebird-ai`)
+
 ## [0.2.0]
 
 ### Added

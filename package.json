@@ -2,7 +2,7 @@
   "name": "openpilot-ai",
   "displayName": "OpenPilot AI",
   "description": "Free, open-source AI coding assistant. Reads your codebase, edits files, and pushes to GitHub — powered by Ollama (free/local), Claude, or OpenAI. No Copilot required.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "TenLabs",
   "license": "MIT",
   "icon": "media/icon.png",
