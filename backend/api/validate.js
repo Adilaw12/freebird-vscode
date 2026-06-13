@@ -32,8 +32,8 @@ export default async function handler(req, res) {
 
     const normalised = key.trim().toUpperCase();
 
-    // Basic format check — must match OP-XXXX-XXXX-XXXX-XXXX pattern
-    if (!/^OP-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(normalised)) {
+    // Basic format check — must match FB-XXXX-XXXX-XXXX-XXXX pattern
+    if (!/^FB-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(normalised)) {
         return res.status(200).json({ valid: false });
     }
 
