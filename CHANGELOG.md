@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.2] — 2026-06-13
+
+### Improved
+- Agent now outlines a short plan (numbered steps) before tackling multi-step or multi-file tasks, so you can see what it's about to do — similar to Cursor Composer
+
+### Changed
+- Extension icon recolored to a monochrome grey/black-and-white palette for a more professional look
+- Removed decorative emoji from README section headers
+
 ## [0.4.1] — 2026-06-13
 
 ### Docs

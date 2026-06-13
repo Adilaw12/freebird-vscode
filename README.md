@@ -20,31 +20,31 @@
 | **Approve / reject before any change** | — | ✅ |
 | **Project memory across sessions** | — | ✅ |
 
-👉 **[Upgrade to Pro — $6/month](https://buy.stripe.com/4gMeVf1K51ZA2604KxfAc02)**
+**[Upgrade to Pro — $6/month](https://buy.stripe.com/4gMeVf1K51ZA2604KxfAc02)**
 
 ---
 
 ## Features
 
-### 🐦 Free as a Bird — No Copilot Required
+### Free as a Bird — No Copilot Required
 Works with **Ollama** (local, totally free), **Anthropic Claude** (pay-as-you-go), or **OpenAI**. Bring your own API key. No GitHub Copilot subscription needed.
 
-### 🧠 Understands Your Whole Codebase (Pro)
+### Understands Your Whole Codebase (Pro)
 Freebird indexes your workspace and reads any file on demand. Ask it to refactor a module, trace a bug across files, or add a feature — it reads the relevant files first, then makes targeted edits with your approval.
 
-### ✏️ Makes Real Code Changes (Pro)
+### Makes Real Code Changes (Pro)
 The AI creates and edits files directly in your workspace. Every write, edit, or destructive action shows an **Approve / Reject** card — nothing is modified silently.
 
-### ⚡ Inline Edit — Cursor-style (Pro)
+### Inline Edit — Cursor-style (Pro)
 Select any code, press `Ctrl+Alt+K`, type an instruction, and the selection is rewritten in place.
 
-### 💬 Smart Chat (Free)
+### Smart Chat (Free)
 Ask anything about your code. Type `@filename` to inject any file into the conversation. Type `/` to see all available commands.
 
-### 🔀 Git Integration (Pro)
+### Git Integration (Pro)
 Generate commit messages, push to remote, and check git status — all from the chat panel.
 
-### 🧠 Project Memory (Pro)
+### Project Memory (Pro)
 Freebird can save notes about your project — conventions, decisions, in-progress work — to `.freebird/memory.md` and automatically loads them into context on future requests, so it doesn't forget what you told it last time. Use `/memory` to see what's saved and `/forget` to clear it.
 
 ---

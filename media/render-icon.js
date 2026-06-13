@@ -16,14 +16,14 @@ function hexToRgb(hex) {
 function scalePt([x, y]) { return [x * s, y * s]; }
 function scalePoly(poly) { return poly.map(scalePt); }
 
-const bg0 = hexToRgb('#0a0f1f');
-const bg1 = hexToRgb('#16243f');
-const glowColor = hexToRgb('#38bdf8');
-const ringColor = hexToRgb('#2dd4ee');
+const bg0 = hexToRgb('#0a0a0a');
+const bg1 = hexToRgb('#262626');
+const glowColor = hexToRgb('#9ca3af');
+const ringColor = hexToRgb('#d4d4d4');
 const topA = hexToRgb('#ffffff'); // top wing: white (catches light)
-const topB = hexToRgb('#dbeafe');
-const botA = hexToRgb('#475569'); // bottom wing: shadowed slate
-const botB = hexToRgb('#94a3b8');
+const topB = hexToRgb('#e5e5e5');
+const botA = hexToRgb('#404040'); // bottom wing: shadowed grey
+const botB = hexToRgb('#a3a3a3');
 
 // Plane "flies through" the ring: tail outside top-left, tip pierces outside right.
 const TIP = [220, 128];

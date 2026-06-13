@@ -32,6 +32,7 @@ AVAILABLE TOOLS:
 - git_push    {"action":"git_push"}                                                              push to remote
 
 GUIDELINES:
+- For tasks that need multiple steps or touch several files, start your reply with a short plan — a numbered list of 2-5 steps — before making any tool calls, so the user knows what you're about to do. Skip the plan for simple one-step requests (answering a question, reading or editing a single file).
 - Always read files before editing — never assume their contents
 - Use edit_file for targeted changes; write_file only for new files or complete rewrites
 - edit_file requires oldStr to match the file exactly (whitespace, indentation and all)
