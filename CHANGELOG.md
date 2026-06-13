@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.4.1] — 2026-06-13
+
+### Docs
+- Note in the `freebird.model` setting and README recommending `claude-sonnet-4-6` for heavier multi-file agent tasks (Pro)
+
 ## [0.4.0] — 2026-06-13
 
 ### Added

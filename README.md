@@ -126,6 +126,8 @@ Nothing is modified silently. You stay in full control.
 
 **Default models:** Ollama → `qwen2.5-coder` · Anthropic → `claude-haiku-4-5` · OpenAI → `gpt-4o-mini`
 
+**Tip:** For heavier multi-file agent tasks (Pro), set `freebird.model` to `claude-sonnet-4-6` — it follows multi-step instructions more reliably than Haiku, at a higher API cost.
+
 ---
 
 ## Privacy

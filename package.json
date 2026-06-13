@@ -2,7 +2,7 @@
   "name": "freebird-ai",
   "displayName": "Freebird AI",
   "description": "Free, open-source AI coding assistant. Reads your codebase, edits files, and pushes to GitHub — powered by Ollama (free/local), Claude, or OpenAI. Fly free from Copilot.",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "publisher": "TenLabs",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -119,7 +119,7 @@
         "freebird.model": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Model override. Leave blank for the recommended default per backend:\n- Ollama: `qwen2.5-coder`\n- Anthropic: `claude-haiku-4-5`\n- OpenAI: `gpt-4o-mini`"
+          "markdownDescription": "Model override. Leave blank for the recommended default per backend:\n- Ollama: `qwen2.5-coder`\n- Anthropic: `claude-haiku-4-5`\n- OpenAI: `gpt-4o-mini`\n\nTip: for heavier multi-file agent tasks (Pro), try `claude-sonnet-4-6` — it follows multi-step instructions more reliably than Haiku, at a higher API cost."
         },
         "freebird.ollamaUrl": {
           "type": "string",
