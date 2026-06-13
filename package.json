@@ -2,7 +2,7 @@
   "name": "freebird-ai",
   "displayName": "Freebird AI",
   "description": "Free, open-source AI coding assistant. Reads your codebase, edits files, and pushes to GitHub — powered by Ollama (free/local), Claude, or OpenAI. Fly free from Copilot.",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "publisher": "TenLabs",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -12,7 +12,8 @@
   },
   "homepage": "https://github.com/Adilaw12/freebird-vscode#readme",
   "bugs": {
-    "url": "https://github.com/Adilaw12/freebird-vscode/issues"
+    "url": "https://github.com/Adilaw12/freebird-vscode/issues",
+    "email": "support@ten-labs.com.au"
   },
   "engines": {
     "vscode": "^1.90.0"

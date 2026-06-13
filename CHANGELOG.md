@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1] — 2026-06-13
+
+### Added
+- Support contact (`support@ten-labs.com.au`) — shown in `/help`, the Stripe success/error pages, and the README
+
+### Fixed
+- License validation regex now matches the `FB-XXXX-XXXX-XXXX-XXXX` key format (previously still checked for the old `OP-` prefix, causing valid Pro keys to be rejected)
+
 ## [0.3.0] — 2026-06-12
 
 ### Added

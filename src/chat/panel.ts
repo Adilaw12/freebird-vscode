@@ -154,6 +154,9 @@ export class ChatPanel {
                     '**Keyboard shortcuts:**',
                     '`Ctrl+Alt+O` — open chat',
                     '`Ctrl+Alt+K` — inline edit selected code (Pro)',
+                    '',
+                    '**Need help?**',
+                    'Billing or technical issues: [support@ten-labs.com.au](mailto:support@ten-labs.com.au)',
                 ].join('\n')
             });
             this.post({ type: 'assistant-end' });

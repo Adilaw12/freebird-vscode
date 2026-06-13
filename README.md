@@ -130,6 +130,12 @@ Nothing is modified silently. You stay in full control.
 
 ---
 
+## Support
+
+Having trouble with a payment, license activation, or anything else? Email **[support@ten-labs.com.au](mailto:support@ten-labs.com.au)** and we'll help you out.
+
+---
+
 ## Contributing
 
 Freebird AI is open source. Issues and PRs welcome at the [GitHub repository](https://github.com/Adilaw12/freebird-vscode).

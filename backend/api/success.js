@@ -6,7 +6,7 @@ export default async function handler(req, res) {
     const { session_id } = req.query;
 
     if (!session_id) {
-        return res.status(400).send(page('Missing session ID', '<p>Something went wrong. Please contact support.</p>'));
+        return res.status(400).send(page('Missing session ID', '<p>Something went wrong. Please <a href="mailto:support@ten-labs.com.au">contact support</a>.</p>'));
     }
 
     const key = await redis.get(`session:${session_id}`);
@@ -38,7 +38,7 @@ export default async function handler(req, res) {
          </ol>
          <p style="margin-top:16px;opacity:0.7">
            Save this key somewhere safe &mdash; you can also find it by
-           <a href="mailto:support@tenlabs.io">contacting support</a> with your email.
+           <a href="mailto:support@ten-labs.com.au">contacting support</a> with your email.
          </p>`
     ));
 }
