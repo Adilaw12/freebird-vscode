@@ -2,6 +2,7 @@ import { Message, AIProvider } from '../ai/provider';
 import { parseToolCalls, executeToolCall, getWorkspaceTree, stripToolBlocks, TOOL_SYSTEM_PROMPT, ToolCall } from './tools';
 import { GitService } from '../git/service';
 import { buildFileContext } from '../chat/contextBuilder';
+import { readProjectMemory, MEMORY_RELATIVE_PATH } from './memory';
 
 const MAX_ITERATIONS = 15;
 
@@ -35,6 +36,11 @@ export async function runAgentLoop(opts: AgentRunOptions): Promise<Message[]> {
 
     if (workspaceTree) {
         systemContent += `\n\nWorkspace files:\n${workspaceTree}`;
+    }
+
+    const projectMemory = readProjectMemory();
+    if (projectMemory) {
+        systemContent += `\n\nProject memory (notes saved from previous sessions in ${MEMORY_RELATIVE_PATH}):\n${projectMemory}`;
     }
 
     const systemMessages: Message[] = [

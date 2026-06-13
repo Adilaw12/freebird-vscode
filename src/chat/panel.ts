@@ -7,6 +7,7 @@ import { Message } from '../ai/provider';
 import { runAgentLoop, AgentEvent, stripToolBlocks } from '../agent/loop';
 import { buildFileContext, resolveMentions, listWorkspaceFiles } from './contextBuilder';
 import { getLicenseStatus, UPGRADE_URL } from '../license/validator';
+import { readProjectMemory, clearProjectMemory, MEMORY_RELATIVE_PATH } from '../agent/memory';
 
 // Keep history to this many message pairs before trimming oldest turns
 const MAX_HISTORY_PAIRS = 20;
@@ -133,6 +134,35 @@ export class ChatPanel {
             this.post({ type: 'cleared' });
             return;
         }
+        if (trimmed === '/memory') {
+            this.post({ type: 'user', text: '/memory' });
+            this.post({ type: 'assistant-start' });
+            const memory = readProjectMemory();
+            this.post({
+                type: 'set-text',
+                text: memory
+                    ? `**Project memory** (\`${MEMORY_RELATIVE_PATH}\`):\n\n${memory}`
+                    : `No project memory yet. Ask Freebird (Pro) to remember something, and it'll save notes to \`${MEMORY_RELATIVE_PATH}\`.`
+            });
+            this.post({ type: 'assistant-end' });
+            return;
+        }
+        if (trimmed === '/forget') {
+            this.post({ type: 'user', text: '/forget' });
+            const choice = await vscode.window.showWarningMessage(
+                `Delete ${MEMORY_RELATIVE_PATH}? This clears everything Freebird remembers about this project.`,
+                'Delete', 'Cancel'
+            );
+            this.post({ type: 'assistant-start' });
+            this.post({
+                type: 'set-text',
+                text: choice === 'Delete'
+                    ? (clearProjectMemory() ? 'Project memory cleared.' : 'No project memory to clear.')
+                    : 'Cancelled.'
+            });
+            this.post({ type: 'assistant-end' });
+            return;
+        }
         if (trimmed === '/help') {
             this.post({ type: 'user', text: '/help' });
             this.post({ type: 'assistant-start' });
@@ -144,6 +174,8 @@ export class ChatPanel {
                     '`/commit` — AI-generate a git commit message',
                     '`/push` — push current branch to remote',
                     '`/status` — show git status',
+                    '`/memory` — show what Freebird remembers about this project',
+                    '`/forget` — clear project memory',
                     '`/clear` — clear conversation history',
                     '`/help` — show this message',
                     '',

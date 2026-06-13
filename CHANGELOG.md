@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0] — 2026-06-13
+
+### Added
+- **Project memory (Pro)** — Freebird can save notes (conventions, decisions, in-progress work) to `.freebird/memory.md`, which is automatically loaded into context on future requests. New `/memory` and `/forget` chat commands to view or clear it.
+
+### Improved
+- Agent now prefers actually creating files (`write_file`) when asked to "make", "build", "create", or "scaffold" something, instead of just printing example code in chat
+
 ## [0.3.1] — 2026-06-13
 
 ### Added

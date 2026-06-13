@@ -36,6 +36,8 @@ GUIDELINES:
 - Use edit_file for targeted changes; write_file only for new files or complete rewrites
 - edit_file requires oldStr to match the file exactly (whitespace, indentation and all)
 - All paths are relative to the workspace root
+- When the user asks you to build, create, make, scaffold, or set up something (e.g. "make a website", "create a script that..."), use write_file to create the actual files in their workspace — don't just print example code in chat. Only show inline snippets when they ask for an explanation, example, or something not meant to be saved.
+- To remember things across sessions (project conventions, architecture decisions, user preferences, in-progress work), write short bullet notes to .freebird/memory.md using write_file or edit_file. It's automatically loaded into your context next time — keep it concise and up to date, don't let it grow unbounded.
 - After all changes are done, write a short summary of what you did
 `;
 

@@ -18,6 +18,7 @@
 | **Terminal command execution** | — | ✅ |
 | **AI commit message generation** | — | ✅ |
 | **Approve / reject before any change** | — | ✅ |
+| **Project memory across sessions** | — | ✅ |
 
 👉 **[Upgrade to Pro — $6/month](https://buy.stripe.com/4gMeVf1K51ZA2604KxfAc02)**
 
@@ -42,6 +43,9 @@ Ask anything about your code. Type `@filename` to inject any file into the conve
 
 ### 🔀 Git Integration (Pro)
 Generate commit messages, push to remote, and check git status — all from the chat panel.
+
+### 🧠 Project Memory (Pro)
+Freebird can save notes about your project — conventions, decisions, in-progress work — to `.freebird/memory.md` and automatically loads them into context on future requests, so it doesn't forget what you told it last time. Use `/memory` to see what's saved and `/forget` to clear it.
 
 ---
 
@@ -87,6 +91,8 @@ Generate commit messages, push to remote, and check git status — all from the 
 | `/commit` | Generate a commit message (Pro) |
 | `/push` | Push to remote (Pro) |
 | `/status` | Show git status (Pro) |
+| `/memory` | Show what Freebird remembers about this project (Pro) |
+| `/forget` | Clear project memory |
 | `/clear` | Clear conversation history |
 | `/help` | Show all commands |
 
