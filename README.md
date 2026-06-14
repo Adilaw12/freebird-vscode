@@ -8,7 +8,7 @@
 
 > The affordable, open-source alternative to Copilot. Reads your entire codebase, edits files, and pushes to GitHub — powered by Ollama (free/local), Claude, or OpenAI.
 
-![Freebird AI — codebase-aware agent with inline edit](media/banner.svg)
+![Freebird AI — codebase-aware agent with inline edit](media/banner.png)
 
 ---
 
@@ -36,7 +36,7 @@
 
 ## Features
 
-![Freebird AI feature highlights](media/feature-grid.svg)
+![Freebird AI feature highlights](media/feature-grid.png)
 
 ### Bring Your Own AI — No Copilot Required
 Works with **Ollama** (local, totally free), **Anthropic Claude** (pay-as-you-go), or **OpenAI**. Bring your own API key. No GitHub Copilot subscription needed.
