@@ -292,6 +292,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             });
             this.history = this.trimHistory(newHistory);
         } catch (err: any) {
+            trackEvent('api_error');
             this.post({ type: 'assistant-start' });
             this.post({
                 type: 'set-text',
@@ -316,9 +317,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 break;
             case 'tool-start':
                 this.toolCallsThisRound++;
+                trackEvent(`tool_used_${event.tool.action}`);
                 this.post({ type: 'tool-status', id: event.id, state: 'running', label: toolLabel(event.tool) });
                 break;
             case 'tool-result':
+                if (!event.success) trackEvent('tool_error');
                 this.post({
                     type: 'tool-update',
                     id: event.id,
@@ -368,6 +371,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             });
             setCachedResponse(key, response);
         } catch (err: any) {
+            trackEvent('ollama_not_reachable');
             response = `**Ollama not reachable** — ${err.message}\n\n` +
                 'Install Ollama at [ollama.com](https://ollama.com) and run `ollama serve` to get unlimited free local AI.\n\n' +
                 'Or [upgrade to Pro](command:freebird.upgradeToPro) for unlimited cloud-powered edits.';

@@ -8,7 +8,7 @@ import { getCloudEditsRemaining } from './license/usage';
 import { initWorkspaceTreeCache } from './agent/tools';
 import { previewHtmlFile } from './agent/preview';
 import { checkOllamaSetup } from './ai/ollamaSetup';
-import { initTelemetry, trackEvent } from './telemetry';
+import { initTelemetry, disposeTelemetry, trackEvent } from './telemetry';
 
 export function activate(context: vscode.ExtensionContext) {
     const git = new GitService();
@@ -173,4 +173,6 @@ export function activate(context: vscode.ExtensionContext) {
     );
 }
 
-export function deactivate() {}
+export function deactivate() {
+    disposeTelemetry();
+}

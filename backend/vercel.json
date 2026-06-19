@@ -4,6 +4,7 @@
   },
   "rewrites": [
     { "source": "/success", "destination": "/api/success" },
-    { "source": "/upgrade", "destination": "/api/upgrade-page" }
+    { "source": "/upgrade", "destination": "/api/upgrade-page" },
+    { "source": "/dashboard", "destination": "/api/dashboard" }
   ]
 }

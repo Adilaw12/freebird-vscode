@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1] — 2026-06-19
+
+### Added
+- **Remote telemetry** — anonymous usage analytics sent to Vercel backend (event counts, no code/PII). Batched every 60 seconds, respects `freebird.telemetry.enabled` setting
+- **Analytics dashboard** — password-protected dashboard at `/dashboard` showing sessions, feature popularity, backend/platform/version breakdowns, daily trends, and error tracking
+- **Granular event tracking** — per-tool usage (`tool_used_read_file`, `tool_used_edit_file`, etc.), API errors, Ollama connectivity errors, tool execution errors
+
 ## [0.6.0] — 2026-06-19
 
 ### Added
