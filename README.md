@@ -1,10 +1,8 @@
 # Copilot throttled your speed? Switch to Freebird AI.
 
-[![VS Marketplace](https://img.shields.io/vscode-marketplace/v/TenLabs.freebird-ai?style=flat-square&label=VS%20Marketplace&color=0066B8)](https://marketplace.visualstudio.com/items?itemName=TenLabs.freebird-ai)
-[![Installs](https://img.shields.io/vscode-marketplace/i/TenLabs.freebird-ai?style=flat-square&color=success)](https://marketplace.visualstudio.com/items?itemName=TenLabs.freebird-ai)
-[![Rating](https://img.shields.io/vscode-marketplace/r/TenLabs.freebird-ai?style=flat-square&color=yellow)](https://marketplace.visualstudio.com/items?itemName=TenLabs.freebird-ai&ssr=false#review-details)
+[![VS Marketplace](https://img.shields.io/badge/VS%20Marketplace-v0.5.1-0066B8?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=TenLabs.freebird-ai)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](https://github.com/Adilaw12/freebird-vscode/blob/main/LICENSE)
-[![GitHub Stars](https://img.shields.io/github/stars/Adilaw12/freebird-vscode?style=flat-square&color=yellow)](https://github.com/Adilaw12/freebird-vscode)
+[![GitHub](https://img.shields.io/badge/GitHub-Adilaw12%2Ffreebird--vscode-181717?style=flat-square&logo=github)](https://github.com/Adilaw12/freebird-vscode)
 
 ![Freebird AI — codebase-aware agent with inline edit](media/banner.png)
 

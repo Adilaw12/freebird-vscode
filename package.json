@@ -2,7 +2,7 @@
   "name": "freebird-ai",
   "displayName": "Freebird AI",
   "description": "Copilot throttled your speed? Get 5 free advanced edits/day, BYOK for unlimited Pro, or fall back to free local Ollama. Reads your codebase, edits files, pushes to GitHub.",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "publisher": "TenLabs",
   "license": "MIT",
   "icon": "media/icon.png",
