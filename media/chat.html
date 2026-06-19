@@ -319,6 +319,32 @@ em { font-style: italic; }
 }
 .status-hint button:hover { opacity: 0.7; text-decoration: underline; }
 
+/* ── upgrade nudge ── */
+.upgrade-nudge {
+  font-size: 0.79em; padding: 10px 16px; margin: 6px 24px 6px 54px;
+  border-radius: 10px; display: flex; align-items: center; gap: 10px;
+  background: linear-gradient(135deg, rgba(217,119,87,0.08), rgba(217,119,87,0.03));
+  border: 1px solid rgba(217,119,87,0.15);
+  animation: fadeIn 0.3s ease-out;
+}
+.upgrade-nudge .nudge-icon {
+  font-size: 1.1em; flex-shrink: 0;
+}
+.upgrade-nudge .nudge-text { flex: 1; line-height: 1.5; }
+.upgrade-nudge .nudge-text strong { color: #d97757; }
+.upgrade-nudge button {
+  background: rgba(217,119,87,0.12); border: 1px solid rgba(217,119,87,0.25);
+  color: #d97757; cursor: pointer; font-size: 0.9em; padding: 5px 14px;
+  border-radius: 6px; font-weight: 500; white-space: nowrap;
+  transition: background 0.2s;
+}
+.upgrade-nudge button:hover { background: rgba(217,119,87,0.2); }
+.nudge-dismiss {
+  background: none !important; border: none !important; color: var(--vscode-editor-foreground) !important;
+  opacity: 0.3; cursor: pointer; padding: 0 4px !important; font-size: 1em !important; line-height: 1;
+}
+.nudge-dismiss:hover { opacity: 0.7; }
+
 /* keep old class for compat */
 .upgrade-hint {
   font-size: 0.78em; padding: 8px 16px; margin: 4px 24px 4px 54px;
@@ -534,6 +560,30 @@ var acItems       = [];
 var acIndex       = -1;
 var acMode        = null;
 
+var THINKING_PHRASES = [
+  'Thinking...', 'Herding electrons...', 'Pondering...', 'Discombobulating...',
+  'Envisioning...', 'Percolating...', 'Untangling spaghetti...', 'Consulting the oracle...',
+  'Rummaging through bytes...', 'Brewing ideas...', 'Connecting dots...',
+  'Channeling the code spirits...', 'Calibrating neurons...', 'Summoning logic...',
+  'Defragmenting thoughts...', 'Wrangling bits...'
+];
+var thinkingInterval = null;
+
+function startThinkingAnimation(el) {
+  stopThinkingAnimation();
+  var idx = Math.floor(Math.random() * THINKING_PHRASES.length);
+  function update() {
+    idx = (idx + 1) % THINKING_PHRASES.length;
+    el.innerHTML = '<span class="spinning" style="display:inline-block;width:14px;height:14px;margin-right:6px;opacity:0.5"><svg viewBox="0 0 12 12" style="width:100%;height:100%;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round"><path d="M6 1v3M6 8v3M1 6h3M8 6h3"/></svg></span>' + THINKING_PHRASES[idx];
+  }
+  update();
+  thinkingInterval = setInterval(update, 1800);
+}
+
+function stopThinkingAnimation() {
+  if (thinkingInterval) { clearInterval(thinkingInterval); thinkingInterval = null; }
+}
+
 var SLASH_COMMANDS = [
   { cmd:'/commit', detail:'AI-generate a commit message',  iconPath:'M8 3l-5 5 2.5 2.5L11 5M6 10l-3 3' },
   { cmd:'/push',   detail:'Push branch to remote',         iconPath:'M7 11V3M3 7l4-4 4 4' },
@@ -617,16 +667,21 @@ function startAssistantMsg() {
   var name=document.createElement('span'); name.className='msg-name'; name.textContent='Freebird';
   hdr.appendChild(av); hdr.appendChild(name);
   var content=document.createElement('div'); content.className='msg-content typing';
-  content.innerHTML='<span class="spinning" style="display:inline-block;width:14px;height:14px;margin-right:6px;opacity:0.5"><svg viewBox="0 0 12 12" style="width:100%;height:100%;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round"><path d="M6 1v3M6 8v3M1 6h3M8 6h3"/></svg></span>Thinking...';
   div.appendChild(hdr); div.appendChild(content); msgsEl.appendChild(div); scroll();
   currentBubble=content;
+  startThinkingAnimation(content);
 }
 
 function setCurrentText(text) {
   if (!currentBubble) return;
-  currentBubble.classList.remove('typing');
-  if (text && text.trim()) { currentBubble.innerHTML=renderMarkdown(text); }
-  else { currentBubble.innerHTML='<span class="spinning" style="opacity:0.4">&#8635;</span> Thinking...'; currentBubble.classList.add('typing'); }
+  if (text && text.trim()) {
+    stopThinkingAnimation();
+    currentBubble.classList.remove('typing');
+    currentBubble.innerHTML=renderMarkdown(text);
+  } else {
+    currentBubble.classList.add('typing');
+    startThinkingAnimation(currentBubble);
+  }
   scroll();
 }
 
@@ -677,7 +732,7 @@ function respondApproval(id, approved) {
   vscode.postMessage({type:'approval-response',id:id,approved:approved});
 }
 
-function endMsg() { currentBubble=null; setBusy(false); }
+function endMsg() { stopThinkingAnimation(); currentBubble=null; setBusy(false); }
 function setBusy(v) { busy=v; sendBtn.disabled=v; inputEl.disabled=v; if(!v) inputEl.focus(); }
 function scroll() { msgsEl.scrollTop=msgsEl.scrollHeight; }
 
@@ -694,6 +749,38 @@ function showCloudEditUsed(remaining) {
       '<button onclick="vscode.postMessage({type:\'upgrade\'})">Upgrade for unlimited cloud edits</button>';
   }
   msgsEl.appendChild(h); scroll();
+}
+
+var NUDGE_MESSAGES = {
+  'running-low': {
+    icon: '⚡',
+    text: 'Only <strong>2 cloud edits</strong> left today. Go Pro for unlimited cloud-powered AI.',
+    cta: 'Upgrade to Pro'
+  },
+  'power-user': {
+    icon: '🚀',
+    text: 'That was a multi-step agent run — <strong>Pro gives you unlimited</strong> of these.',
+    cta: 'Go Pro'
+  },
+  'periodic': {
+    icon: '💡',
+    text: 'Enjoying Freebird? <strong>Pro</strong> unlocks cloud AI, multi-file editing, and agent mode.',
+    cta: 'Learn more'
+  }
+};
+
+function showUpgradeNudge(variant) {
+  var msg = NUDGE_MESSAGES[variant];
+  if (!msg) return;
+  var nudge = document.createElement('div');
+  nudge.className = 'upgrade-nudge';
+  nudge.innerHTML =
+    '<span class="nudge-icon">' + msg.icon + '</span>' +
+    '<span class="nudge-text">' + msg.text + '</span>' +
+    '<button onclick="vscode.postMessage({type:\'upgrade\'})">' + msg.cta + '</button>' +
+    '<button class="nudge-dismiss" onclick="this.parentElement.remove()" title="Dismiss">✕</button>';
+  msgsEl.appendChild(nudge);
+  scroll();
 }
 
 function showOllamaFallback() {
@@ -809,6 +896,7 @@ window.addEventListener('message',function(e){
     case 'assistant-end':    endMsg(); break;
     case 'cloud-edit-used':  showCloudEditUsed(m.remaining); break;
     case 'ollama-fallback':  showOllamaFallback(); break;
+    case 'upgrade-nudge':    showUpgradeNudge(m.variant); break;
     case 'cleared':          msgsEl.innerHTML=''; addDivider('conversation cleared'); break;
     case 'workspace-files':  workspaceFiles=m.files||[]; break;
     case 'license-status': {

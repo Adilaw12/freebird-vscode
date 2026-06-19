@@ -147,7 +147,7 @@ export function activate(context: vscode.ExtensionContext) {
                     { label: '$(server) Ollama (local — free)',  value: 'ollama',    description: 'Unlimited, 100% private, runs on your machine' },
                     { label: '$(cloud) Anthropic Claude (Pro)',  value: 'anthropic', description: 'BYOK — direct-to-LLM speed, total privacy' },
                     { label: '$(cloud) OpenAI (Pro)',            value: 'openai',    description: 'BYOK — direct-to-LLM speed, total privacy' },
-                    { label: '$(cloud) DeepSeek Coder V2 (Pro)', value: 'deepseek',  description: 'BYOK — fast coding model, great value' },
+                    { label: '$(cloud) DeepSeek V4-pro (Pro)', value: 'deepseek',  description: 'BYOK — advanced reasoning model, excellent value' },
                     { label: '$(cloud) Qwen 2.5 (Pro)',          value: 'qwen',      description: 'BYOK — powerful coding model via DashScope' }
                 ],
                 { placeHolder: 'Select AI backend', title: 'Freebird AI: Configure AI Backend' }

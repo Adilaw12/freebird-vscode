@@ -73,6 +73,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     private history: Message[] = [];
     private readonly pendingApprovals = new Map<string, (approved: boolean) => void>();
     private rawBuffer = '';
+    private sessionMessageCount = 0;
+    private toolCallsThisRound = 0;
 
     constructor(context: vscode.ExtensionContext, git: GitService) {
         this.context = context;
@@ -235,19 +237,36 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         this.post({ type: 'user', text: trimmed });
 
         const license = await getLicenseStatus(this.context);
+        this.sessionMessageCount++;
 
         if (license.isPro) {
             trackEvent('pro_message');
             await this.runProChat(cleanText, mentionContext);
         } else if (getCloudEditsRemaining(this.context) > 0) {
             trackEvent('cloud_edit_used');
+            this.toolCallsThisRound = 0;
             await this.runProChat(cleanText, mentionContext);
             const remaining = await consumeCloudEdit(this.context);
             this.post({ type: 'cloud-edit-used', remaining });
+
+            // Nudge when cloud edits are running low
+            if (remaining === 2) {
+                this.post({ type: 'upgrade-nudge', variant: 'running-low' });
+            }
+
+            // Nudge after an impressive multi-tool agent run
+            if (this.toolCallsThisRound >= 3) {
+                this.post({ type: 'upgrade-nudge', variant: 'power-user' });
+            }
         } else {
             trackEvent('ollama_fallback');
             this.post({ type: 'ollama-fallback' });
             await this.runOllamaFallback(cleanText, mentionContext);
+
+            // Periodic nudge every 10 messages in Ollama fallback mode
+            if (this.sessionMessageCount % 10 === 0) {
+                this.post({ type: 'upgrade-nudge', variant: 'periodic' });
+            }
         }
     }
 
@@ -296,6 +315,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 this.rawBuffer = '';
                 break;
             case 'tool-start':
+                this.toolCallsThisRound++;
                 this.post({ type: 'tool-status', id: event.id, state: 'running', label: toolLabel(event.tool) });
                 break;
             case 'tool-result':
@@ -462,8 +482,11 @@ function toolLabel(tool: { action: string; [key: string]: unknown }): string {
         case 'write_file':  return `Writing ${tool.path}`;
         case 'edit_file':   return `Editing ${tool.path}`;
         case 'run_command': return `Running: ${tool.command}`;
-        case 'git_status':  return 'Checking git status';
-        case 'git_push':    return 'Pushing to remote';
-        default:            return tool.action;
+        case 'download_file':  return `Downloading ${tool.url}`;
+        case 'create_diagram': return `Creating diagram: ${tool.title}`;
+        case 'copy_file':      return `Copying ${tool.source} → ${tool.destination}`;
+        case 'git_status':     return 'Checking git status';
+        case 'git_push':       return 'Pushing to remote';
+        default:               return tool.action;
     }
 }

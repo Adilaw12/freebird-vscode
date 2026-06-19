@@ -2,7 +2,7 @@
   "name": "freebird-ai",
   "displayName": "Freebird AI",
   "description": "Copilot throttled your speed? Get 5 free advanced edits/day, BYOK for unlimited Pro, or fall back to free local Ollama. Reads your codebase, edits files, pushes to GitHub.",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "publisher": "TenLabs",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -154,7 +154,7 @@
         "freebird.model": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Model override. Leave blank for the recommended default per backend:\n- Ollama: `qwen2.5-coder`\n- Anthropic: `claude-haiku-4-5`\n- OpenAI: `gpt-4o-mini`\n- DeepSeek: `deepseek-coder-v2`\n- Qwen: `qwen2.5-coder-32b-instruct`\n\nTip: for heavier multi-file agent tasks (Pro), try `claude-sonnet-4-6` — it follows multi-step instructions more reliably than Haiku, at a higher API cost."
+          "markdownDescription": "Model override. Leave blank for the recommended default per backend:\n- Ollama: `qwen2.5-coder`\n- Anthropic: `claude-haiku-4-5`\n- OpenAI: `gpt-4o-mini`\n- DeepSeek: `deepseek-reasoner`\n- Qwen: `qwen2.5-coder-32b-instruct`\n\nTip: for heavier multi-file agent tasks (Pro), try `claude-sonnet-4-6` — it follows multi-step instructions more reliably than Haiku, at a higher API cost."
         },
         "freebird.ollamaUrl": {
           "type": "string",

@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as https from 'https';
+import * as http from 'http';
 import { exec, ExecException } from 'child_process';
 import { GitService } from '../git/service';
 import { previewHtmlFile } from './preview';
@@ -100,6 +102,43 @@ export const NATIVE_TOOL_SCHEMAS: ToolSchema[] = [
         name: 'git_push',
         description: 'Push the current branch to the remote. Requires user approval.',
         input_schema: { type: 'object', properties: {} }
+    },
+    {
+        name: 'download_file',
+        description: 'Download a file from a URL and save it to the workspace. Requires user approval.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                url: { type: 'string', description: 'URL to download from (http/https)' },
+                path: { type: 'string', description: 'Workspace-relative path where to save the file' }
+            },
+            required: ['url', 'path']
+        }
+    },
+    {
+        name: 'create_diagram',
+        description: 'Create a diagram using Mermaid syntax. Generates an HTML file with the rendered diagram and opens a live preview. Supports flowcharts, sequence diagrams, class diagrams, ER diagrams, Gantt charts, pie charts, and more.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                title: { type: 'string', description: 'Diagram title (used for the filename)' },
+                mermaid: { type: 'string', description: 'Mermaid diagram definition (e.g. "graph TD; A-->B;")' },
+                path: { type: 'string', description: 'Workspace-relative path to save the HTML file (default: diagrams/<title>.html)' }
+            },
+            required: ['title', 'mermaid']
+        }
+    },
+    {
+        name: 'copy_file',
+        description: 'Copy a file from one location to another within the workspace. Requires user approval if the destination already exists.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                source: { type: 'string', description: 'Workspace-relative path of the source file' },
+                destination: { type: 'string', description: 'Workspace-relative path for the copy' }
+            },
+            required: ['source', 'destination']
+        }
     }
 ];
 
@@ -113,15 +152,18 @@ You have access to tools to read and modify the codebase. To invoke a tool write
 \`\`\`
 
 AVAILABLE TOOLS:
-- read_file   {"action":"read_file","path":"src/main.ts"}                                        read a file
-- list_files  {"action":"list_files","pattern":"**/*.ts"}                                        list files by glob
-- search_code {"action":"search_code","query":"myFunc","filePattern":"*.ts"}                     grep across files
-- write_file  {"action":"write_file","path":"src/new.ts","content":"..."}                        create / overwrite
-- edit_file   {"action":"edit_file","path":"src/x.ts","oldStr":"exact","newStr":"replacement"}   targeted edit
-- preview_html {"action":"preview_html","path":"index.html"}                                     open a live preview tab
-- run_command {"action":"run_command","command":"npm test"}                                       run in terminal
-- git_status  {"action":"git_status"}                                                            repo status
-- git_push    {"action":"git_push"}                                                              push to remote
+- read_file     {"action":"read_file","path":"src/main.ts"}                                       read a file
+- list_files    {"action":"list_files","pattern":"**/*.ts"}                                       list files by glob
+- search_code   {"action":"search_code","query":"myFunc","filePattern":"*.ts"}                    grep across files
+- write_file    {"action":"write_file","path":"src/new.ts","content":"..."}                       create / overwrite
+- edit_file     {"action":"edit_file","path":"src/x.ts","oldStr":"exact","newStr":"replacement"}  targeted edit
+- preview_html  {"action":"preview_html","path":"index.html"}                                    open a live preview tab
+- run_command   {"action":"run_command","command":"npm test"}                                     run in terminal
+- download_file  {"action":"download_file","url":"https://example.com/file.zip","path":"files/file.zip"} download from web
+- create_diagram {"action":"create_diagram","title":"Auth Flow","mermaid":"graph TD; A-->B;"}     create & preview a Mermaid diagram
+- copy_file      {"action":"copy_file","source":"src/old.ts","destination":"src/new.ts"}           copy a file
+- git_status     {"action":"git_status"}                                                          repo status
+- git_push       {"action":"git_push"}                                                            push to remote
 
 GUIDELINES:
 - For tasks that need multiple steps or touch several files, start your reply with a short plan — a numbered list of 2-5 steps — before making any tool calls, so the user knows what you're about to do. Skip the plan for simple one-step requests (answering a question, reading or editing a single file).
@@ -241,15 +283,18 @@ export async function executeToolCall(
 ): Promise<ToolResult> {
     try {
         switch (tool.action) {
-            case 'read_file':   return await readFileTool(tool);
-            case 'list_files':  return await listFilesTool(tool);
-            case 'search_code': return await searchCodeTool(tool);
-            case 'write_file':  return await writeFileTool(tool, onApprovalNeeded);
-            case 'edit_file':   return await editFileTool(tool, onApprovalNeeded);
-            case 'preview_html': return await previewHtmlTool(tool);
-            case 'run_command': return await runCommandTool(tool, onApprovalNeeded);
-            case 'git_status':  return { success: true, output: await git.getStatus() };
-            case 'git_push':    return await gitPushTool(git, onApprovalNeeded);
+            case 'read_file':      return await readFileTool(tool);
+            case 'list_files':     return await listFilesTool(tool);
+            case 'search_code':    return await searchCodeTool(tool);
+            case 'write_file':     return await writeFileTool(tool, onApprovalNeeded);
+            case 'edit_file':      return await editFileTool(tool, onApprovalNeeded);
+            case 'preview_html':   return await previewHtmlTool(tool);
+            case 'run_command':    return await runCommandTool(tool, onApprovalNeeded);
+            case 'download_file':  return await downloadFileTool(tool, onApprovalNeeded);
+            case 'create_diagram': return await createDiagramTool(tool);
+            case 'copy_file':      return await copyFileTool(tool, onApprovalNeeded);
+            case 'git_status':     return { success: true, output: await git.getStatus() };
+            case 'git_push':       return await gitPushTool(git, onApprovalNeeded);
             default:
                 return { success: false, output: `Unknown tool action: "${tool.action}"` };
         }
@@ -492,6 +537,163 @@ async function runCommandTool(tool: ToolCall, onApprovalNeeded: ApprovalFn): Pro
                 }
             });
     });
+}
+
+async function downloadFileTool(tool: ToolCall, onApprovalNeeded: ApprovalFn): Promise<ToolResult> {
+    const url = String(tool.url ?? '');
+    const relPath = String(tool.path ?? '');
+    if (!url || !relPath) return { success: false, output: 'download_file requires "url" and "path".' };
+
+    // Validate URL
+    let parsedUrl: URL;
+    try {
+        parsedUrl = new URL(url);
+    } catch {
+        return { success: false, output: `Invalid URL: ${url}` };
+    }
+
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+        return { success: false, output: `Only http/https URLs are supported.` };
+    }
+
+    const approved = await onApprovalNeeded(
+        approvalId('download_file'),
+        `Download ${url}`,
+        `Save to: ${relPath}`
+    );
+    if (!approved) return { success: false, output: 'User rejected this download.' };
+
+    const full = resolveWorkspacePath(relPath);
+    const exists = fs.existsSync(full);
+
+    return new Promise<ToolResult>(resolve => {
+        const protocol = parsedUrl.protocol === 'https:' ? https : http;
+        const timeout = setTimeout(() => {
+            resolve({ success: false, output: 'Download timeout (30s exceeded).' });
+        }, 30_000);
+
+        const request = protocol.get(url, { timeout: 30_000 }, (response) => {
+            clearTimeout(timeout);
+
+            // Handle redirects
+            if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+                const redirectUrl = response.headers.location;
+                downloadFileTool({ ...tool, url: redirectUrl }, onApprovalNeeded).then(resolve);
+                return;
+            }
+
+            if (!response.statusCode || response.statusCode !== 200) {
+                resolve({ success: false, output: `HTTP ${response.statusCode}: ${response.statusMessage}` });
+                return;
+            }
+
+            const contentLength = parseInt(response.headers['content-length'] || '0', 10);
+            const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB limit
+
+            if (contentLength > MAX_FILE_SIZE) {
+                resolve({ success: false, output: `File too large (${contentLength} bytes, limit is ${MAX_FILE_SIZE}).` });
+                return;
+            }
+
+            try {
+                fs.mkdirSync(path.dirname(full), { recursive: true });
+                const writeStream = fs.createWriteStream(full);
+
+                response.pipe(writeStream);
+
+                writeStream.on('finish', () => {
+                    writeStream.close();
+                    const stats = fs.statSync(full);
+                    resolve({
+                        success: true,
+                        output: `Downloaded ${relPath} (${stats.size} bytes)${exists ? ' and replaced existing file.' : '.'}`
+                    });
+                });
+
+                writeStream.on('error', (err) => {
+                    try { fs.unlinkSync(full); } catch { /* ok */ }
+                    resolve({ success: false, output: `Write error: ${err.message}` });
+                });
+            } catch (err: any) {
+                resolve({ success: false, output: `Error saving file: ${err?.message ?? String(err)}` });
+            }
+        });
+
+        request.on('error', (err: any) => {
+            clearTimeout(timeout);
+            resolve({ success: false, output: `Download error: ${err?.message ?? String(err)}` });
+        });
+    });
+}
+
+async function createDiagramTool(tool: ToolCall): Promise<ToolResult> {
+    const title = String(tool.title ?? '').trim();
+    const mermaid = String(tool.mermaid ?? '').trim();
+    if (!title || !mermaid) return { success: false, output: 'create_diagram requires "title" and "mermaid".' };
+
+    const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    const relPath = String(tool.path ?? '') || `diagrams/${slug}.html`;
+    const full = resolveWorkspacePath(relPath);
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1e1e2e; color: #cdd6f4; display: flex; flex-direction: column; align-items: center; padding: 2rem; margin: 0; }
+    h1 { font-size: 1.4rem; margin-bottom: 1.5rem; color: #89b4fa; }
+    .mermaid { background: #181825; border-radius: 8px; padding: 1.5rem; max-width: 100%; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>${title.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</h1>
+  <div class="mermaid">
+${mermaid}
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"><\/script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'dark' });<\/script>
+</body>
+</html>`;
+
+    try {
+        fs.mkdirSync(path.dirname(full), { recursive: true });
+        fs.writeFileSync(full, html, 'utf8');
+        previewHtmlFile(full);
+        return { success: true, output: `Diagram saved to ${relPath} and opened in preview.` };
+    } catch (err: any) {
+        return { success: false, output: `Error creating diagram: ${err?.message ?? String(err)}` };
+    }
+}
+
+async function copyFileTool(tool: ToolCall, onApprovalNeeded: ApprovalFn): Promise<ToolResult> {
+    const source = String(tool.source ?? '').trim();
+    const destination = String(tool.destination ?? '').trim();
+    if (!source || !destination) return { success: false, output: 'copy_file requires "source" and "destination".' };
+
+    const srcFull = resolveWorkspacePath(source);
+    const dstFull = resolveWorkspacePath(destination);
+
+    if (!fs.existsSync(srcFull)) return { success: false, output: `Source file not found: ${source}` };
+    if (!fs.statSync(srcFull).isFile()) return { success: false, output: `Source is not a file: ${source}` };
+
+    if (fs.existsSync(dstFull)) {
+        const approved = await onApprovalNeeded(
+            approvalId('copy_file'),
+            `Overwrite ${destination}`,
+            `Copy ${source} → ${destination} (destination already exists)`
+        );
+        if (!approved) return { success: false, output: 'User rejected the overwrite.' };
+    }
+
+    try {
+        fs.mkdirSync(path.dirname(dstFull), { recursive: true });
+        fs.copyFileSync(srcFull, dstFull);
+        return { success: true, output: `Copied ${source} → ${destination}` };
+    } catch (err: any) {
+        return { success: false, output: `Error copying file: ${err?.message ?? String(err)}` };
+    }
 }
 
 async function gitPushTool(git: GitService, onApprovalNeeded: ApprovalFn): Promise<ToolResult> {

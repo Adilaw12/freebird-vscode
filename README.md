@@ -1,6 +1,6 @@
 # Copilot throttled your speed? Switch to Freebird AI.
 
-[![VS Marketplace](https://img.shields.io/badge/VS%20Marketplace-v0.5.1-0066B8?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=TenLabs.freebird-ai)
+[![VS Marketplace](https://img.shields.io/badge/VS%20Marketplace-v0.6.0-0066B8?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=TenLabs.freebird-ai)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](https://github.com/Adilaw12/freebird-vscode/blob/main/LICENSE)
 [![GitHub](https://img.shields.io/badge/GitHub-Adilaw12%2Ffreebird--vscode-181717?style=flat-square&logo=github)](https://github.com/Adilaw12/freebird-vscode)
 
@@ -10,11 +10,11 @@
 
 ## The Problem
 
-Copilot is great — until you hit your monthly high-speed limit and get downgraded to a slow, basic model. Suddenly your AI assistant can barely keep up.
+Copilot is great - until you hit your monthly high-speed limit and get downgraded to a slow, basic model. Suddenly your AI assistant can barely keep up.
 
 ## The Solution
 
-Don't wait for your billing to reset. Install Freebird AI and instantly get **5 advanced cloud edits per day** — codebase search, multi-file editing, inline rewrites, AI commits, and more. Need more? **Upgrade to Pro ($6/mo)** to plug in your own API keys (BYOK) for **unlimited, unthrottled, fast refactoring**. If you run out of cash, fall back to **unlimited local Ollama (Llama 3) for free**.
+Don't wait for your billing to reset. Install Freebird AI and instantly get **5 advanced cloud edits per day** - codebase search, multi-file editing, inline rewrites, AI commits, and more. Need more? **Upgrade to Pro ($6/mo)** to plug in your own API keys (BYOK) for **unlimited, unthrottled, fast refactoring**. If you run out of cash, fall back to **unlimited local Ollama (Llama 3) for free**.
 
 **[Upgrade to Pro — $6/month](https://buy.stripe.com/4gMeVf1K51ZA2604KxfAc02)**
 
@@ -42,11 +42,11 @@ Don't wait for your billing to reset. Install Freebird AI and instantly get **5 
 
 | Model | Best for | Cost |
 |---|---|---|
-| **DeepSeek Coder V2** | Fast coding, debugging, and everyday edits | ~$0.14/M tokens |
+| **DeepSeek V4-pro** | Advanced reasoning, coding, and debugging | ~$0.14/M tokens |
 | **Qwen 2.5 Coder** | Programming speed and accuracy | ~$0.16/M tokens |
 | **Claude 3.5 Sonnet** | Complex refactoring & system architecture | ~$3/M tokens |
 | **GPT-4o** | Best all-rounder — code, docs, planning | ~$2.50/M tokens |
-| **Ollama (Llama 3)** | Unlimited local AI — free, 100% private | Free |
+| **Ollama (Llama 3)** | Unlimited local AI - free, 100% private | Free |
 
 All cloud models are BYOK (Pro). Ollama is always available as a free fallback.
 
@@ -57,7 +57,7 @@ All cloud models are BYOK (Pro). Ollama is always available as a free fallback.
 ![Freebird AI feature highlights](media/feature-grid.png)
 
 ### 5 Free Advanced Edits Every Day
-Instantly get 5 cloud-powered agent runs per day — codebase indexing, multi-file edits, inline edit, AI commits, and more. When they run out, Freebird seamlessly switches to **unlimited local Ollama (Llama 3)** so you're never blocked. Resets daily, no card required.
+Instantly get 5 cloud-powered agent runs per day codebase - indexing, multi-file edits, inline edit, AI commits, and more. When they run out, Freebird seamlessly switches to **unlimited local Ollama (Llama 3)** so you're never blocked. Resets daily, no card required.
 
 ### Bring Your Own Keys — Unthrottled (Pro)
 Plug in your own **Anthropic Claude** or **OpenAI** API key for unlimited, unthrottled refactoring. Direct-to-LLM speed, total data privacy, no middleman quotas.
@@ -66,7 +66,7 @@ Plug in your own **Anthropic Claude** or **OpenAI** API key for unlimited, unthr
 Run out of cloud edits? Out of budget? Freebird seamlessly falls back to **Ollama (Llama 3)** running on your machine. Unlimited, 100% private, zero cost. No one can throttle your local AI.
 
 ### Understands Your Whole Codebase
-Freebird indexes your workspace and reads any file on demand. Ask it to refactor a module, trace a bug across files, or add a feature — it reads the relevant files first, then makes targeted edits with your approval.
+Freebird indexes your workspace and reads any file on demand. Ask it to refactor a module, trace a bug across files, or add a feature - it reads the relevant files first, then makes targeted edits with your approval.
 
 ### Makes Real Code Changes
 The AI creates and edits files directly in your workspace. Every write, edit, or destructive action shows an **Approve / Reject** card — nothing is modified silently.
@@ -78,7 +78,7 @@ Select any code, press `Ctrl+Alt+K`, type an instruction, and the selection is r
 Ask anything about your code. Type `@filename` to inject any file into the conversation. Type `/` to see all available commands.
 
 ### Git Integration
-Generate commit messages, push to remote, and check git status — all from the chat panel.
+Generate commit messages, push to remote, and check git status - all from the chat panel.
 
 ### Project Memory (Pro)
 Freebird saves notes about your project — conventions, decisions, in-progress work — to `.freebird/memory.md` and loads them automatically on future requests. Use `/memory` to see what's saved and `/forget` to clear it.
@@ -91,7 +91,7 @@ Freebird saves notes about your project — conventions, decisions, in-progress 
 
 1. Open Freebird AI chat (`Ctrl+Alt+O`)
 2. If Ollama isn't installed, Freebird will **automatically download and install it** for you
-3. The default coding model (`qwen2.5-coder`) is pulled automatically — no manual setup needed
+3. The default coding model (`qwen2.5-coder`) is pulled automatically - no manual setup needed
 
 Already have Ollama? Freebird detects it and connects instantly.
 
@@ -107,10 +107,11 @@ Already have Ollama? Freebird detects it and connects instantly.
 2. Run **Freebird: Configure AI Backend** from the Command Palette
 3. Select **OpenAI** and paste your API key.
 
-### Option 4 — DeepSeek Coder V2 (Pro, BYOK)
+### Option 4 — DeepSeek (Pro, BYOK)
 
 1. Get an API key at [platform.deepseek.com](https://platform.deepseek.com)
-2. Run **Freebird: Configure AI Backend** → select **DeepSeek Coder V2** and paste your key.
+2. Run **Freebird: Configure AI Backend** → select **DeepSeek** and paste your key.
+3. *(Optional)* To use a different DeepSeek model version, see [Customizing Model Versions](#customizing-model-versions) below.
 
 ### Option 5 — Qwen 2.5 (Pro, BYOK)
 
@@ -145,17 +146,47 @@ Already have Ollama? Freebird detects it and connects instantly.
 
 ## How the Agent Works
 
-When you ask Freebird to perform a task, it runs an agent loop — similar to Cursor Composer:
+When you ask Freebird to perform a task, it runs an agent loop - similar to Cursor Composer:
 
 1. **Reads** your workspace file tree automatically
 2. **Fetches** specific files it needs
 3. **Searches** the codebase for symbols, patterns, or text
-4. **Edits** files with targeted diffs — Approve / Reject before anything changes
-5. **Creates** new files — preview shown before creation
-6. **Runs** terminal commands — shown before execution
-7. **Commits and pushes** — requires your explicit approval
+4. **Edits** files with targeted diffs - Approve / Reject before anything changes
+5. **Creates** new files - preview shown before creation
+6. **Runs** terminal commands - shown before execution
+7. **Commits and pushes** - requires your explicit approval
 
 Nothing is modified silently. You stay in full control.
+
+---
+
+## Customizing Model Versions
+
+All cloud backends support model overrides via the `freebird.model` setting. This lets you use any model version available from your provider.
+
+### DeepSeek Model Versions
+
+By default, Freebird uses `deepseek-reasoner` (V4-pro). To switch to a different version:
+
+**Via Settings UI:**
+1. Open VS Code Settings (`Ctrl+,`)
+2. Search for `freebird.model`
+3. Enter one of:
+   - `deepseek-reasoner` — V4-pro (default, recommended for complex reasoning)
+   - `deepseek-coder` — Coder model (faster, lighter-weight)
+   - `deepseek-chat` — Chat model
+   - Or any other model available in your DeepSeek API plan
+
+**Via `.vscode/settings.json`:**
+```json
+{
+  "freebird.backend": "deepseek",
+  "freebird.apiKey": "your-api-key-here",
+  "freebird.model": "deepseek-coder"
+}
+```
+
+Same approach works for **Anthropic**, **OpenAI**, and **Qwen** — just enter any model ID available in your account.
 
 ---
 
@@ -176,7 +207,7 @@ Nothing is modified silently. You stay in full control.
 | Ollama | `qwen2.5-coder` | — |
 | Anthropic | `claude-haiku-4-5` | `claude-sonnet-4-6` (complex refactoring) |
 | OpenAI | `gpt-4o-mini` | `gpt-4o` (all-rounder) |
-| DeepSeek | `deepseek-coder-v2` | — |
+| DeepSeek | `deepseek-reasoner` | — |
 | Qwen | `qwen2.5-coder-32b-instruct` | — |
 
 See the [model guide](#pick-the-right-model-for-the-job) above to choose the best model for your task.

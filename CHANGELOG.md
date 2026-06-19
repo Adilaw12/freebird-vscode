@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.6.0] — 2026-06-19
+
+### Added
+- **Download file tool** — agent can download files from URLs and save them to the workspace
+- **Create diagram tool** — agent can generate Mermaid diagrams (flowcharts, sequence, ER, Gantt, etc.) and render them in a live preview tab
+- **Copy file tool** — agent can copy/paste files within the workspace
+- **Thinking animation** — fun rotating status phrases while AI is processing ("Herding electrons...", "Pondering...", "Discombobulating...", etc.)
+- **Auto Ollama setup** — on first load, automatically detects, starts, or downloads+installs Ollama without prompting (cancellable progress notification)
+- **Upgrade nudges** — contextual, dismissible Pro upgrade prompts for free users: when cloud edits run low, after impressive multi-tool agent runs, and periodically in Ollama fallback mode
+
+### Changed
+- **DeepSeek default model** updated from `deepseek-coder-v2` to `deepseek-reasoner` (V4-pro)
+- DeepSeek backend label updated to "DeepSeek V4-pro" in the configure picker
+- Model override description updated with `deepseek-reasoner` as default
+
 ## [0.4.3] — 2026-06-14
 
 ### Added

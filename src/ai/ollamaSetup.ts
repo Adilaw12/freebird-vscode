@@ -7,51 +7,35 @@ export async function checkOllamaSetup(context: vscode.ExtensionContext): Promis
     const config = vscode.workspace.getConfiguration('freebird');
     const backend = config.get<string>('backend', 'ollama');
     if (backend !== 'ollama') return;
-    if (context.globalState.get<boolean>('ollamaPromptDismissed')) return;
+    if (context.globalState.get<boolean>('ollamaSetupDismissed')) return;
 
     const url = config.get<string>('ollamaUrl', 'http://localhost:11434');
+
+    // Already running — just make sure the model is pulled
     if (await pingOllama(url)) {
         await ensureModel(url, config.get<string>('model') || 'qwen2.5-coder');
         return;
     }
 
+    // Installed but not running — auto-start
     if (isOllamaInstalled()) {
-        const choice = await vscode.window.showInformationMessage(
-            'Ollama is installed but not running. Start it to enable free local AI.',
-            'Start Ollama', 'Use a different backend', "Don't show again"
-        );
-        if (choice === 'Start Ollama') {
-            startOllama();
-            await waitForOllama(url, 15000);
-            const model = config.get<string>('model') || 'qwen2.5-coder';
-            await ensureModel(url, model);
-        } else if (choice === 'Use a different backend') {
-            vscode.commands.executeCommand('freebird.configure');
-        } else if (choice === "Don't show again") {
-            await context.globalState.update('ollamaPromptDismissed', true);
+        startOllama();
+        const ready = await waitForOllama(url, 15000);
+        if (ready) {
+            await ensureModel(url, config.get<string>('model') || 'qwen2.5-coder');
         }
         return;
     }
 
-    const choice = await vscode.window.showInformationMessage(
-        'Freebird uses Ollama for free, unlimited local AI. Install it now for seamless usage?',
-        'Install Ollama (recommended)', 'Use a different backend', "Don't show again"
-    );
-
-    if (choice === 'Install Ollama (recommended)') {
-        await installOllama(context);
-    } else if (choice === 'Use a different backend') {
-        vscode.commands.executeCommand('freebird.configure');
-    } else if (choice === "Don't show again") {
-        await context.globalState.update('ollamaPromptDismissed', true);
-    }
+    // Not installed — auto-download with progress notification
+    await installOllama(context);
 }
 
 async function installOllama(context: vscode.ExtensionContext): Promise<void> {
     const platform = process.platform;
 
     await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: 'Freebird: Setting up Ollama...', cancellable: true },
+        { location: vscode.ProgressLocation.Notification, title: 'Freebird: Setting up Ollama for free local AI...', cancellable: true },
         async (progress, token) => {
             try {
                 if (platform === 'win32') {
@@ -62,9 +46,12 @@ async function installOllama(context: vscode.ExtensionContext): Promise<void> {
                     const installerPath = path.join(downloadDir, 'OllamaSetup.exe');
 
                     await downloadFile(installerUrl, installerPath, token);
-                    if (token.isCancellationRequested) return;
+                    if (token.isCancellationRequested) {
+                        await context.globalState.update('ollamaSetupDismissed', true);
+                        return;
+                    }
 
-                    progress.report({ message: 'Running installer...' });
+                    progress.report({ message: 'Installing (this may take a moment)...' });
                     cp.execSync(`"${installerPath}" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART`, { timeout: 120000 });
 
                     try { fs.unlinkSync(installerPath); } catch { /* cleanup optional */ }
@@ -79,6 +66,11 @@ async function installOllama(context: vscode.ExtensionContext): Promise<void> {
                     return;
                 }
 
+                if (token.isCancellationRequested) {
+                    await context.globalState.update('ollamaSetupDismissed', true);
+                    return;
+                }
+
                 progress.report({ message: 'Starting Ollama...' });
                 startOllama();
 
@@ -89,13 +81,24 @@ async function installOllama(context: vscode.ExtensionContext): Promise<void> {
                     progress.report({ message: 'Pulling qwen2.5-coder model...' });
                     const model = vscode.workspace.getConfiguration('freebird').get<string>('model') || 'qwen2.5-coder';
                     await pullModel(url, model, progress, token);
-                    vscode.window.showInformationMessage('Ollama is ready! Freebird is now using free local AI.');
+                    vscode.window.showInformationMessage(
+                        'Ollama is ready! Freebird is now using free local AI.'
+                    );
                 } else {
                     vscode.window.showWarningMessage('Ollama installed but taking a while to start. Try restarting VS Code.');
                 }
             } catch (err: any) {
-                vscode.window.showErrorMessage(`Ollama setup failed: ${err.message}. You can install manually at ollama.com`);
-                vscode.env.openExternal(vscode.Uri.parse('https://ollama.com/download'));
+                const action = await vscode.window.showErrorMessage(
+                    `Ollama auto-setup failed: ${err.message}`,
+                    'Install manually', 'Use cloud backend', "Don't try again"
+                );
+                if (action === 'Install manually') {
+                    vscode.env.openExternal(vscode.Uri.parse('https://ollama.com/download'));
+                } else if (action === 'Use cloud backend') {
+                    vscode.commands.executeCommand('freebird.configure');
+                } else if (action === "Don't try again") {
+                    await context.globalState.update('ollamaSetupDismissed', true);
+                }
             }
         }
     );
