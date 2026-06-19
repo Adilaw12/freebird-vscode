@@ -9,8 +9,8 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
   display: flex; flex-direction: column; height: 100vh;
-  font-family: var(--vscode-font-family);
-  font-size: var(--vscode-font-size);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
   color: var(--vscode-editor-foreground);
   background: var(--vscode-editor-background);
   overflow: hidden;
@@ -19,315 +19,418 @@ body {
 /* ── top bar ── */
 #top-bar {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 0 12px; height: 38px; flex-shrink: 0;
-  border-bottom: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.08));
-  background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  padding: 0 16px; height: 44px; flex-shrink: 0;
+  border-bottom: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.06));
+  background: var(--vscode-editor-background);
 }
-#top-bar-left { display: flex; align-items: center; gap: 8px; }
+#top-bar-left { display: flex; align-items: center; gap: 10px; }
+#top-bar-title {
+  font-size: 0.88em; font-weight: 600; letter-spacing: -0.01em;
+  opacity: 0.85;
+}
 #pro-badge {
   display: none;
-  font-size: 0.68em; font-weight: 700; letter-spacing: 0.06em;
-  padding: 2px 7px; border-radius: 20px;
-  background: rgba(108, 99, 255, 0.18); color: #a89aff;
-  border: 1px solid rgba(108,99,255,0.35);
+  font-size: 0.62em; font-weight: 700; letter-spacing: 0.06em;
+  padding: 2px 8px; border-radius: 10px;
+  background: rgba(217, 119, 87, 0.15); color: #d97757;
+  border: 1px solid rgba(217,119,87,0.25);
 }
 #top-bar-right { display: flex; gap: 2px; }
 .icon-btn {
   background: none; border: none; cursor: pointer;
-  color: var(--vscode-editor-foreground); opacity: 0.45;
-  font-size: 0.78em; padding: 4px 8px; border-radius: 4px;
-  display: flex; align-items: center; gap: 4px;
-  transition: opacity 0.15s, background 0.15s;
+  color: var(--vscode-editor-foreground); opacity: 0.35;
+  font-size: 0.78em; padding: 6px 10px; border-radius: 6px;
+  display: flex; align-items: center; gap: 5px;
+  transition: opacity 0.2s, background 0.2s;
 }
-.icon-btn:hover { opacity: 0.85; background: var(--vscode-toolbar-hoverBackground, rgba(255,255,255,0.07)); }
-.icon-btn svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+.icon-btn:hover { opacity: 0.75; background: var(--vscode-toolbar-hoverBackground, rgba(255,255,255,0.05)); }
+.icon-btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
 
 /* ── upgrade banner ── */
 #upgrade-banner {
   display: none; align-items: center; justify-content: space-between;
-  padding: 7px 14px; font-size: 0.79em; flex-shrink: 0;
-  background: rgba(108, 99, 255, 0.10);
-  border-bottom: 1px solid rgba(108,99,255,0.2);
+  padding: 8px 16px; font-size: 0.79em; flex-shrink: 0;
+  background: rgba(217, 119, 87, 0.06);
+  border-bottom: 1px solid rgba(217,119,87,0.12);
   color: var(--vscode-editor-foreground);
 }
-.banner-links { display: flex; align-items: center; gap: 12px; }
+.banner-links { display: flex; align-items: center; gap: 14px; }
 .link-btn {
   background: none; border: none; cursor: pointer; padding: 0;
-  color: #a89aff; font-size: inherit; text-decoration: underline;
-  text-underline-offset: 2px;
+  color: #d97757; font-size: inherit; text-decoration: none;
+  font-weight: 500;
+  transition: opacity 0.2s;
 }
+.link-btn:hover { opacity: 0.8; text-decoration: underline; }
 .banner-close {
-  background: none; border: none; cursor: pointer; opacity: 0.45;
-  color: var(--vscode-editor-foreground); font-size: 1em; padding: 0 2px; line-height: 1;
+  background: none; border: none; cursor: pointer; opacity: 0.3;
+  color: var(--vscode-editor-foreground); font-size: 1em; padding: 0 4px; line-height: 1;
 }
-.banner-close:hover { opacity: 0.8; }
+.banner-close:hover { opacity: 0.7; }
 
 /* ── messages ── */
 #messages {
-  flex: 1; overflow-y: auto; padding: 16px 14px 8px;
-  display: flex; flex-direction: column; gap: 12px;
+  flex: 1; overflow-y: auto; padding: 24px 0 16px;
+  display: flex; flex-direction: column; gap: 0;
   scrollbar-width: thin;
 }
-#messages::-webkit-scrollbar { width: 4px; }
+#messages::-webkit-scrollbar { width: 5px; }
 #messages::-webkit-scrollbar-track { background: transparent; }
-#messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
+#messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
 
 /* ── welcome screen ── */
 .welcome {
-  margin: auto; text-align: center; padding: 32px 24px;
+  margin: auto; text-align: center; padding: 40px 24px;
   display: flex; flex-direction: column; align-items: center; gap: 0;
 }
 .welcome-logo {
-  width: 52px; height: 52px; margin-bottom: 16px;
+  width: 48px; height: 48px; margin-bottom: 20px; opacity: 0.7;
 }
 .welcome-title {
-  font-size: 1.2em; font-weight: 600; letter-spacing: 0.01em;
-  color: var(--vscode-editor-foreground); margin-bottom: 5px;
+  font-size: 1.3em; font-weight: 600; letter-spacing: -0.02em;
+  color: var(--vscode-editor-foreground); margin-bottom: 6px;
 }
 .welcome-sub {
-  font-size: 0.82em; opacity: 0.5; margin-bottom: 24px;
+  font-size: 0.84em; opacity: 0.4; margin-bottom: 28px; font-weight: 400;
 }
 .welcome-grid {
   display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
-  width: 100%; max-width: 320px; text-align: left;
+  width: 100%; max-width: 340px; text-align: left;
 }
 .welcome-card {
-  background: var(--vscode-editorWidget-background, rgba(255,255,255,0.04));
-  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.08));
-  border-radius: 8px; padding: 10px 12px;
+  background: var(--vscode-editorWidget-background, rgba(255,255,255,0.03));
+  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.06));
+  border-radius: 10px; padding: 12px 14px;
+  cursor: default;
+  transition: border-color 0.2s;
+}
+.welcome-card:hover {
+  border-color: rgba(255,255,255,0.12);
 }
 .welcome-card-icon {
-  width: 16px; height: 16px; margin-bottom: 7px; opacity: 0.7;
+  width: 15px; height: 15px; margin-bottom: 8px; opacity: 0.5;
   stroke: var(--vscode-editor-foreground); fill: none; stroke-width: 1.8;
   stroke-linecap: round; stroke-linejoin: round; display: block;
 }
 .welcome-card-label {
-  font-size: 0.79em; font-weight: 600; margin-bottom: 2px;
+  font-size: 0.8em; font-weight: 600; margin-bottom: 3px;
   color: var(--vscode-editor-foreground);
 }
 .welcome-card-desc {
-  font-size: 0.73em; opacity: 0.5; line-height: 1.4;
+  font-size: 0.72em; opacity: 0.4; line-height: 1.45;
 }
 .welcome-hint {
-  margin-top: 20px; font-size: 0.75em; opacity: 0.35;
+  margin-top: 24px; font-size: 0.74em; opacity: 0.25;
   display: flex; align-items: center; gap: 6px;
 }
 kbd {
-  background: var(--vscode-keybindingLabel-background, rgba(255,255,255,0.1));
-  border: 1px solid var(--vscode-keybindingLabel-border, rgba(255,255,255,0.2));
-  border-radius: 3px; padding: 1px 5px; font-family: var(--vscode-editor-font-family);
-  font-size: 0.9em;
+  background: var(--vscode-keybindingLabel-background, rgba(255,255,255,0.08));
+  border: 1px solid var(--vscode-keybindingLabel-border, rgba(255,255,255,0.15));
+  border-radius: 4px; padding: 1px 6px; font-family: var(--vscode-editor-font-family);
+  font-size: 0.88em;
 }
 
-/* ── message bubbles ── */
-.msg { display: flex; flex-direction: column; gap: 3px; }
-.msg.user { align-items: flex-end; }
-.msg.assistant { align-items: flex-start; }
-.label {
-  font-size: 0.71em; opacity: 0.4; padding: 0 4px;
-  letter-spacing: 0.04em; text-transform: uppercase; font-weight: 600;
+/* ── message containers ── */
+.msg { padding: 16px 24px; }
+.msg + .msg { padding-top: 0; }
+
+.msg.user {
+  padding: 16px 24px;
 }
-.bubble { padding: 9px 13px; border-radius: 10px; line-height: 1.6; max-width: 93%; }
-.user .bubble {
+
+.msg.assistant {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.04));
+}
+
+.msg-header {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 8px;
+}
+
+.msg-avatar {
+  width: 22px; height: 22px; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.msg.user .msg-avatar {
   background: var(--vscode-button-background);
-  color: var(--vscode-button-foreground);
-  white-space: pre-wrap; border-radius: 10px 10px 3px 10px;
+  opacity: 0.8;
 }
-.assistant .bubble {
-  background: var(--vscode-editorWidget-background, rgba(255,255,255,0.04));
-  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.08));
-  border-radius: 3px 10px 10px 10px;
+.msg.assistant .msg-avatar {
+  background: rgba(217, 119, 87, 0.15);
+}
+.msg-avatar svg {
+  width: 12px; height: 12px;
+  stroke: currentColor; fill: none; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.msg.assistant .msg-avatar svg {
+  stroke: #d97757;
+}
+
+.msg-name {
+  font-size: 0.8em; font-weight: 600; letter-spacing: -0.01em;
+  opacity: 0.7;
+}
+
+/* ── user content ── */
+.msg.user .msg-content {
+  font-size: 0.92em; line-height: 1.6;
+  white-space: pre-wrap;
+  padding-left: 30px;
+  opacity: 0.85;
+}
+
+/* ── assistant content (Claude-style: clean text, no bubble) ── */
+.msg.assistant .msg-content {
+  line-height: 1.7; font-size: 0.92em;
+  padding-left: 30px;
 }
 
 /* ── markdown ── */
-.assistant .bubble h1, .assistant .bubble h2, .assistant .bubble h3 {
-  font-weight: 600; margin: 12px 0 5px; line-height: 1.3;
-  padding-bottom: 4px; border-bottom: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.08));
+.msg.assistant .msg-content h1,
+.msg.assistant .msg-content h2,
+.msg.assistant .msg-content h3 {
+  font-weight: 600; margin: 16px 0 6px; line-height: 1.35;
+  letter-spacing: -0.01em;
 }
-.assistant .bubble h1 { font-size: 1.15em; }
-.assistant .bubble h2 { font-size: 1.05em; }
-.assistant .bubble h3 { font-size: 0.97em; border-bottom: none; }
-.assistant .bubble p { margin: 5px 0; }
-.assistant .bubble ul, .assistant .bubble ol { padding-left: 18px; margin: 5px 0; }
-.assistant .bubble li { margin: 3px 0; line-height: 1.5; }
-.assistant .bubble blockquote {
-  border-left: 2px solid rgba(108,99,255,0.5); padding-left: 10px;
-  opacity: 0.75; margin: 8px 0; font-style: italic;
+.msg.assistant .msg-content h1 { font-size: 1.15em; }
+.msg.assistant .msg-content h2 { font-size: 1.05em; }
+.msg.assistant .msg-content h3 { font-size: 0.95em; }
+.msg.assistant .msg-content p { margin: 6px 0; }
+.msg.assistant .msg-content ul,
+.msg.assistant .msg-content ol { padding-left: 20px; margin: 6px 0; }
+.msg.assistant .msg-content li { margin: 4px 0; line-height: 1.6; }
+.msg.assistant .msg-content blockquote {
+  border-left: 2px solid rgba(217,119,87,0.4); padding-left: 12px;
+  opacity: 0.7; margin: 10px 0; font-style: italic;
 }
-.assistant .bubble hr { border: none; border-top: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.08)); margin: 10px 0; }
-.assistant .bubble a { color: var(--vscode-textLink-foreground, #6db3f2); }
+.msg.assistant .msg-content hr {
+  border: none;
+  border-top: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.06));
+  margin: 12px 0;
+}
+.msg.assistant .msg-content a { color: #d97757; text-decoration: none; }
+.msg.assistant .msg-content a:hover { text-decoration: underline; }
+
 pre {
-  background: var(--vscode-textCodeBlock-background, rgba(0,0,0,0.3));
-  border-radius: 6px; padding: 10px 12px; overflow-x: auto; margin: 8px 0;
+  background: var(--vscode-textCodeBlock-background, rgba(0,0,0,0.25));
+  border-radius: 8px; padding: 14px 16px; overflow-x: auto; margin: 10px 0;
   font-family: var(--vscode-editor-font-family);
-  font-size: calc(var(--vscode-editor-font-size) * 0.92);
+  font-size: calc(var(--vscode-editor-font-size) * 0.9);
   white-space: pre; position: relative;
-  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.06));
+  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.05));
+  line-height: 1.5;
 }
 .copy-code-btn {
-  position: absolute; top: 6px; right: 6px;
-  background: var(--vscode-button-secondaryBackground, rgba(255,255,255,0.08));
+  position: absolute; top: 8px; right: 8px;
+  background: var(--vscode-button-secondaryBackground, rgba(255,255,255,0.06));
   color: var(--vscode-editor-foreground);
-  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.12));
-  border-radius: 4px; padding: 2px 8px;
+  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.1));
+  border-radius: 5px; padding: 3px 10px;
   font-size: 0.72em; cursor: pointer; opacity: 0;
-  transition: opacity 0.15s; font-family: var(--vscode-font-family);
+  transition: opacity 0.2s; font-family: inherit;
 }
-pre:hover .copy-code-btn { opacity: 0.7; }
+pre:hover .copy-code-btn { opacity: 0.6; }
 .copy-code-btn:hover { opacity: 1 !important; }
 code {
   font-family: var(--vscode-editor-font-family);
   font-size: 0.88em;
-  background: var(--vscode-textCodeBlock-background, rgba(0,0,0,0.25));
-  padding: 1px 5px; border-radius: 3px;
-  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.07));
+  background: var(--vscode-textCodeBlock-background, rgba(0,0,0,0.2));
+  padding: 2px 6px; border-radius: 4px;
+  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.05));
 }
 pre code { background: none; padding: 0; font-size: inherit; border: none; }
 strong { font-weight: 600; }
 em { font-style: italic; }
-.typing { opacity: 0.45; font-style: italic; }
+.typing { opacity: 0.4; font-style: italic; }
 
 /* ── tool cards ── */
 .tool-card {
   display: flex; flex-direction: column; gap: 4px;
-  padding: 6px 10px; border-radius: 6px; font-size: 0.82em;
+  padding: 8px 12px; border-radius: 8px; font-size: 0.82em;
+  margin: 4px 24px 4px 54px;
+  background: var(--vscode-editorWidget-background, rgba(255,255,255,0.02));
+  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.06));
   border-left: 2px solid transparent;
-  background: var(--vscode-editorWidget-background, rgba(255,255,255,0.03));
-  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.07));
-  border-left-width: 2px; max-width: 93%;
 }
-.tool-card.tool-running { border-left-color: #6c63ff; }
+.tool-card.tool-running { border-left-color: #d97757; }
 .tool-card.tool-done    { border-left-color: #4caf50; }
 .tool-card.tool-error   { border-left-color: #f48771; }
-.tool-header { display: flex; align-items: center; gap: 7px; }
-.tool-icon { min-width: 14px; opacity: 0.7; }
-.tool-icon svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.tool-label { opacity: 0.8; }
+.tool-header { display: flex; align-items: center; gap: 8px; }
+.tool-icon { min-width: 14px; opacity: 0.6; }
+.tool-icon svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.tool-label { opacity: 0.7; font-size: 0.95em; }
 .tool-output {
   font-family: var(--vscode-editor-font-family); font-size: 0.85em;
-  white-space: pre-wrap; opacity: 0.5;
+  white-space: pre-wrap; opacity: 0.4;
   max-height: 70px; overflow: hidden;
-  border-top: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.07));
+  border-top: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.05));
   margin-top: 4px; padding-top: 4px;
 }
 
 /* ── approval cards ── */
 .approval-card {
-  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.1));
-  border-radius: 8px; padding: 12px 14px;
-  background: var(--vscode-editorWidget-background, rgba(255,255,255,0.04));
-  max-width: 93%; display: flex; flex-direction: column; gap: 10px;
+  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.08));
+  border-radius: 10px; padding: 14px 16px;
+  background: var(--vscode-editorWidget-background, rgba(255,255,255,0.02));
+  margin: 6px 24px 6px 54px;
+  display: flex; flex-direction: column; gap: 10px;
 }
-.approval-desc { font-weight: 600; font-size: 0.88em; }
+.approval-desc { font-weight: 600; font-size: 0.86em; }
 .approval-preview {
   font-family: var(--vscode-editor-font-family);
   font-size: 0.78em; white-space: pre-wrap;
-  background: var(--vscode-textCodeBlock-background, rgba(0,0,0,0.25));
-  padding: 8px 10px; border-radius: 5px;
+  background: var(--vscode-textCodeBlock-background, rgba(0,0,0,0.2));
+  padding: 10px 12px; border-radius: 6px;
   max-height: 140px; overflow-y: auto;
 }
 .approval-actions { display: flex; gap: 8px; }
 .approve-btn, .reject-btn {
-  border: none; border-radius: 5px; padding: 5px 16px;
-  cursor: pointer; font-size: 0.83em; font-family: var(--vscode-font-family);
+  border: none; border-radius: 6px; padding: 6px 18px;
+  cursor: pointer; font-size: 0.82em; font-family: inherit;
+  font-weight: 500; transition: opacity 0.2s;
 }
 .approve-btn { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
-.approve-btn:hover { background: var(--vscode-button-hoverBackground); }
-.reject-btn  { background: var(--vscode-button-secondaryBackground, rgba(255,255,255,0.08)); color: var(--vscode-editor-foreground); border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.12)); }
-.reject-btn:hover { background: var(--vscode-button-secondaryHoverBackground, rgba(255,255,255,0.13)); }
-.approval-result { font-size: 0.82em; opacity: 0.6; }
+.approve-btn:hover { opacity: 0.85; }
+.reject-btn  { background: var(--vscode-button-secondaryBackground, rgba(255,255,255,0.06)); color: var(--vscode-editor-foreground); border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.1)); }
+.reject-btn:hover { opacity: 0.8; }
+.approval-result { font-size: 0.82em; opacity: 0.5; }
 
-/* ── upgrade hint ── */
+/* ── status hints (cloud edit / ollama fallback) ── */
+.status-hint {
+  font-size: 0.78em; padding: 8px 16px; margin: 4px 24px 4px 54px;
+  border-radius: 8px; display: flex; align-items: center; gap: 10px;
+  background: var(--vscode-editorWidget-background, rgba(255,255,255,0.02));
+  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.06));
+  opacity: 0.8;
+}
+.status-hint.ollama-mode {
+  border-left: 2px solid #4ec9b0;
+}
+.status-hint.cloud-mode {
+  border-left: 2px solid #d97757;
+}
+.status-hint button {
+  background: none; border: none; color: #d97757;
+  cursor: pointer; font-size: inherit; padding: 0;
+  font-weight: 500; transition: opacity 0.2s;
+}
+.status-hint button:hover { opacity: 0.7; text-decoration: underline; }
+
+/* keep old class for compat */
 .upgrade-hint {
-  font-size: 0.79em; padding: 8px 12px; border-radius: 7px;
-  border: 1px dashed var(--vscode-widget-border, rgba(255,255,255,0.15));
-  display: flex; align-items: center; gap: 10px; opacity: 0.75;
+  font-size: 0.78em; padding: 8px 16px; margin: 4px 24px 4px 54px;
+  border-radius: 8px; display: flex; align-items: center; gap: 10px;
+  background: var(--vscode-editorWidget-background, rgba(255,255,255,0.02));
+  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.06));
+  opacity: 0.8;
 }
 .upgrade-hint button {
-  background: none; border: none; color: #a89aff;
-  cursor: pointer; font-size: inherit; padding: 0; text-decoration: underline;
-  text-underline-offset: 2px;
+  background: none; border: none; color: #d97757;
+  cursor: pointer; font-size: inherit; padding: 0;
+  font-weight: 500; transition: opacity 0.2s;
 }
+.upgrade-hint button:hover { opacity: 0.7; text-decoration: underline; }
 
 /* ── divider ── */
 .divider {
-  text-align: center; font-size: 0.73em; opacity: 0.3;
-  position: relative; margin: 4px 0;
+  text-align: center; font-size: 0.72em; opacity: 0.2;
+  position: relative; margin: 8px 0; padding: 0 24px;
 }
 .divider::before, .divider::after {
   content: ''; position: absolute; top: 50%;
-  width: 38%; height: 1px;
-  background: var(--vscode-widget-border, rgba(255,255,255,0.1));
+  width: 36%; height: 1px;
+  background: var(--vscode-widget-border, rgba(255,255,255,0.08));
 }
-.divider::before { left: 0; }
-.divider::after  { right: 0; }
+.divider::before { left: 24px; }
+.divider::after  { right: 24px; }
 
-/* ── input row ── */
+/* ── input area (Claude-style) ── */
 #input-row {
   display: flex; flex-direction: column; flex-shrink: 0;
-  border-top: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.08));
-  background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  padding: 0 16px 16px;
+  background: var(--vscode-editor-background);
 }
-#input-hints {
-  display: flex; align-items: center; gap: 14px;
-  padding: 6px 14px 2px; font-size: 0.72em; opacity: 0.3;
+#input-container {
+  display: flex; flex-direction: column;
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, rgba(255,255,255,0.08));
+  border-radius: 12px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  overflow: hidden;
 }
-#input-area {
-  display: flex; gap: 8px; padding: 6px 12px 10px; align-items: flex-end;
+#input-container:focus-within {
+  border-color: rgba(217, 119, 87, 0.4);
+  box-shadow: 0 0 0 1px rgba(217, 119, 87, 0.15);
 }
 #input {
   flex: 1;
-  background: var(--vscode-input-background);
+  background: transparent;
   color: var(--vscode-input-foreground);
-  border: 1px solid var(--vscode-input-border, rgba(255,255,255,0.1));
-  border-radius: 6px; padding: 7px 11px;
-  font-family: var(--vscode-font-family); font-size: var(--vscode-font-size);
-  resize: none; min-height: 36px; max-height: 160px; overflow-y: auto;
+  border: none;
+  padding: 12px 16px 8px;
+  font-family: inherit; font-size: 0.92em;
+  resize: none; min-height: 40px; max-height: 160px; overflow-y: auto;
   line-height: 1.5;
 }
-#input:focus { outline: 1px solid var(--vscode-focusBorder, rgba(108,99,255,0.6)); border-color: var(--vscode-focusBorder, rgba(108,99,255,0.6)); }
-#send {
-  background: var(--vscode-button-background);
-  color: var(--vscode-button-foreground);
-  border: none; border-radius: 6px; padding: 7px 15px;
-  cursor: pointer; font-size: var(--vscode-font-size);
-  font-family: var(--vscode-font-family); align-self: flex-end;
-  display: flex; align-items: center; gap: 5px;
+#input:focus { outline: none; }
+#input::placeholder { opacity: 0.35; }
+#input-bottom {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 4px 8px 8px 12px;
 }
-#send:hover { background: var(--vscode-button-hoverBackground); }
-#send:disabled { opacity: 0.4; cursor: not-allowed; }
-#send svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+#input-hints {
+  display: flex; align-items: center; gap: 12px;
+  font-size: 0.7em; opacity: 0.25;
+}
+#send {
+  background: var(--vscode-editor-foreground);
+  color: var(--vscode-editor-background);
+  border: none; border-radius: 8px; padding: 6px 8px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: opacity 0.2s;
+  opacity: 0.7;
+}
+#send:hover { opacity: 1; }
+#send:disabled { opacity: 0.15; cursor: not-allowed; }
+#send svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
 /* ── autocomplete ── */
 #autocomplete {
   display: none; position: fixed;
   background: var(--vscode-editorWidget-background, #252526);
-  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.15));
-  border-radius: 7px; max-height: 210px; overflow-y: auto;
+  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.12));
+  border-radius: 10px; max-height: 210px; overflow-y: auto;
   z-index: 1000; min-width: 270px;
-  box-shadow: 0 6px 20px rgba(0,0,0,0.35);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
 }
 .ac-item {
-  padding: 6px 12px; cursor: pointer; font-size: 0.84em;
-  display: flex; align-items: center; gap: 9px;
+  padding: 7px 14px; cursor: pointer; font-size: 0.84em;
+  display: flex; align-items: center; gap: 10px;
   border-left: 2px solid transparent;
+  transition: background 0.1s;
 }
 .ac-item:hover, .ac-item.selected {
-  background: var(--vscode-list-hoverBackground, rgba(255,255,255,0.07));
-  border-left-color: #6c63ff;
+  background: var(--vscode-list-hoverBackground, rgba(255,255,255,0.05));
+  border-left-color: #d97757;
 }
-.ac-icon { opacity: 0.45; min-width: 15px; display: flex; align-items: center; }
+.ac-icon { opacity: 0.4; min-width: 15px; display: flex; align-items: center; }
 .ac-icon svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .ac-label { flex: 1; }
-.ac-detail { opacity: 0.4; font-size: 0.85em; }
+.ac-detail { opacity: 0.35; font-size: 0.85em; }
 .ac-section {
-  padding: 5px 12px 3px; font-size: 0.7em; letter-spacing: 0.07em;
-  text-transform: uppercase; opacity: 0.35; font-weight: 600;
-  border-top: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.07));
+  padding: 6px 14px 3px; font-size: 0.68em; letter-spacing: 0.08em;
+  text-transform: uppercase; opacity: 0.3; font-weight: 600;
+  border-top: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.05));
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 .spinning { display: inline-block; animation: spin 1s linear infinite; }
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+.msg { animation: fadeIn 0.2s ease-out; }
 </style>
 </head>
 <body>
@@ -335,26 +438,26 @@ em { font-style: italic; }
 <!-- Top bar -->
 <div id="top-bar">
   <div id="top-bar-left">
-    <svg width="20" height="20" viewBox="0 0 52 52" fill="none" aria-hidden="true">
-      <circle cx="26" cy="26" r="24" stroke="currentColor" stroke-width="1.5" opacity="0.25"/>
-      <polygon points="14,18 38,26 14,34 20,26" fill="currentColor" opacity="0.9"/>
-      <polygon points="22,22 38,26 22,30 26,26" fill="currentColor" opacity="0.45"/>
+    <svg width="18" height="18" viewBox="0 0 52 52" fill="none" aria-hidden="true">
+      <circle cx="26" cy="26" r="24" stroke="currentColor" stroke-width="1.5" opacity="0.2"/>
+      <polygon points="14,18 38,26 14,34 20,26" fill="currentColor" opacity="0.85"/>
+      <polygon points="22,22 38,26 22,30 26,26" fill="currentColor" opacity="0.4"/>
     </svg>
+    <span id="top-bar-title">Freebird AI</span>
     <span id="pro-badge">PRO</span>
   </div>
   <div id="top-bar-right">
-    <button class="icon-btn" id="clear-btn" title="Clear conversation (/clear)">
+    <button class="icon-btn" id="clear-btn" title="Clear conversation">
       <svg viewBox="0 0 16 16"><path d="M2 4h12M5 4V2h6v2M6 7v5M10 7v5M3 4l1 10h8l1-10"/></svg>
-      Clear
     </button>
   </div>
 </div>
 
 <!-- Upgrade banner -->
 <div id="upgrade-banner">
-  <span>Agent tools, multi-file edits &amp; codebase search require Pro</span>
+  <span>5 free cloud edits/day &bull; unlimited local Ollama &bull; Pro = unlimited everything</span>
   <div class="banner-links">
-    <button class="link-btn" onclick="vscode.postMessage({type:'upgrade'})">Upgrade — $6/mo</button>
+    <button class="link-btn" onclick="vscode.postMessage({type:'upgrade'})">Upgrade to Pro</button>
     <button class="link-btn" onclick="vscode.postMessage({type:'activate-license'})">Enter license key</button>
     <button class="banner-close" onclick="document.getElementById('upgrade-banner').style.display='none'" title="Dismiss">&#x2715;</button>
   </div>
@@ -363,16 +466,13 @@ em { font-style: italic; }
 <!-- Messages -->
 <div id="messages">
   <div class="welcome" id="welcome">
-    <!-- Custom SVG logo — clean geometric mark, no rocket emoji -->
     <svg class="welcome-logo" viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <circle cx="26" cy="26" r="24" stroke="currentColor" stroke-width="1.5" opacity="0.18"/>
-      <circle cx="26" cy="26" r="18" stroke="currentColor" stroke-width="1" opacity="0.08"/>
-      <!-- Angular right-pointing arrow matching the actual icon -->
-      <polygon points="11,17 42,26 11,35 18,26" fill="currentColor" opacity="0.88"/>
-      <polygon points="20,22 42,26 20,30 25,26" fill="currentColor" opacity="0.35"/>
+      <circle cx="26" cy="26" r="24" stroke="currentColor" stroke-width="1.5" opacity="0.12"/>
+      <polygon points="11,17 42,26 11,35 18,26" fill="currentColor" opacity="0.8"/>
+      <polygon points="20,22 42,26 20,30 25,26" fill="currentColor" opacity="0.3"/>
     </svg>
     <div class="welcome-title">Freebird AI</div>
-    <div class="welcome-sub">AI coding assistant for VS Code</div>
+    <div class="welcome-sub">What can I help you build?</div>
     <div class="welcome-grid">
       <div class="welcome-card">
         <svg class="welcome-card-icon" viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="10" rx="1.5"/><path d="M5 6h6M5 9h4"/></svg>
@@ -395,45 +495,46 @@ em { font-style: italic; }
         <div class="welcome-card-desc">/commit /push /status</div>
       </div>
     </div>
-    <div class="welcome-hint">Type <kbd>/</kbd> for commands &nbsp;·&nbsp; <kbd>@</kbd> for files</div>
+    <div class="welcome-hint">Type <kbd>/</kbd> for commands &nbsp;&middot;&nbsp; <kbd>@</kbd> for files</div>
   </div>
 </div>
 
 <!-- Autocomplete dropdown -->
 <div id="autocomplete"></div>
 
-<!-- Input -->
+<!-- Input (Claude-style container) -->
 <div id="input-row">
-  <div id="input-hints">
-    <span>/ commands</span>
-    <span>@ files</span>
-    <span>&#x21E7;&#x23CE; newline</span>
-  </div>
-  <div id="input-area">
-    <textarea id="input" rows="1" placeholder="Ask anything…"></textarea>
-    <button id="send">
-      <svg viewBox="0 0 14 14"><path d="M1 7h12M8 3l5 4-5 4"/></svg>
-      Send
-    </button>
+  <div id="input-container">
+    <textarea id="input" rows="1" placeholder="Message Freebird..."></textarea>
+    <div id="input-bottom">
+      <div id="input-hints">
+        <span>/ commands</span>
+        <span>@ files</span>
+        <span>Shift+Enter for newline</span>
+      </div>
+      <button id="send" title="Send message">
+        <svg viewBox="0 0 16 16"><path d="M3 13V3l10 5z"/></svg>
+      </button>
+    </div>
   </div>
 </div>
 
 <script>
-const vscode      = acquireVsCodeApi();
-const msgsEl      = document.getElementById('messages');
-const inputEl     = document.getElementById('input');
-const sendBtn     = document.getElementById('send');
-const acEl        = document.getElementById('autocomplete');
-const clearBtn    = document.getElementById('clear-btn');
+var vscode      = acquireVsCodeApi();
+var msgsEl      = document.getElementById('messages');
+var inputEl     = document.getElementById('input');
+var sendBtn     = document.getElementById('send');
+var acEl        = document.getElementById('autocomplete');
+var clearBtn    = document.getElementById('clear-btn');
 
-let busy          = false;
-let currentBubble = null;
-let workspaceFiles= [];
-let acItems       = [];
-let acIndex       = -1;
-let acMode        = null;
+var busy          = false;
+var currentBubble = null;
+var workspaceFiles= [];
+var acItems       = [];
+var acIndex       = -1;
+var acMode        = null;
 
-const SLASH_COMMANDS = [
+var SLASH_COMMANDS = [
   { cmd:'/commit', detail:'AI-generate a commit message',  iconPath:'M8 3l-5 5 2.5 2.5L11 5M6 10l-3 3' },
   { cmd:'/push',   detail:'Push branch to remote',         iconPath:'M7 11V3M3 7l4-4 4 4' },
   { cmd:'/status', detail:'Show git status',               iconPath:'M2 8h12M8 3v10' },
@@ -498,26 +599,34 @@ function removeWelcome() { var w=document.getElementById('welcome'); if(w) w.rem
 function addUserMsg(text) {
   removeWelcome();
   var div=document.createElement('div'); div.className='msg user';
-  var lbl=document.createElement('span'); lbl.className='label'; lbl.textContent='You';
-  var bbl=document.createElement('div'); bbl.className='bubble'; bbl.textContent=text;
-  div.appendChild(lbl); div.appendChild(bbl); msgsEl.appendChild(div); scroll();
+  var hdr=document.createElement('div'); hdr.className='msg-header';
+  var av=document.createElement('div'); av.className='msg-avatar';
+  av.innerHTML='<svg viewBox="0 0 16 16"><circle cx="8" cy="5.5" r="2.8"/><path d="M3 14c0-2.8 2.2-5 5-5s5 2.2 5 5"/></svg>';
+  var name=document.createElement('span'); name.className='msg-name'; name.textContent='You';
+  hdr.appendChild(av); hdr.appendChild(name);
+  var content=document.createElement('div'); content.className='msg-content'; content.textContent=text;
+  div.appendChild(hdr); div.appendChild(content); msgsEl.appendChild(div); scroll();
 }
 
 function startAssistantMsg() {
   removeWelcome();
   var div=document.createElement('div'); div.className='msg assistant';
-  var lbl=document.createElement('span'); lbl.className='label'; lbl.textContent='Freebird AI';
-  var bbl=document.createElement('div'); bbl.className='bubble typing';
-  bbl.innerHTML='<span class="spinning" style="display:inline-block;width:12px;height:12px;margin-right:6px"><svg viewBox="0 0 12 12" style="width:100%;height:100%;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round"><path d="M6 1v3M6 8v3M1 6h3M8 6h3"/></svg></span>Thinking…';
-  div.appendChild(lbl); div.appendChild(bbl); msgsEl.appendChild(div); scroll();
-  currentBubble=bbl;
+  var hdr=document.createElement('div'); hdr.className='msg-header';
+  var av=document.createElement('div'); av.className='msg-avatar';
+  av.innerHTML='<svg viewBox="0 0 16 16"><polygon points="3,5 13,8 3,11 5,8" fill="currentColor" stroke="none"/></svg>';
+  var name=document.createElement('span'); name.className='msg-name'; name.textContent='Freebird';
+  hdr.appendChild(av); hdr.appendChild(name);
+  var content=document.createElement('div'); content.className='msg-content typing';
+  content.innerHTML='<span class="spinning" style="display:inline-block;width:14px;height:14px;margin-right:6px;opacity:0.5"><svg viewBox="0 0 12 12" style="width:100%;height:100%;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round"><path d="M6 1v3M6 8v3M1 6h3M8 6h3"/></svg></span>Thinking...';
+  div.appendChild(hdr); div.appendChild(content); msgsEl.appendChild(div); scroll();
+  currentBubble=content;
 }
 
 function setCurrentText(text) {
   if (!currentBubble) return;
   currentBubble.classList.remove('typing');
   if (text && text.trim()) { currentBubble.innerHTML=renderMarkdown(text); }
-  else { currentBubble.innerHTML='<span class="spinning" style="opacity:0.5">↻</span> Thinking…'; currentBubble.classList.add('typing'); }
+  else { currentBubble.innerHTML='<span class="spinning" style="opacity:0.4">&#8635;</span> Thinking...'; currentBubble.classList.add('typing'); }
   scroll();
 }
 
@@ -563,7 +672,7 @@ function respondApproval(id, approved) {
   var acts=document.getElementById('approval-actions-'+id);
   if (acts) {
     var r=document.createElement('span'); r.className='approval-result';
-    r.textContent=approved?'&#x2713; Approved':'&#x2715; Rejected'; acts.replaceWith(r);
+    r.textContent=approved?'Approved':'Rejected'; acts.replaceWith(r);
   }
   vscode.postMessage({type:'approval-response',id:id,approved:approved});
 }
@@ -572,22 +681,25 @@ function endMsg() { currentBubble=null; setBusy(false); }
 function setBusy(v) { busy=v; sendBtn.disabled=v; inputEl.disabled=v; if(!v) inputEl.focus(); }
 function scroll() { msgsEl.scrollTop=msgsEl.scrollHeight; }
 
-function showUpgradeHint() {
-  var h=document.createElement('div'); h.className='upgrade-hint';
-  h.innerHTML='Want AI to read files &amp; edit your codebase? &nbsp;' +
-    '<button onclick="vscode.postMessage({type:\'upgrade\'})">Upgrade to Pro — $6/mo</button>' +
-    ' &nbsp;or&nbsp; <button onclick="vscode.postMessage({type:\'activate-license\'})">Enter license key</button>';
+function showCloudEditUsed(remaining) {
+  var h=document.createElement('div'); h.className='status-hint cloud-mode';
+  var msg = remaining > 0
+    ? '<b>'+remaining+'</b> cloud edit'+(remaining===1?'':'s')+' left today.'
+    : 'Daily cloud edits used — switching to unlimited local Ollama. Resets tomorrow!';
+  if (remaining > 0) {
+    h.innerHTML = msg + ' &nbsp;' +
+      '<button onclick="vscode.postMessage({type:\'upgrade\'})">Go Pro for unlimited</button>';
+  } else {
+    h.innerHTML = msg + ' &nbsp;' +
+      '<button onclick="vscode.postMessage({type:\'upgrade\'})">Upgrade for unlimited cloud edits</button>';
+  }
   msgsEl.appendChild(h); scroll();
 }
 
-function showTrialUsedHint(remaining) {
-  var h=document.createElement('div'); h.className='upgrade-hint';
-  var msg = remaining > 0
-    ? 'That used one of your free codebase-aware runs — <b>'+remaining+'</b> left this month.'
-    : 'That was your last free codebase-aware run this month.';
-  h.innerHTML = msg + ' &nbsp;' +
-    '<button onclick="vscode.postMessage({type:\'upgrade\'})">Upgrade to Pro — $6/mo</button>' +
-    ' &nbsp;or&nbsp; <button onclick="vscode.postMessage({type:\'activate-license\'})">Enter license key</button>';
+function showOllamaFallback() {
+  var h=document.createElement('div'); h.className='status-hint ollama-mode';
+  h.innerHTML='Running locally via Ollama — 100% private, unlimited. &nbsp;' +
+    '<button onclick="vscode.postMessage({type:\'upgrade\'})">Want cloud power? Go Pro</button>';
   msgsEl.appendChild(h); scroll();
 }
 
@@ -611,9 +723,9 @@ function showAC(items, mode, sectionLabel) {
   });
   var rect=inputEl.getBoundingClientRect();
   acEl.style.display='block';
-  acEl.style.left=rect.left+'px';
-  acEl.style.width=(rect.width-60)+'px';
-  acEl.style.bottom=(window.innerHeight-rect.top+4)+'px';
+  acEl.style.left=(rect.left)+'px';
+  acEl.style.width=(rect.width)+'px';
+  acEl.style.bottom=(window.innerHeight-rect.top+8)+'px';
   acEl.style.top='auto';
 }
 
@@ -695,8 +807,8 @@ window.addEventListener('message',function(e){
     case 'tool-update':      updateToolStatus(m.id,m.state,m.output); break;
     case 'approval-request': addApprovalCard(m.id,m.description,m.preview); break;
     case 'assistant-end':    endMsg(); break;
-    case 'show-upgrade-hint':showUpgradeHint(); break;
-    case 'trial-used':       showTrialUsedHint(m.remaining); break;
+    case 'cloud-edit-used':  showCloudEditUsed(m.remaining); break;
+    case 'ollama-fallback':  showOllamaFallback(); break;
     case 'cleared':          msgsEl.innerHTML=''; addDivider('conversation cleared'); break;
     case 'workspace-files':  workspaceFiles=m.files||[]; break;
     case 'license-status': {

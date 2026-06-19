@@ -1,8 +1,8 @@
 {
   "name": "freebird-ai",
   "displayName": "Freebird AI",
-  "description": "The affordable, open-source alternative to GitHub Copilot. Reads your codebase, edits files, and pushes to GitHub — powered by Ollama (free/local), Claude, or OpenAI.",
-  "version": "0.4.3",
+  "description": "Copilot throttled your speed? Get 5 free advanced edits/day, BYOK for unlimited Pro, or fall back to free local Ollama. Reads your codebase, edits files, pushes to GitHub.",
+  "version": "0.5.0",
   "publisher": "TenLabs",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -33,6 +33,8 @@
     "claude",
     "openai",
     "ollama",
+    "deepseek",
+    "qwen",
     "chatbot",
     "coding assistant",
     "cursor",
@@ -47,6 +49,24 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "freebird",
+          "title": "Freebird AI",
+          "icon": "media/icon.png"
+        }
+      ]
+    },
+    "views": {
+      "freebird": [
+        {
+          "type": "webview",
+          "id": "freebird.chatView",
+          "name": "Chat"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "freebird.openChat",
@@ -112,12 +132,16 @@
           "enum": [
             "ollama",
             "anthropic",
-            "openai"
+            "openai",
+            "deepseek",
+            "qwen"
           ],
           "enumDescriptions": [
-            "Local AI via Ollama — completely free, runs on your machine",
-            "Anthropic Claude API — pay-as-you-go, very cheap",
-            "OpenAI API — pay-as-you-go"
+            "Local AI via Ollama — unlimited, 100% private, runs on your machine",
+            "Anthropic Claude API — BYOK, direct-to-LLM speed (Pro)",
+            "OpenAI API — BYOK, direct-to-LLM speed (Pro)",
+            "DeepSeek Coder API — BYOK, fast coding model (Pro)",
+            "Qwen 2.5 API (DashScope) — BYOK, powerful coding model (Pro)"
           ],
           "default": "ollama",
           "description": "AI backend to use for Freebird"
@@ -130,7 +154,7 @@
         "freebird.model": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Model override. Leave blank for the recommended default per backend:\n- Ollama: `qwen2.5-coder`\n- Anthropic: `claude-haiku-4-5`\n- OpenAI: `gpt-4o-mini`\n\nTip: for heavier multi-file agent tasks (Pro), try `claude-sonnet-4-6` — it follows multi-step instructions more reliably than Haiku, at a higher API cost."
+          "markdownDescription": "Model override. Leave blank for the recommended default per backend:\n- Ollama: `qwen2.5-coder`\n- Anthropic: `claude-haiku-4-5`\n- OpenAI: `gpt-4o-mini`\n- DeepSeek: `deepseek-coder-v2`\n- Qwen: `qwen2.5-coder-32b-instruct`\n\nTip: for heavier multi-file agent tasks (Pro), try `claude-sonnet-4-6` — it follows multi-step instructions more reliably than Haiku, at a higher API cost."
         },
         "freebird.ollamaUrl": {
           "type": "string",
@@ -151,6 +175,11 @@
           "type": "number",
           "default": 350,
           "description": "Milliseconds to wait after typing stops before requesting a completion."
+        },
+        "freebird.telemetry.enabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Allow Freebird to collect anonymous usage statistics (feature usage counts, no code or personal data). Helps us improve the extension."
         }
       }
     }

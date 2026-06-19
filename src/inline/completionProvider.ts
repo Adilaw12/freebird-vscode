@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { getProvider } from '../ai';
+import { FIMProvider } from '../ai/provider';
 import { stripFences } from '../util/text';
 
 const MAX_PREFIX_LINES = 100;
@@ -8,7 +9,6 @@ const MAX_PREFIX_CHARS = 6_000;
 const MAX_SUFFIX_CHARS = 1_000;
 const DEFAULT_DELAY_MS = 350;
 
-// Show at most one "tab completion unavailable" warning per session
 let warnedThisSession = false;
 
 class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider {
@@ -35,21 +35,28 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
 
         const { prefix, suffix } = getSurroundingText(document, position);
 
-        const fileName = vscode.workspace.asRelativePath(document.fileName);
-        const lang = document.languageId;
-        const prompt =
-            `You are a code-completion engine for ${fileName} (${lang}). Given the code ` +
-            `before and after <CURSOR>, output ONLY the text to insert at <CURSOR> — ` +
-            `no explanation, no markdown fences, no repeating surrounding code. If ` +
-            `nothing useful belongs there, output nothing.\n\n` +
-            `${prefix}<CURSOR>${suffix}`;
-
         let raw: string;
         try {
-            raw = await getProvider().complete(
-                [{ role: 'user', content: prompt }],
-                { maxTokens: 128, temperature: 0.2 }
-            );
+            const provider = getProvider();
+
+            // Use FIM endpoint when available (Ollama) — much faster for completions
+            if (isFIMProvider(provider)) {
+                raw = await provider.fillInMiddle(prefix, suffix, { maxTokens: 128, temperature: 0.2 });
+            } else {
+                const fileName = vscode.workspace.asRelativePath(document.fileName);
+                const lang = document.languageId;
+                const prompt =
+                    `You are a code-completion engine for ${fileName} (${lang}). Given the code ` +
+                    `before and after <CURSOR>, output ONLY the text to insert at <CURSOR> — ` +
+                    `no explanation, no markdown fences, no repeating surrounding code. If ` +
+                    `nothing useful belongs there, output nothing.\n\n` +
+                    `${prefix}<CURSOR>${suffix}`;
+
+                raw = await provider.complete(
+                    [{ role: 'user', content: prompt }],
+                    { maxTokens: 128, temperature: 0.2 }
+                );
+            }
         } catch (err: any) {
             if (!warnedThisSession) {
                 warnedThisSession = true;
@@ -85,6 +92,10 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
             });
         });
     }
+}
+
+function isFIMProvider(provider: unknown): provider is FIMProvider {
+    return typeof (provider as FIMProvider).fillInMiddle === 'function';
 }
 
 function getSurroundingText(document: vscode.TextDocument, position: vscode.Position): { prefix: string; suffix: string } {

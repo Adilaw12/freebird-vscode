@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import { exec, ExecException } from 'child_process';
 import { GitService } from '../git/service';
 import { previewHtmlFile } from './preview';
+import { ToolSchema } from '../ai/provider';
 
 export interface ToolCall {
     action: string;
@@ -14,6 +15,95 @@ export interface ToolResult {
     success: boolean;
     output: string;
 }
+
+// ── Native tool schemas (for Anthropic/OpenAI/DeepSeek/Qwen) ─────────────────
+
+export const NATIVE_TOOL_SCHEMAS: ToolSchema[] = [
+    {
+        name: 'read_file',
+        description: 'Read the contents of a file in the workspace.',
+        input_schema: {
+            type: 'object',
+            properties: { path: { type: 'string', description: 'Workspace-relative file path' } },
+            required: ['path']
+        }
+    },
+    {
+        name: 'list_files',
+        description: 'List files in the workspace matching a glob pattern.',
+        input_schema: {
+            type: 'object',
+            properties: { pattern: { type: 'string', description: 'Glob pattern (default: **/*)', default: '**/*' } }
+        }
+    },
+    {
+        name: 'search_code',
+        description: 'Search for a regex pattern across workspace files. Returns matching lines with file paths and line numbers.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                query: { type: 'string', description: 'Regex pattern to search for' },
+                filePattern: { type: 'string', description: 'Glob to filter files (default: **/*)', default: '**/*' }
+            },
+            required: ['query']
+        }
+    },
+    {
+        name: 'write_file',
+        description: 'Create a new file or overwrite an existing file. Requires user approval.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                path: { type: 'string', description: 'Workspace-relative file path' },
+                content: { type: 'string', description: 'Full file content to write' }
+            },
+            required: ['path', 'content']
+        }
+    },
+    {
+        name: 'edit_file',
+        description: 'Make a targeted edit to an existing file by replacing a specific string. Requires user approval. Shows a diff view.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                path: { type: 'string', description: 'Workspace-relative file path' },
+                oldStr: { type: 'string', description: 'Exact text to find and replace' },
+                newStr: { type: 'string', description: 'Replacement text' }
+            },
+            required: ['path', 'oldStr', 'newStr']
+        }
+    },
+    {
+        name: 'preview_html',
+        description: 'Open a live preview of an HTML file in a VS Code tab.',
+        input_schema: {
+            type: 'object',
+            properties: { path: { type: 'string', description: 'Workspace-relative path to HTML file' } },
+            required: ['path']
+        }
+    },
+    {
+        name: 'run_command',
+        description: 'Run a shell command in the workspace root. Requires user approval.',
+        input_schema: {
+            type: 'object',
+            properties: { command: { type: 'string', description: 'Shell command to execute' } },
+            required: ['command']
+        }
+    },
+    {
+        name: 'git_status',
+        description: 'Show the current git repository status (branch, staged, unstaged counts).',
+        input_schema: { type: 'object', properties: {} }
+    },
+    {
+        name: 'git_push',
+        description: 'Push the current branch to the remote. Requires user approval.',
+        input_schema: { type: 'object', properties: {} }
+    }
+];
+
+// ── Text-parsed tool prompt (for Ollama fallback) ────────────────────────────
 
 export const TOOL_SYSTEM_PROMPT = `
 You have access to tools to read and modify the codebase. To invoke a tool write a fenced code block with language "tool":
@@ -46,6 +136,16 @@ GUIDELINES:
 - After all changes are done, write a short summary of what you did
 `;
 
+export const NATIVE_TOOL_GUIDELINES = `GUIDELINES:
+- For tasks that need multiple steps or touch several files, start your reply with a short plan before making any tool calls.
+- Always read files before editing — never assume their contents.
+- Use edit_file for targeted changes; write_file only for new files or complete rewrites.
+- All paths are relative to the workspace root.
+- When the user asks you to build/create something, use write_file to create actual files — don't just print code.
+- When creating a website, write every file the HTML references.
+- To remember things across sessions, write notes to .freebird/memory.md.
+- After all changes, write a short summary.`;
+
 export function parseToolCalls(text: string): ToolCall[] {
     const results: ToolCall[] = [];
     const regex = /```tool\s*\n([\s\S]*?)```/g;
@@ -65,16 +165,17 @@ export function stripToolBlocks(text: string): string {
     return result.trim();
 }
 
+// Convert a NativeToolCall (from cloud provider) into our internal ToolCall format
+export function nativeToToolCall(name: string, input: Record<string, unknown>): ToolCall {
+    return { action: name, ...input };
+}
+
 // ── Workspace tree cache ──────────────────────────────────────────────────────
-// One scan per VS Code session; invalidated when files are created/deleted.
 let _workspaceTreeCache: string | null = null;
 let _cacheWatcher: vscode.FileSystemWatcher | undefined;
 
 export function initWorkspaceTreeCache(context: vscode.ExtensionContext): void {
-    // Warm the cache immediately in the background — don't block activation
     getWorkspaceTree();
-
-    // Invalidate cache on file create/delete (not on every save — too noisy)
     _cacheWatcher = vscode.workspace.createFileSystemWatcher('**/*', false, true, false);
     _cacheWatcher.onDidCreate(() => { _workspaceTreeCache = null; });
     _cacheWatcher.onDidDelete(() => { _workspaceTreeCache = null; });
@@ -124,7 +225,6 @@ function getWorkspaceRoot(): string {
     return root;
 }
 
-// Resolves a workspace-relative path and rejects attempts to escape the workspace root
 function resolveWorkspacePath(relPath: string): string {
     const root = path.resolve(getWorkspaceRoot());
     const full = path.resolve(root, relPath);
@@ -179,7 +279,21 @@ async function searchCodeTool(tool: ToolCall): Promise<ToolResult> {
     if (!query) return { success: false, output: 'search_code requires "query".' };
 
     const filePattern = String(tool.filePattern ?? '**/*');
+
+    // Try VS Code's built-in text search first (uses ripgrep under the hood)
+    try {
+        const results = await ripgrepSearch(query, filePattern);
+        if (results !== null) return { success: true, output: results };
+    } catch { /* fall through to manual search */ }
+
+    // Fallback: manual file-by-file search with regex support
     const uris = await vscode.workspace.findFiles(filePattern, EXCLUDE_GLOB, 1000);
+    let regex: RegExp;
+    try {
+        regex = new RegExp(query, 'g');
+    } catch {
+        regex = new RegExp(escapeRegex(query), 'g');
+    }
 
     const matches: string[] = [];
     for (const uri of uris) {
@@ -189,20 +303,40 @@ async function searchCodeTool(tool: ToolCall): Promise<ToolResult> {
         try {
             text = fs.readFileSync(uri.fsPath, 'utf8');
         } catch {
-            continue; // unreadable or binary
+            continue;
         }
-        if (text.includes('\0')) continue; // skip binary files
+        if (text.includes('\0')) continue;
 
         const rel = vscode.workspace.asRelativePath(uri);
         const lines = text.split('\n');
         for (let i = 0; i < lines.length && matches.length < MAX_SEARCH_MATCHES; i++) {
-            if (lines[i].includes(query)) {
+            if (regex.test(lines[i])) {
                 matches.push(`${rel}:${i + 1}: ${lines[i].trim()}`);
             }
+            regex.lastIndex = 0;
         }
     }
 
     return { success: true, output: matches.length ? matches.join('\n') : 'No matches found.' };
+}
+
+async function ripgrepSearch(query: string, filePattern: string): Promise<string | null> {
+    const root = getWorkspaceRoot();
+    return new Promise<string | null>((resolve) => {
+        const globArg = filePattern !== '**/*' ? `--glob "${filePattern}"` : '';
+        const cmd = `rg --line-number --max-count 200 --no-heading --color never ${globArg} -- "${query.replace(/"/g, '\\"')}"`;
+        exec(cmd, { cwd: root, timeout: 10_000, maxBuffer: 512 * 1024 },
+            (err, stdout) => {
+                if (err && !stdout) { resolve(null); return; }
+                const output = stdout.trim();
+                resolve(output ? truncate(output, MAX_TOOL_OUTPUT_CHARS) : 'No matches found.');
+            }
+        );
+    });
+}
+
+function escapeRegex(s: string): string {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 async function writeFileTool(tool: ToolCall, onApprovalNeeded: ApprovalFn): Promise<ToolResult> {
@@ -225,14 +359,10 @@ async function writeFileTool(tool: ToolCall, onApprovalNeeded: ApprovalFn): Prom
     return { success: true, output: `Wrote ${relPath} (${content.length} bytes).` };
 }
 
-// Collapses leading/trailing whitespace and internal runs of whitespace so lines that
-// differ only in indentation or spacing still compare equal.
 function normalizeLine(line: string): string {
     return line.trim().replace(/\s+/g, ' ');
 }
 
-// Falls back to a whitespace-insensitive, line-by-line match when an exact substring
-// match isn't found — handles re-indentation or spacing drift in the model's oldStr.
 function findFuzzyMatch(content: string, oldStr: string): { start: number; end: number } | null {
     const oldLines = oldStr.split('\n');
     const normalizedOld = oldLines.map(normalizeLine);
@@ -280,15 +410,54 @@ async function editFileTool(tool: ToolCall, onApprovalNeeded: ApprovalFn): Promi
     const matchedText = content.slice(start, end);
     const updated = content.slice(0, start) + newStr + content.slice(end);
 
-    const approved = await onApprovalNeeded(
-        approvalId('edit_file'),
-        `Edit ${relPath}`,
-        truncate(`- ${matchedText}\n+ ${newStr}`, 2000)
-    );
+    // Show VS Code diff view for approval
+    const approved = await showDiffApproval(full, content, updated, relPath, onApprovalNeeded);
     if (!approved) return { success: false, output: 'User rejected this change.' };
 
     fs.writeFileSync(full, updated, 'utf8');
     return { success: true, output: `Edited ${relPath}.` };
+}
+
+async function showDiffApproval(
+    fullPath: string,
+    originalContent: string,
+    updatedContent: string,
+    relPath: string,
+    onApprovalNeeded: ApprovalFn
+): Promise<boolean> {
+    try {
+        const root = getWorkspaceRoot();
+        const tempDir = path.join(root, '.freebird', '.tmp');
+        fs.mkdirSync(tempDir, { recursive: true });
+
+        const origFile = path.join(tempDir, `orig_${path.basename(fullPath)}`);
+        const newFile = path.join(tempDir, `new_${path.basename(fullPath)}`);
+
+        fs.writeFileSync(origFile, originalContent, 'utf8');
+        fs.writeFileSync(newFile, updatedContent, 'utf8');
+
+        const origUri = vscode.Uri.file(origFile);
+        const newUri = vscode.Uri.file(newFile);
+
+        await vscode.commands.executeCommand('vscode.diff', origUri, newUri, `${relPath} — Freebird Edit`);
+
+        const approved = await onApprovalNeeded(
+            approvalId('edit_file'),
+            `Edit ${relPath}`,
+            '(see diff view)'
+        );
+
+        // Cleanup temp files
+        try { fs.unlinkSync(origFile); } catch { /* ok */ }
+        try { fs.unlinkSync(newFile); } catch { /* ok */ }
+        try { fs.rmdirSync(tempDir); } catch { /* ok if not empty */ }
+
+        return approved;
+    } catch {
+        // Fallback to text-based approval if diff view fails
+        const preview = truncate(`- ${originalContent.slice(0, 500)}\n+ ${updatedContent.slice(0, 500)}`, 2000);
+        return onApprovalNeeded(approvalId('edit_file'), `Edit ${relPath}`, preview);
+    }
 }
 
 async function previewHtmlTool(tool: ToolCall): Promise<ToolResult> {

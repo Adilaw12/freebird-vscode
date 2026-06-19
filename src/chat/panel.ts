@@ -1,82 +1,106 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'crypto';
 import { getProvider } from '../ai';
+import { OllamaProvider } from '../ai/ollama';
 import { GitService } from '../git/service';
 import { Message } from '../ai/provider';
 import { runAgentLoop, AgentEvent, stripToolBlocks } from '../agent/loop';
 import { buildFileContext, resolveMentions, listWorkspaceFiles } from './contextBuilder';
 import { getLicenseStatus, UPGRADE_URL } from '../license/validator';
-import { getAgentTrialRemaining, consumeAgentTrial, AGENT_TRIAL_LIMIT } from '../license/usage';
+import { getCloudEditsRemaining, consumeCloudEdit, DAILY_CLOUD_LIMIT } from '../license/usage';
 import { readProjectMemory, clearProjectMemory, MEMORY_RELATIVE_PATH } from '../agent/memory';
+import { trackEvent } from '../telemetry';
 
-// Keep history to this many message pairs before trimming oldest turns
 const MAX_HISTORY_PAIRS = 20;
 
-// How many upgrade hints to show before going quiet
-const MAX_UPGRADE_HINTS = 2;
-
-const FREE_SYSTEM: Message[] = [
+const OLLAMA_FALLBACK_SYSTEM: Message[] = [
     {
         role: 'user',
         content:
             'You are Freebird, a free open-source AI coding assistant for VS Code. ' +
             'Help with writing, debugging, explaining, and improving code. ' +
             'Use markdown with language-tagged code blocks. Be concise but thorough.\n\n' +
-            'IMPORTANT: You are running in free mode and cannot access files or run commands. ' +
-            'When the user asks you to read files, edit across multiple files, search the codebase, ' +
-            'or run terminal commands, explain that Freebird Pro enables these capabilities. ' +
-            'In the meantime, ask them to paste the relevant code directly into the chat.'
+            'You are running locally via Ollama — 100% private, unlimited, and free. ' +
+            'You can help with code questions, refactoring suggestions, and explanations. ' +
+            'For multi-file editing, codebase search, and terminal commands, the user can ' +
+            'upgrade to Pro for unlimited cloud-powered agent mode.'
     },
     {
         role: 'assistant',
-        content: 'Ready. I am Freebird — ask me anything about your code.'
+        content: 'Ready. I am Freebird running locally via Ollama — ask me anything about your code.'
     }
 ];
 
-export class ChatPanel {
-    static current: ChatPanel | undefined;
-    private readonly panel: vscode.WebviewPanel;
+// ── Simple response cache ────────────────────────────────────────────────────
+const _responseCache = new Map<string, { response: string; ts: number }>();
+const CACHE_TTL_MS = 5 * 60 * 1000;
+const MAX_CACHE_ENTRIES = 20;
+
+function cacheKey(text: string, history: Message[]): string {
+    const h = crypto.createHash('md5').update(text + history.length).digest('hex');
+    return h;
+}
+
+function getCachedResponse(key: string): string | null {
+    const entry = _responseCache.get(key);
+    if (!entry) return null;
+    if (Date.now() - entry.ts > CACHE_TTL_MS) {
+        _responseCache.delete(key);
+        return null;
+    }
+    return entry.response;
+}
+
+function setCachedResponse(key: string, response: string): void {
+    if (_responseCache.size >= MAX_CACHE_ENTRIES) {
+        const oldest = _responseCache.keys().next().value;
+        if (oldest !== undefined) _responseCache.delete(oldest);
+    }
+    _responseCache.set(key, { response, ts: Date.now() });
+}
+
+// ── Sidebar view provider ────────────────────────────────────────────────────
+
+export class ChatViewProvider implements vscode.WebviewViewProvider {
+    static readonly viewType = 'freebird.chatView';
+    static current: ChatViewProvider | undefined;
+
+    private view?: vscode.WebviewView;
     private readonly context: vscode.ExtensionContext;
+    private readonly git: GitService;
     private history: Message[] = [];
-    private readonly disposables: vscode.Disposable[] = [];
     private readonly pendingApprovals = new Map<string, (approved: boolean) => void>();
     private rawBuffer = '';
-    private upgradeHintsShown = 0;
 
-    static open(context: vscode.ExtensionContext, git: GitService, initialCommand?: string) {
-        if (ChatPanel.current) {
-            ChatPanel.current.panel.reveal(vscode.ViewColumn.Beside);
-            if (initialCommand) ChatPanel.current.triggerCommand(initialCommand, git);
-            return;
-        }
-        ChatPanel.current = new ChatPanel(context, git, initialCommand);
+    constructor(context: vscode.ExtensionContext, git: GitService) {
+        this.context = context;
+        this.git = git;
+        ChatViewProvider.current = this;
     }
 
-    private constructor(context: vscode.ExtensionContext, git: GitService, initialCommand?: string) {
-        this.context = context;
-        this.panel = vscode.window.createWebviewPanel(
-            'freebird.chat',
-            'Freebird',
-            vscode.ViewColumn.Beside,
-            { enableScripts: true, retainContextWhenHidden: true }
-        );
-        this.panel.iconPath = vscode.Uri.joinPath(context.extensionUri, 'media', 'icon.png');
-        this.panel.webview.html = fs.readFileSync(
-            path.join(context.extensionPath, 'media', 'chat.html'), 'utf8'
+    resolveWebviewView(
+        webviewView: vscode.WebviewView,
+        _context: vscode.WebviewViewResolveContext,
+        _token: vscode.CancellationToken
+    ): void {
+        this.view = webviewView;
+        webviewView.webview.options = { enableScripts: true };
+        webviewView.webview.html = fs.readFileSync(
+            path.join(this.context.extensionPath, 'media', 'chat.html'), 'utf8'
         );
 
-        // Send workspace file list so the UI can power @ autocomplete
         this.sendWorkspaceFiles();
 
-        this.panel.webview.onDidReceiveMessage(async (msg: any) => {
+        webviewView.webview.onDidReceiveMessage(async (msg: any) => {
             switch (msg.type) {
                 case 'send':
-                    await this.handleMessage(msg.text, git);
+                    trackEvent('message_sent');
+                    await this.handleMessage(msg.text);
                     break;
                 case 'clear':
                     this.history = [];
-                    this.upgradeHintsShown = 0;
                     this.post({ type: 'cleared' });
                     break;
                 case 'approval-response': {
@@ -89,21 +113,18 @@ export class ChatPanel {
                 }
                 case 'upgrade':
                     vscode.env.openExternal(vscode.Uri.parse(UPGRADE_URL));
+                    trackEvent('upgrade_clicked');
                     break;
                 case 'activate-license':
                     vscode.commands.executeCommand('freebird.activateLicense');
                     break;
             }
-        }, null, this.disposables);
+        });
 
-        this.panel.onDidDispose(() => {
-            ChatPanel.current = undefined;
+        webviewView.onDidDispose(() => {
             for (const resolve of this.pendingApprovals.values()) resolve(false);
             this.pendingApprovals.clear();
-            this.disposables.forEach(d => d.dispose());
-        }, null, this.disposables);
-
-        if (initialCommand) this.triggerCommand(initialCommand, git);
+        });
     }
 
     async showLicenseStatus() {
@@ -111,8 +132,14 @@ export class ChatPanel {
         this.post({ type: 'license-status', isPro: status.isPro, email: status.email });
     }
 
-    triggerCommand(command: string, git: GitService) {
-        if (command === 'commit') this.handleCommit(git);
+    triggerCommand(command: string) {
+        if (command === 'commit') this.handleCommit();
+    }
+
+    focus() {
+        if (this.view) {
+            this.view.show(true);
+        }
     }
 
     private async sendWorkspaceFiles() {
@@ -122,16 +149,15 @@ export class ChatPanel {
         } catch { /* no workspace open */ }
     }
 
-    private async handleMessage(text: string, git: GitService) {
+    private async handleMessage(text: string) {
         const trimmed = text.trim();
+        const git = this.git;
 
-        // Slash commands
-        if (trimmed === '/commit') { await this.handleCommit(git); return; }
-        if (trimmed === '/push')   { await this.handlePush(git);   return; }
-        if (trimmed === '/status') { await this.handleStatus(git); return; }
+        if (trimmed === '/commit') { await this.handleCommit(); return; }
+        if (trimmed === '/push')   { await this.handlePush();   return; }
+        if (trimmed === '/status') { await this.handleStatus(); return; }
         if (trimmed === '/clear')  {
             this.history = [];
-            this.upgradeHintsShown = 0;
             this.post({ type: 'cleared' });
             return;
         }
@@ -185,13 +211,14 @@ export class ChatPanel {
                 '',
                 '**Keyboard shortcuts:**',
                 '`Ctrl+Alt+O` — open chat',
-                '`Ctrl+Alt+K` — inline edit selected code (Pro)',
+                '`Ctrl+Alt+K` — inline edit selected code',
                 '',
             ];
             if (!license.isPro) {
                 helpLines.push(
                     '**Free plan:**',
-                    `${getAgentTrialRemaining(this.context)}/${AGENT_TRIAL_LIMIT} full codebase-aware agent runs left this month — [Upgrade to Pro](${UPGRADE_URL}) for unlimited.`,
+                    `${getCloudEditsRemaining(this.context)}/${DAILY_CLOUD_LIMIT} cloud edits left today — resets daily. After that, unlimited local Ollama.`,
+                    `[Upgrade to Pro](${UPGRADE_URL}) for unlimited cloud edits + BYOK.`,
                     ''
                 );
             }
@@ -204,28 +231,29 @@ export class ChatPanel {
             return;
         }
 
-        // Resolve @mentions before displaying or sending
         const { cleanText, mentionContext } = await resolveMentions(trimmed);
-        const displayText = trimmed; // show original (with @mentions) in UI
-        this.post({ type: 'user', text: displayText });
+        this.post({ type: 'user', text: trimmed });
 
         const license = await getLicenseStatus(this.context);
 
         if (license.isPro) {
-            await this.runProChat(cleanText, mentionContext, git);
-        } else if (getAgentTrialRemaining(this.context) > 0) {
-            await this.runProChat(cleanText, mentionContext, git);
-            const remaining = await consumeAgentTrial(this.context);
-            this.post({ type: 'trial-used', remaining });
+            trackEvent('pro_message');
+            await this.runProChat(cleanText, mentionContext);
+        } else if (getCloudEditsRemaining(this.context) > 0) {
+            trackEvent('cloud_edit_used');
+            await this.runProChat(cleanText, mentionContext);
+            const remaining = await consumeCloudEdit(this.context);
+            this.post({ type: 'cloud-edit-used', remaining });
         } else {
-            await this.runFreeChat(cleanText, mentionContext);
+            trackEvent('ollama_fallback');
+            this.post({ type: 'ollama-fallback' });
+            await this.runOllamaFallback(cleanText, mentionContext);
         }
     }
 
     // ── Pro: full agentic loop ────────────────────────────────────────────────
 
-    private async runProChat(text: string, mentionContext: string, git: GitService) {
-        // Inject active file context + mention context on first message or when relevant
+    private async runProChat(text: string, mentionContext: string) {
         const fileCtx = buildFileContext();
         const contextPrefix = [mentionContext, fileCtx].filter(Boolean).join('\n');
         const fullText = contextPrefix ? `${contextPrefix}\n\n${text}` : text;
@@ -235,7 +263,7 @@ export class ChatPanel {
                 userMessage: fullText,
                 history: this.trimHistory(this.history),
                 provider: getProvider(),
-                git,
+                git: this.git,
                 onEvent: (event: AgentEvent) => this.handleAgentEvent(event),
                 onApprovalNeeded: (id, description, preview) =>
                     new Promise<boolean>(resolve => {
@@ -281,15 +309,30 @@ export class ChatPanel {
         }
     }
 
-    // ── Free: simple chat, no tools ───────────────────────────────────────────
+    // ── Ollama fallback ──────────────────────────────────────────────────────
 
-    private async runFreeChat(text: string, mentionContext: string) {
+    private async runOllamaFallback(text: string, mentionContext: string) {
         const fileContext  = buildFileContext();
         const contextParts = [mentionContext, fileContext].filter(Boolean).join('\n');
         const userContent  = contextParts ? `${contextParts}\n\n${text}` : text;
 
+        // Check cache for identical questions
+        const key = cacheKey(userContent, this.history);
+        const cached = getCachedResponse(key);
+        if (cached) {
+            this.post({ type: 'assistant-start' });
+            this.post({ type: 'set-text', text: cached });
+            this.history = this.trimHistory([
+                ...this.history,
+                { role: 'user', content: text },
+                { role: 'assistant', content: cached }
+            ]);
+            this.post({ type: 'assistant-end' });
+            return;
+        }
+
         const messages: Message[] = [
-            ...FREE_SYSTEM,
+            ...OLLAMA_FALLBACK_SYSTEM,
             ...this.trimHistory(this.history),
             { role: 'user', content: userContent }
         ];
@@ -297,45 +340,41 @@ export class ChatPanel {
         this.post({ type: 'assistant-start' });
         let response = '';
 
+        const ollama = new OllamaProvider();
         try {
-            await getProvider().stream(messages, chunk => {
+            await ollama.stream(messages, chunk => {
                 response += chunk;
                 this.post({ type: 'set-text', text: response });
             });
+            setCachedResponse(key, response);
         } catch (err: any) {
-            response = `**Error:** ${err.message}\n\nRun \`Freebird: Configure AI Backend\` to check your settings.`;
+            response = `**Ollama not reachable** — ${err.message}\n\n` +
+                'Install Ollama at [ollama.com](https://ollama.com) and run `ollama serve` to get unlimited free local AI.\n\n' +
+                'Or [upgrade to Pro](command:freebird.upgradeToPro) for unlimited cloud-powered edits.';
             this.post({ type: 'set-text', text: response });
         }
 
         this.history = this.trimHistory([
             ...this.history,
-            { role: 'user', content: text },      // store clean text (no context blob)
+            { role: 'user', content: text },
             { role: 'assistant', content: response }
         ]);
 
         this.post({ type: 'assistant-end' });
-
-        // Show upgrade hint, but not on every single message
-        if (this.upgradeHintsShown < MAX_UPGRADE_HINTS) {
-            this.upgradeHintsShown++;
-            this.post({ type: 'show-upgrade-hint' });
-        }
     }
 
-    // ── Trim history to avoid blowing context window ──────────────────────────
+    // ── Trim history ─────────────────────────────────────────────────────────
 
     private trimHistory(messages: Message[]): Message[] {
-        // Each pair = 1 user + 1 assistant message
         const maxMessages = MAX_HISTORY_PAIRS * 2;
         if (messages.length <= maxMessages) return messages;
-        // Always keep the most recent messages; drop oldest pairs
         return messages.slice(messages.length - maxMessages);
     }
 
-    // ── Shared git commands ───────────────────────────────────────────────────
+    // ── Git commands ─────────────────────────────────────────────────────────
 
-    private async handleCommit(git: GitService) {
-        const diff = await git.getDiff();
+    private async handleCommit() {
+        const diff = await this.git.getDiff();
         if (!diff) {
             this.post({ type: 'user', text: '/commit' });
             this.post({ type: 'assistant-start' });
@@ -369,7 +408,7 @@ export class ChatPanel {
         );
         if (choice === 'Commit') {
             try {
-                await git.commit(trimmed);
+                await this.git.commit(trimmed);
                 this.post({ type: 'assistant-start' });
                 this.post({ type: 'set-text', text: `**Committed:** ${trimmed}` });
                 this.post({ type: 'assistant-end' });
@@ -378,7 +417,7 @@ export class ChatPanel {
             const edited = await vscode.window.showInputBox({ value: trimmed, prompt: 'Edit commit message' });
             if (edited) {
                 try {
-                    await git.commit(edited);
+                    await this.git.commit(edited);
                     this.post({ type: 'assistant-start' });
                     this.post({ type: 'set-text', text: `**Committed:** ${edited}` });
                     this.post({ type: 'assistant-end' });
@@ -387,11 +426,11 @@ export class ChatPanel {
         }
     }
 
-    private async handlePush(git: GitService) {
+    private async handlePush() {
         this.post({ type: 'user', text: '/push' });
         this.post({ type: 'assistant-start' });
         try {
-            await git.push();
+            await this.git.push();
             this.post({ type: 'set-text', text: '**Pushed** to remote successfully.' });
         } catch (err: any) {
             this.post({ type: 'set-text', text: `**Push failed:** ${err.message}` });
@@ -399,11 +438,11 @@ export class ChatPanel {
         this.post({ type: 'assistant-end' });
     }
 
-    private async handleStatus(git: GitService) {
+    private async handleStatus() {
         this.post({ type: 'user', text: '/status' });
         this.post({ type: 'assistant-start' });
         try {
-            this.post({ type: 'set-text', text: `**Git status:**\n\n${await git.getStatus()}` });
+            this.post({ type: 'set-text', text: `**Git status:**\n\n${await this.git.getStatus()}` });
         } catch (err: any) {
             this.post({ type: 'set-text', text: `**Error:** ${err.message}` });
         }
@@ -411,7 +450,7 @@ export class ChatPanel {
     }
 
     private post(msg: object) {
-        this.panel.webview.postMessage(msg);
+        this.view?.webview.postMessage(msg);
     }
 }
 

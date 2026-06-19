@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
-import { AIProvider, CompletionOptions, Message } from './provider';
+import { AIProvider, CompletionOptions, Message, FIMProvider } from './provider';
 
-export class OllamaProvider implements AIProvider {
+export class OllamaProvider implements AIProvider, FIMProvider {
     private get url() {
         return vscode.workspace.getConfiguration('freebird').get<string>('ollamaUrl', 'http://localhost:11434');
     }
@@ -50,5 +50,30 @@ export class OllamaProvider implements AIProvider {
         let result = '';
         await this.stream(messages, chunk => { result += chunk; }, opts);
         return result;
+    }
+
+    async fillInMiddle(prefix: string, suffix: string, opts?: CompletionOptions): Promise<string> {
+        const response = await fetch(`${this.url}/api/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: this.model,
+                prompt: prefix,
+                suffix,
+                stream: false,
+                options: {
+                    num_predict: opts?.maxTokens ?? 128,
+                    temperature: opts?.temperature ?? 0.2,
+                    stop: ['\n\n', '\r\n\r\n']
+                }
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`Ollama FIM error: ${response.statusText}`);
+        }
+
+        const data = await response.json() as { response?: string };
+        return data.response ?? '';
     }
 }
