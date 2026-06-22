@@ -8,7 +8,7 @@
 //   or { error, code } on failure
 //
 // Quota is enforced server-side using Redis (same db as telemetry).
-// 5 free edits per sessionId per UTC day.
+// 20 free edits per sessionId per UTC day.
 
 import { Redis } from '@upstash/redis';
 
@@ -18,7 +18,7 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL   = 'gemini-2.0-flash';
 const GEMINI_URL     = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`;
 
-const DAILY_LIMIT    = 5;
+const DAILY_LIMIT = 20; // was 5
 const QUOTA_TTL      = 24 * 60 * 60; // 1 day in seconds
 
 export const config = { runtime: 'nodejs' }; // streaming needs Node runtime, not edge

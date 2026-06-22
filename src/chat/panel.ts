@@ -117,6 +117,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     vscode.env.openExternal(vscode.Uri.parse(UPGRADE_URL));
                     trackEvent('upgrade_clicked');
                     break;
+                case 'install-ollama':
+                    vscode.env.openExternal(vscode.Uri.parse('https://ollama.com/download'));
+                    trackEvent('ollama_install_clicked');
+                    break;
                 case 'activate-license':
                     vscode.commands.executeCommand('freebird.activateLicense');
                     break;
@@ -377,9 +381,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         } catch (err: any) {
             trackEvent('api_error');
             if (err?.code === 'QUOTA_EXCEEDED') {
-                response =
-                    `**Daily cloud edits used up.**\n\n` +
-                    `[Upgrade to Pro](${UPGRADE_URL}) for unlimited access, or wait until tomorrow for your free edits to reset.`;
+                this.post({ type: 'quota-exceeded' });
+                trackEvent('upgrade_prompt_shown');
+                return;
             } else if (err?.code === 'IP_RATE_LIMITED') {
                 response =
                     `**Too many requests** — you've hit the fallback rate limit (20/hr).\n\n` +

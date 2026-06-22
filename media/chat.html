@@ -345,6 +345,96 @@ em { font-style: italic; }
 }
 .nudge-dismiss:hover { opacity: 0.7; }
 
+/* ── quota wall ── */
+.quota-bar {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 0.76em; padding: 6px 14px; margin: 2px 24px 2px 54px;
+  border-radius: 7px; opacity: 0.7;
+  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.06));
+  background: var(--vscode-editorWidget-background, rgba(255,255,255,0.02));
+}
+.quota-dots { display: flex; gap: 3px; flex-shrink: 0; }
+.quota-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--vscode-editor-foreground); opacity: 0.15;
+  transition: opacity 0.3s;
+}
+.quota-dot.used { opacity: 0.6; }
+.quota-dot.low  { background: #e8a020; opacity: 1; }
+.quota-dot.gone { background: #f48771; opacity: 1; }
+.quota-bar-text { flex: 1; color: var(--vscode-descriptionForeground); }
+.quota-bar-link {
+  background: none; border: none; cursor: pointer; padding: 0;
+  color: #d97757; font-size: inherit; font-weight: 500;
+  transition: opacity 0.2s; white-space: nowrap;
+}
+.quota-bar-link:hover { opacity: 0.7; text-decoration: underline; }
+
+.quota-wall {
+  margin: 10px 24px 10px 54px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--vscode-editorWidget-background, rgba(255,255,255,0.02));
+  border: 1px solid rgba(217,119,87,0.2);
+  animation: fadeIn 0.25s ease-out;
+}
+.quota-wall-header {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+}
+.quota-wall-title {
+  font-size: 0.88em; font-weight: 600;
+  color: var(--vscode-editor-foreground);
+}
+.quota-wall-stats {
+  display: flex; gap: 0; margin-bottom: 12px;
+  border-radius: 7px; overflow: hidden;
+  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.06));
+  background: var(--vscode-input-background);
+}
+.quota-wall-stat {
+  flex: 1; padding: 8px 10px; text-align: center;
+  border-right: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.06));
+}
+.quota-wall-stat:last-child { border-right: none; }
+.quota-wall-stat-value {
+  font-size: 1.3em; font-weight: 600;
+  color: var(--vscode-editor-foreground); display: block;
+}
+.quota-wall-stat-label {
+  font-size: 0.68em; text-transform: uppercase; letter-spacing: 0.06em;
+  opacity: 0.4; display: block; margin-top: 1px;
+}
+.quota-wall-features {
+  margin-bottom: 12px; display: flex; flex-direction: column; gap: 4px;
+}
+.quota-wall-feature {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 0.8em; color: var(--vscode-descriptionForeground);
+}
+.quota-wall-check { color: #4caf50; font-size: 0.85em; flex-shrink: 0; }
+.quota-wall-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.quota-wall-btn-primary {
+  flex: 1; padding: 7px 14px; border-radius: 7px; border: none;
+  background: #d97757; color: #fff;
+  font-size: 0.82em; font-weight: 600; cursor: pointer;
+  font-family: inherit; transition: opacity 0.2s; text-align: center;
+  min-width: 140px;
+}
+.quota-wall-btn-primary:hover { opacity: 0.88; }
+.quota-wall-btn-secondary {
+  padding: 7px 14px; border-radius: 7px;
+  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.12));
+  background: transparent; color: var(--vscode-editor-foreground);
+  font-size: 0.82em; cursor: pointer; font-family: inherit;
+  transition: background 0.2s; white-space: nowrap;
+}
+.quota-wall-btn-secondary:hover {
+  background: var(--vscode-list-hoverBackground, rgba(255,255,255,0.05));
+}
+.quota-wall-reset {
+  font-size: 0.72em; opacity: 0.35; margin-top: 8px; text-align: center;
+}
+
 /* keep old class for compat */
 .upgrade-hint {
   font-size: 0.78em; padding: 8px 16px; margin: 4px 24px 4px 54px;
@@ -481,7 +571,7 @@ em { font-style: italic; }
 
 <!-- Upgrade banner -->
 <div id="upgrade-banner">
-  <span>5 free cloud edits/day &bull; unlimited local Ollama &bull; Pro = unlimited everything</span>
+  <span>20 free cloud edits/day &bull; unlimited local Ollama &bull; Pro = unlimited everything</span>
   <div class="banner-links">
     <button class="link-btn" onclick="vscode.postMessage({type:'upgrade'})">Upgrade to Pro</button>
     <button class="link-btn" onclick="vscode.postMessage({type:'activate-license'})">Enter license key</button>
@@ -736,25 +826,77 @@ function endMsg() { stopThinkingAnimation(); currentBubble=null; setBusy(false);
 function setBusy(v) { busy=v; sendBtn.disabled=v; inputEl.disabled=v; if(!v) inputEl.focus(); }
 function scroll() { msgsEl.scrollTop=msgsEl.scrollHeight; }
 
+// ── Quota tracking ───────────────────────────────────────────────────────────
+var _sessionEdits = 0;
+var _sessionMessages = 0;
+var _sessionStart = Date.now();
+var DAILY_LIMIT = 20;
+
+function getResetCountdown() {
+  var now = new Date();
+  var midnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+  var diff = midnight - now;
+  var h = Math.floor(diff / 3600000);
+  var m = Math.floor((diff % 3600000) / 60000);
+  return h > 0 ? h + 'h ' + m + 'm' : m + 'm';
+}
+
 function showCloudEditUsed(remaining) {
-  var h=document.createElement('div'); h.className='status-hint cloud-mode';
-  var msg = remaining > 0
-    ? '<b>'+remaining+'</b> cloud edit'+(remaining===1?'':'s')+' left today.'
-    : 'Daily cloud edits used — switching to unlimited local Ollama. Resets tomorrow!';
-  if (remaining > 0) {
-    h.innerHTML = msg + ' &nbsp;' +
-      '<button onclick="vscode.postMessage({type:\'upgrade\'})">Go Pro for unlimited</button>';
-  } else {
-    h.innerHTML = msg + ' &nbsp;' +
-      '<button onclick="vscode.postMessage({type:\'upgrade\'})">Upgrade for unlimited cloud edits</button>';
+  _sessionEdits++;
+  var used = DAILY_LIMIT - remaining;
+  var dots = '';
+  for (var i = 0; i < DAILY_LIMIT; i++) {
+    var cls = 'quota-dot';
+    if (i < used) {
+      cls += (remaining === 0) ? ' gone' : (remaining <= 3 ? ' low' : ' used');
+    }
+    dots += '<div class="' + cls + '"></div>';
   }
+  var text = remaining <= 0
+    ? 'Free edits used up today'
+    : remaining === 1
+      ? '1 free edit left today'
+      : remaining + ' free edits left today';
+  var h = document.createElement('div');
+  h.className = 'quota-bar';
+  h.innerHTML = '<div class="quota-dots">' + dots + '</div>'
+    + '<span class="quota-bar-text">' + text + '</span>'
+    + '<button class="quota-bar-link" onclick="vscode.postMessage({type:\'upgrade\'})">Upgrade →</button>';
   msgsEl.appendChild(h); scroll();
+}
+
+function showQuotaWall() {
+  var sessionMins = Math.round((Date.now() - _sessionStart) / 60000);
+  var wall = document.createElement('div');
+  wall.className = 'quota-wall';
+  wall.innerHTML =
+    '<div class="quota-wall-header">'
+      + '<svg width="16" height="16" viewBox="0 0 16 16" style="stroke:#d97757;fill:none;stroke-width:1.8;stroke-linecap:round;flex-shrink:0"><polygon points="8,2 15,13 1,13"/><line x1="8" y1="6" x2="8" y2="9"/><circle cx="8" cy="11" r="0.5" fill="#d97757"/></svg>'
+      + '<span class="quota-wall-title">Free edits used up for today</span>'
+    + '</div>'
+    + '<div class="quota-wall-stats">'
+      + '<div class="quota-wall-stat"><span class="quota-wall-stat-value">' + _sessionEdits + '</span><span class="quota-wall-stat-label">edits used</span></div>'
+      + '<div class="quota-wall-stat"><span class="quota-wall-stat-value">' + _sessionMessages + '</span><span class="quota-wall-stat-label">messages</span></div>'
+      + '<div class="quota-wall-stat"><span class="quota-wall-stat-value">' + (sessionMins < 1 ? '<1m' : sessionMins + 'm') + '</span><span class="quota-wall-stat-label">this session</span></div>'
+    + '</div>'
+    + '<div class="quota-wall-features">'
+      + '<div class="quota-wall-feature"><span class="quota-wall-check">✓</span> Unlimited cloud edits — no daily cap</div>'
+      + '<div class="quota-wall-feature"><span class="quota-wall-check">✓</span> BYOK — Claude, GPT-4o, DeepSeek, Qwen</div>'
+      + '<div class="quota-wall-feature"><span class="quota-wall-check">✓</span> Project memory across sessions</div>'
+      + '<div class="quota-wall-feature"><span class="quota-wall-check">✓</span> Direct-to-LLM speed, total privacy</div>'
+    + '</div>'
+    + '<div class="quota-wall-actions">'
+      + '<button class="quota-wall-btn-primary" onclick="vscode.postMessage({type:\'upgrade\'})">Upgrade to Pro — $6/month →</button>'
+      + '<button class="quota-wall-btn-secondary" onclick="vscode.postMessage({type:\'install-ollama\'})">Install Ollama (free)</button>'
+    + '</div>'
+    + '<div class="quota-wall-reset">Free edits reset in ' + getResetCountdown() + ' (midnight UTC)</div>';
+  msgsEl.appendChild(wall); scroll();
 }
 
 var NUDGE_MESSAGES = {
   'running-low': {
     icon: '⚡',
-    text: 'Only <strong>2 cloud edits</strong> left today. Go Pro for unlimited cloud-powered AI.',
+    text: 'Only <strong>2 free edits</strong> left today. Upgrade to Pro for unlimited cloud AI.',
     cta: 'Upgrade to Pro'
   },
   'power-user': {
@@ -766,6 +908,11 @@ var NUDGE_MESSAGES = {
     icon: '💡',
     text: 'Enjoying Freebird? <strong>Pro</strong> unlocks cloud AI, multi-file editing, and agent mode.',
     cta: 'Learn more'
+  },
+  'quota-overflow': {
+    icon: '🔄',
+    text: 'Free edits used — responding via fallback AI. <strong>Upgrade to Pro</strong> for unlimited fast responses.',
+    cta: 'Upgrade to Pro'
   }
 };
 
@@ -887,8 +1034,9 @@ inputEl.addEventListener('blur',function(){setTimeout(hideAC,150);});
 window.addEventListener('message',function(e){
   var m=e.data;
   switch(m.type){
-    case 'user':             addUserMsg(m.text); break;
+    case 'user':             _sessionMessages++; addUserMsg(m.text); break;
     case 'assistant-start':  startAssistantMsg(); break;
+    case 'quota-exceeded':   showQuotaWall(); setBusy(false); break;
     case 'set-text':         setCurrentText(m.text); break;
     case 'tool-status':      addToolStatus(m.id,m.state,m.label); break;
     case 'tool-update':      updateToolStatus(m.id,m.state,m.output); break;
