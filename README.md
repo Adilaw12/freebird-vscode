@@ -41,13 +41,13 @@ Copilot throttled? GitHub limits hit? **Don't wait for your billing to reset** -
 
 Ask Freebird to update your products page, add images to cards, or refactor across files — it shows a full diff and waits for your approval before changing anything.
 
-!\[Freebird AI — multi-file agent edit with approve/reject flow](media/demo-agent-edit.png)
+![Freebird AI — multi-file agent edit with approve/reject flow](media/Freebird%20AI-%20edit%20screen.png)
 
 ### Agentic page editing across HTML and CSS
 
 Freebird reads your existing HTML structure, understands the context, and makes targeted edits across files — CSS, HTML, and content — in one agent run.
 
-!\[Freebird AI — agentic page editing across HTML and CSS](media/demo-slideshow-edit.png)
+![Freebird AI — agentic page editing across HTML and CSS](media/Freebird%20AI-%20edit%20screen-2.png)
 
 \---
 
