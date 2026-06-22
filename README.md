@@ -1,12 +1,12 @@
 # The AI coding assistant that just works - no setup, no throttling.
 
-[!\[VS Marketplace](https://img.shields.io/badge/VS%20Marketplace-v0.6.3-0066B8?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=TenLabs.freebird-ai)
-[!\[License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](https://github.com/Adilaw12/freebird-vscode/blob/main/LICENSE)
-[!\[GitHub](https://img.shields.io/badge/GitHub-Adilaw12%2Ffreebird--vscode-181717?style=flat-square\&logo=github)](https://github.com/Adilaw12/freebird-vscode)
+[![VS Marketplace](https://img.shields.io/badge/VS%20Marketplace-v0.6.4-0066B8?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=TenLabs.freebird-ai)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](https://github.com/Adilaw12/freebird-vscode/blob/main/LICENSE)
+[![GitHub](https://img.shields.io/badge/GitHub-Adilaw12%2Ffreebird--vscode-181717?style=flat-square&logo=github)](https://github.com/Adilaw12/freebird-vscode)
 
-!\[Freebird AI - codebase-aware agent with inline edit](media/banner.png)
+![Freebird AI - codebase-aware agent with inline edit](media/banner.png)
 
-\---
+---
 
 Install Freebird AI and start coding in seconds. No API keys. No Ollama. No configuration. Just **5 free advanced edits per day** powered by Gemini Flash, and unlimited local AI when you want full privacy.
 
@@ -14,7 +14,7 @@ Copilot throttled? GitHub limits hit? **Don't wait for your billing to reset** -
 
 [**Start free — upgrade anytime for $6 USD/month →**](https://buy.stripe.com/9B628t4WheMmeSMccZfAc03)
 
-\---
+---
 
 ## Free vs Pro
 
@@ -28,12 +28,12 @@ Copilot throttled? GitHub limits hit? **Don't wait for your billing to reset** -
 |**Advanced cloud edits (codebase search, multi-file editing, inline edit, terminal, AI commit)**|5/day|**Unlimited**|
 |**Gemini Flash fallback when Ollama is unavailable**|✅|—|
 |**Bring your own API keys — BYOK (Anthropic / OpenAI / DeepSeek / Qwen)**|—|✅|
-|**Direct-to-LLM speed \& total data privacy**|—|✅|
+|**Direct-to-LLM speed & total data privacy**|—|✅|
 |**Project memory across sessions**|—|✅|
 
-> \*\*Pro tip:\*\* Connect your DeepSeek API key (Pro). It scores higher than GPT-4o on coding benchmarks but costs less than \*\*$0.20 per million tokens\*\* — thousands of unthrottled edits per month for a couple of dollars on top of your $6 plan.
+> **Pro tip:** Connect your DeepSeek API key (Pro). It scores higher than GPT-4o on coding benchmarks but costs less than **$0.20 per million tokens** — thousands of unthrottled edits per month for a couple of dollars on top of your $6 plan.
 
-\---
+---
 
 ## See It in Action
 
@@ -49,11 +49,11 @@ Freebird reads your existing HTML structure, understands the context, and makes 
 
 ![Freebird AI — agentic page editing across HTML and CSS](media/Freebird%20AI-%20edit%20screen-2.png)
 
-\---
+---
 
 ## Features
 
-!\[Freebird AI feature highlights](media/feature-grid.png)
+![Freebird AI feature highlights](media/feature-grid.png)
 
 ### Works Immediately, No Setup Required
 
@@ -95,7 +95,7 @@ Generate commit messages, push to remote, and check git status — all from the 
 
 Freebird saves notes about your project — conventions, decisions, in-progress work — to `.freebird/memory.md` and loads them automatically on future requests. Use `/memory` to see what's saved and `/forget` to clear it.
 
-\---
+---
 
 ## Pick the Right Model for the Job
 
@@ -103,14 +103,14 @@ Freebird saves notes about your project — conventions, decisions, in-progress 
 |-|-|-|
 |**Gemini Flash (built-in)**|Default free tier — fast, no setup|Free (5/day)|
 |**Ollama (local)**|Unlimited local AI — free, 100% private|Free|
-|**DeepSeek V4-pro**|Advanced reasoning, coding, debugging|\~$0.14/M tokens|
-|**Qwen 2.5 Coder**|Programming speed and accuracy|\~$0.16/M tokens|
-|**GPT-4o**|Best all-rounder — code, docs, planning|\~$2.50/M tokens|
-|**Claude Sonnet**|Complex refactoring \& system architecture|\~$3/M tokens|
+|**DeepSeek V4-pro**|Advanced reasoning, coding, debugging|~$0.14/M tokens|
+|**Qwen 2.5 Coder**|Programming speed and accuracy|~$0.16/M tokens|
+|**GPT-4o**|Best all-rounder — code, docs, planning|~$2.50/M tokens|
+|**Claude Sonnet**|Complex refactoring & system architecture|~$3/M tokens|
 
 All BYOK models require Pro. Gemini Flash and Ollama are always free.
 
-\---
+---
 
 ## Getting Started
 
@@ -148,7 +148,7 @@ No API keys, no Ollama, no configuration needed.
 1. Get an API key at [dashscope.console.aliyun.com](https://dashscope.console.aliyun.com)
 2. Run **Freebird: Configure AI Backend** → select **Qwen 2.5** and paste your key
 
-\---
+---
 
 ## Commands
 
@@ -172,7 +172,7 @@ No API keys, no Ollama, no configuration needed.
 |`/clear`|Clear conversation history|
 |`/help`|Show all commands|
 
-\---
+---
 
 ## How the Agent Works
 
@@ -188,7 +188,7 @@ When you ask Freebird to perform a task, it runs an agent loop — similar to Cu
 
 Nothing is modified silently. You stay in full control.
 
-\---
+---
 
 ## Customizing Model Versions
 
@@ -213,7 +213,7 @@ All cloud backends support model overrides via the `freebird.model` setting.
 |DeepSeek|`deepseek-reasoner`|`deepseek-coder`|
 |Qwen|`qwen2.5-coder-32b-instruct`|—|
 
-\---
+---
 
 ## Settings
 
@@ -226,7 +226,7 @@ All cloud backends support model overrides via the `freebird.model` setting.
 |`freebird.licenseKey`|*(empty)*|Pro license key|
 |`freebird.telemetry.enabled`|`true`|Anonymous usage analytics (no code/PII collected)|
 
-\---
+---
 
 ## Privacy
 
@@ -235,21 +235,20 @@ All cloud backends support model overrides via the `freebird.model` setting.
 * **Anthropic / OpenAI / DeepSeek / Qwen**: code sent to their APIs under your own account.
 * **Freebird AI** (Ten Labs Pty. Limited) never collects or stores your code or conversation data.
 
-\---
+---
 
 ## Support
 
 Having trouble with a payment, license activation, or anything else? Email [**support@ten-labs.com.au**](mailto:support@ten-labs.com.au) and we'll sort it out.
 
-\---
+---
 
 ## Contributing
 
 Freebird AI is open source. Issues and PRs welcome at the [GitHub repository](https://github.com/Adilaw12/freebird-vscode).
 
-\---
+---
 
 ## License
 
 MIT — Copyright © 2025 Ten Labs Pty. Limited
-
