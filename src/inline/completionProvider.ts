@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { getProvider } from '../ai';
 import { FIMProvider } from '../ai/provider';
+import { getSessionId } from '../telemetry';
 import { stripFences } from '../util/text';
 
 const MAX_PREFIX_LINES = 100;
@@ -13,6 +14,7 @@ let warnedThisSession = false;
 
 class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider {
     private pendingTimer: ReturnType<typeof setTimeout> | undefined;
+    constructor(private readonly context: vscode.ExtensionContext) {}
 
     async provideInlineCompletionItems(
         document: vscode.TextDocument,
@@ -37,7 +39,7 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
 
         let raw: string;
         try {
-            const provider = getProvider();
+            const provider = getProvider(this.context, getSessionId());
 
             // Use FIM endpoint when available (Ollama) — much faster for completions
             if (isFIMProvider(provider)) {
@@ -116,7 +118,7 @@ export function registerTabCompletion(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
         vscode.languages.registerInlineCompletionItemProvider(
             { pattern: '**' },
-            new FreebirdCompletionProvider()
+            new FreebirdCompletionProvider(context)
         )
     );
 }

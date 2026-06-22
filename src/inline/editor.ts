@@ -1,10 +1,13 @@
 import * as vscode from 'vscode';
 import { getProvider } from '../ai';
 import { getLicenseStatus, UPGRADE_URL } from '../license/validator';
+import { getSessionId } from '../telemetry';
 import { stripFences } from '../util/text';
 
+let _extensionContext: vscode.ExtensionContext;
+
 export function registerInlineEdit(context: vscode.ExtensionContext) {
-    // Register the internal command (no Pro check — called only after gate passes)
+    _extensionContext = context;
     context.subscriptions.push(
         vscode.commands.registerCommand('freebird._inlineEditInternal', inlineEdit)
     );
@@ -40,7 +43,7 @@ async function inlineEdit() {
     });
     if (!instruction) return;
 
-    const provider = getProvider();
+    const provider = getProvider(_extensionContext, getSessionId());
 
     await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: 'Freebird: Rewriting…', cancellable: true },

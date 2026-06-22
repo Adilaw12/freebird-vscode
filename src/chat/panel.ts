@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { getProvider } from '../ai';
+import { CloudProvider } from '../ai/cloud';
 import { OllamaProvider } from '../ai/ollama';
 import { GitService } from '../git/service';
 import { Message } from '../ai/provider';
@@ -11,25 +12,24 @@ import { buildFileContext, resolveMentions, listWorkspaceFiles } from './context
 import { getLicenseStatus, UPGRADE_URL } from '../license/validator';
 import { getCloudEditsRemaining, consumeCloudEdit, DAILY_CLOUD_LIMIT } from '../license/usage';
 import { readProjectMemory, clearProjectMemory, MEMORY_RELATIVE_PATH } from '../agent/memory';
-import { trackEvent } from '../telemetry';
+import { trackEvent, getSessionId } from '../telemetry';
 
 const MAX_HISTORY_PAIRS = 20;
 
-const OLLAMA_FALLBACK_SYSTEM: Message[] = [
+// System prompt for the free cloud/Ollama tier (no agent tools)
+const FREE_SYSTEM: Message[] = [
     {
         role: 'user',
         content:
-            'You are Freebird, a free open-source AI coding assistant for VS Code. ' +
+            'You are Freebird, a free AI coding assistant for VS Code. ' +
             'Help with writing, debugging, explaining, and improving code. ' +
             'Use markdown with language-tagged code blocks. Be concise but thorough.\n\n' +
-            'You are running locally via Ollama — 100% private, unlimited, and free. ' +
-            'You can help with code questions, refactoring suggestions, and explanations. ' +
             'For multi-file editing, codebase search, and terminal commands, the user can ' +
             'upgrade to Pro for unlimited cloud-powered agent mode.'
     },
     {
         role: 'assistant',
-        content: 'Ready. I am Freebird running locally via Ollama — ask me anything about your code.'
+        content: 'Ready — ask me anything about your code.'
     }
 ];
 
@@ -153,7 +153,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     private async handleMessage(text: string) {
         const trimmed = text.trim();
-        const git = this.git;
 
         if (trimmed === '/commit') { await this.handleCommit(); return; }
         if (trimmed === '/push')   { await this.handlePush();   return; }
@@ -219,7 +218,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             if (!license.isPro) {
                 helpLines.push(
                     '**Free plan:**',
-                    `${getCloudEditsRemaining(this.context)}/${DAILY_CLOUD_LIMIT} cloud edits left today — resets daily. After that, unlimited local Ollama.`,
+                    `${getCloudEditsRemaining(this.context)}/${DAILY_CLOUD_LIMIT} cloud edits left today (Gemini Flash) — resets daily.`,
+                    `After cloud edits: falls back to local Ollama if available.`,
                     `[Upgrade to Pro](${UPGRADE_URL}) for unlimited cloud edits + BYOK.`,
                     ''
                 );
@@ -242,28 +242,28 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         if (license.isPro) {
             trackEvent('pro_message');
             await this.runProChat(cleanText, mentionContext);
+
         } else if (getCloudEditsRemaining(this.context) > 0) {
+            // Free tier: use cloud edits (Gemini Flash via Vercel backend)
             trackEvent('cloud_edit_used');
             this.toolCallsThisRound = 0;
-            await this.runProChat(cleanText, mentionContext);
+            await this.runFreeChat(cleanText, mentionContext, 'cloud');
             const remaining = await consumeCloudEdit(this.context);
             this.post({ type: 'cloud-edit-used', remaining });
 
-            // Nudge when cloud edits are running low
             if (remaining === 2) {
                 this.post({ type: 'upgrade-nudge', variant: 'running-low' });
             }
-
-            // Nudge after an impressive multi-tool agent run
             if (this.toolCallsThisRound >= 3) {
                 this.post({ type: 'upgrade-nudge', variant: 'power-user' });
             }
+
         } else {
+            // Cloud edits exhausted — try Ollama, then fall back to cloud with upgrade prompt
             trackEvent('ollama_fallback');
             this.post({ type: 'ollama-fallback' });
-            await this.runOllamaFallback(cleanText, mentionContext);
+            await this.runFreeChat(cleanText, mentionContext, 'ollama-then-cloud');
 
-            // Periodic nudge every 10 messages in Ollama fallback mode
             if (this.sessionMessageCount % 10 === 0) {
                 this.post({ type: 'upgrade-nudge', variant: 'periodic' });
             }
@@ -281,7 +281,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             const newHistory = await runAgentLoop({
                 userMessage: fullText,
                 history: this.trimHistory(this.history),
-                provider: getProvider(),
+                provider: getProvider(this.context, getSessionId()),
                 git: this.git,
                 onEvent: (event: AgentEvent) => this.handleAgentEvent(event),
                 onApprovalNeeded: (id, description, preview) =>
@@ -300,6 +300,121 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             });
         }
         this.post({ type: 'assistant-end' });
+    }
+
+    // ── Free tier: cloud (Gemini Flash) with Ollama fallback ─────────────────
+    //
+    // mode = 'cloud'            → use CloudProvider directly (has quota)
+    // mode = 'ollama-then-cloud' → try Ollama first; if unreachable, use CloudProvider
+    //                              (quota exhausted path — cloud here has no daily limit
+    //                               since we only reach this after the 5 paid edits are gone,
+    //                               but Gemini Flash is cheap enough to absorb the overflow)
+
+    private async runFreeChat(
+        text: string,
+        mentionContext: string,
+        mode: 'cloud' | 'ollama-then-cloud'
+    ) {
+        const fileContext  = buildFileContext();
+        const contextParts = [mentionContext, fileContext].filter(Boolean).join('\n');
+        const userContent  = contextParts ? `${contextParts}\n\n${text}` : text;
+
+        // Cache check
+        const key = cacheKey(userContent, this.history);
+        const cached = getCachedResponse(key);
+        if (cached) {
+            this.post({ type: 'assistant-start' });
+            this.post({ type: 'set-text', text: cached });
+            this.history = this.trimHistory([
+                ...this.history,
+                { role: 'user', content: text },
+                { role: 'assistant', content: cached }
+            ]);
+            this.post({ type: 'assistant-end' });
+            return;
+        }
+
+        const messages: Message[] = [
+            ...FREE_SYSTEM,
+            ...this.trimHistory(this.history),
+            { role: 'user', content: userContent }
+        ];
+
+        this.post({ type: 'assistant-start' });
+        let response = '';
+
+        try {
+            if (mode === 'ollama-then-cloud') {
+                // Try Ollama first
+                const ollamaAvailable = await this.tryOllama(messages, chunk => {
+                    response += chunk;
+                    this.post({ type: 'set-text', text: response });
+                });
+
+                if (!ollamaAvailable) {
+                    // Ollama not available — fall back to Gemini via /api/fallback
+                    // (no quota, rate-limited by IP instead)
+                    trackEvent('ollama_not_reachable');
+                    const cloud = new CloudProvider(this.context, getSessionId(), 'fallback');
+                    await cloud.stream(messages, chunk => {
+                        response += chunk;
+                        this.post({ type: 'set-text', text: response });
+                    });
+                    // Show a one-time gentle upgrade prompt since they're in overflow
+                    this.post({ type: 'upgrade-nudge', variant: 'quota-overflow' });
+                }
+            } else {
+                // mode = 'cloud' — use CloudProvider with normal quota
+                const cloud = new CloudProvider(this.context, getSessionId());
+                await cloud.stream(messages, chunk => {
+                    response += chunk;
+                    this.post({ type: 'set-text', text: response });
+                });
+            }
+
+            if (response) setCachedResponse(key, response);
+
+        } catch (err: any) {
+            trackEvent('api_error');
+            if (err?.code === 'QUOTA_EXCEEDED') {
+                response =
+                    `**Daily cloud edits used up.**\n\n` +
+                    `[Upgrade to Pro](${UPGRADE_URL}) for unlimited access, or wait until tomorrow for your free edits to reset.`;
+            } else if (err?.code === 'IP_RATE_LIMITED') {
+                response =
+                    `**Too many requests** — you've hit the fallback rate limit (20/hr).\n\n` +
+                    `[Upgrade to Pro](${UPGRADE_URL}) for unlimited access, or install ` +
+                    `[Ollama](https://ollama.com) for unlimited free local AI.`;
+            } else {
+                response =
+                    `**Error:** ${err.message}\n\n` +
+                    `Try running \`Freebird: Configure AI Backend\` to check your settings, ` +
+                    `or [contact support](mailto:support@ten-labs.com.au).`;
+            }
+            this.post({ type: 'set-text', text: response });
+        }
+
+        this.history = this.trimHistory([
+            ...this.history,
+            { role: 'user', content: text },
+            { role: 'assistant', content: response }
+        ]);
+
+        this.post({ type: 'assistant-end' });
+    }
+
+    // Returns true if Ollama responded, false if unreachable
+    private async tryOllama(
+        messages: Message[],
+        onChunk: (text: string) => void
+    ): Promise<boolean> {
+        try {
+            const ollama = new OllamaProvider();
+            await ollama.stream(messages, onChunk);
+            return true;
+        } catch {
+            return false;
+        }
     }
 
     private handleAgentEvent(event: AgentEvent) {
@@ -332,61 +447,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
     }
 
-    // ── Ollama fallback ──────────────────────────────────────────────────────
-
-    private async runOllamaFallback(text: string, mentionContext: string) {
-        const fileContext  = buildFileContext();
-        const contextParts = [mentionContext, fileContext].filter(Boolean).join('\n');
-        const userContent  = contextParts ? `${contextParts}\n\n${text}` : text;
-
-        // Check cache for identical questions
-        const key = cacheKey(userContent, this.history);
-        const cached = getCachedResponse(key);
-        if (cached) {
-            this.post({ type: 'assistant-start' });
-            this.post({ type: 'set-text', text: cached });
-            this.history = this.trimHistory([
-                ...this.history,
-                { role: 'user', content: text },
-                { role: 'assistant', content: cached }
-            ]);
-            this.post({ type: 'assistant-end' });
-            return;
-        }
-
-        const messages: Message[] = [
-            ...OLLAMA_FALLBACK_SYSTEM,
-            ...this.trimHistory(this.history),
-            { role: 'user', content: userContent }
-        ];
-
-        this.post({ type: 'assistant-start' });
-        let response = '';
-
-        const ollama = new OllamaProvider();
-        try {
-            await ollama.stream(messages, chunk => {
-                response += chunk;
-                this.post({ type: 'set-text', text: response });
-            });
-            setCachedResponse(key, response);
-        } catch (err: any) {
-            trackEvent('ollama_not_reachable');
-            response = `**Ollama not reachable** — ${err.message}\n\n` +
-                'Install Ollama at [ollama.com](https://ollama.com) and run `ollama serve` to get unlimited free local AI.\n\n' +
-                'Or [upgrade to Pro](command:freebird.upgradeToPro) for unlimited cloud-powered edits.';
-            this.post({ type: 'set-text', text: response });
-        }
-
-        this.history = this.trimHistory([
-            ...this.history,
-            { role: 'user', content: text },
-            { role: 'assistant', content: response }
-        ]);
-
-        this.post({ type: 'assistant-end' });
-    }
-
     // ── Trim history ─────────────────────────────────────────────────────────
 
     private trimHistory(messages: Message[]): Message[] {
@@ -413,7 +473,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         let commitMsg = '';
         try {
-            commitMsg = await getProvider().complete([{
+            // Use getProvider with context + sessionId so routing logic applies
+            commitMsg = await getProvider(this.context, getSessionId()).complete([{
                 role: 'user',
                 content: `Write a concise conventional git commit message (imperative mood, max 72 chars subject line) for these changes. Reply with ONLY the commit message:\n\n${diff}`
             }]);
@@ -480,12 +541,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
 function toolLabel(tool: { action: string; [key: string]: unknown }): string {
     switch (tool.action) {
-        case 'read_file':   return `Reading ${tool.path}`;
-        case 'list_files':  return `Listing files (${tool.pattern || '**/*'})`;
-        case 'search_code': return `Searching for "${tool.query}"`;
-        case 'write_file':  return `Writing ${tool.path}`;
-        case 'edit_file':   return `Editing ${tool.path}`;
-        case 'run_command': return `Running: ${tool.command}`;
+        case 'read_file':      return `Reading ${tool.path}`;
+        case 'list_files':     return `Listing files (${tool.pattern || '**/*'})`;
+        case 'search_code':    return `Searching for "${tool.query}"`;
+        case 'write_file':     return `Writing ${tool.path}`;
+        case 'edit_file':      return `Editing ${tool.path}`;
+        case 'run_command':    return `Running: ${tool.command}`;
         case 'download_file':  return `Downloading ${tool.url}`;
         case 'create_diagram': return `Creating diagram: ${tool.title}`;
         case 'copy_file':      return `Copying ${tool.source} → ${tool.destination}`;

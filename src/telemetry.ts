@@ -58,6 +58,10 @@ export function trackEvent(name: string): void {
     _pendingEvents[name] = (_pendingEvents[name] ?? 0) + 1;
 }
 
+export function getSessionId(): string {
+    return _sessionId;
+}
+
 export function getSessionStats(): Record<string, number> | null {
     if (!_context) return null;
     const session = _context.globalState.get<SessionData>(SESSION_KEY);
@@ -88,7 +92,7 @@ async function flush(): Promise<void> {
             sessionId: _sessionId,
             version: vscode.extensions.getExtension('TenLabs.freebird-ai')?.packageJSON?.version ?? 'unknown',
             platform: process.platform,
-            backend: config.get<string>('backend', 'ollama')
+            backend: config.get<string>('backend', 'cloud')
         }
     };
 

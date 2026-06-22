@@ -2,7 +2,7 @@
   "name": "freebird-ai",
   "displayName": "Freebird AI",
   "description": "Copilot throttled your speed? Get 5 free advanced edits/day, BYOK for unlimited Pro, or fall back to free local Ollama. Reads your codebase, edits files, pushes to GitHub.",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "publisher": "TenLabs",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -130,6 +130,7 @@
         "freebird.backend": {
           "type": "string",
           "enum": [
+            "cloud",
             "ollama",
             "anthropic",
             "openai",
@@ -137,13 +138,14 @@
             "qwen"
           ],
           "enumDescriptions": [
+            "Freebird Cloud (Gemini Flash) — works instantly, 5 free edits/day, no setup",
             "Local AI via Ollama — unlimited, 100% private, runs on your machine",
             "Anthropic Claude API — BYOK, direct-to-LLM speed (Pro)",
             "OpenAI API — BYOK, direct-to-LLM speed (Pro)",
-            "DeepSeek Coder API — BYOK, fast coding model (Pro)",
+            "DeepSeek API — BYOK, advanced reasoning model (Pro)",
             "Qwen 2.5 API (DashScope) — BYOK, powerful coding model (Pro)"
           ],
-          "default": "ollama",
+          "default": "cloud",
           "description": "AI backend to use for Freebird"
         },
         "freebird.apiKey": {
