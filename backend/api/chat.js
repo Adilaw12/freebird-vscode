@@ -9,13 +9,14 @@
 //
 // Quota is enforced server-side using Redis (same db as telemetry).
 // 20 free edits per sessionId per UTC day.
+// Quota is only incremented on successful responses — failed requests are never charged.
 
 import { Redis } from '@upstash/redis';
 
 const redis = Redis.fromEnv();
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL   = 'gemini-2.5-flash';
 const GEMINI_URL     = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`;
 
 const DAILY_LIMIT = 20; // was 5
@@ -62,13 +63,9 @@ export default async function handler(req, res) {
         });
     }
 
-    // Increment quota (set with TTL on first use)
-    const pipeline = redis.pipeline();
-    pipeline.incr(quotaKey);
-    if (used === 0) pipeline.expire(quotaKey, QUOTA_TTL);
-    await pipeline.exec().catch(() => {}); // non-blocking — don't fail the request
-
     // ── Build Gemini request ─────────────────────────────────────────────────
+    // NOTE: quota is only incremented AFTER a successful Gemini response
+    // so users are never charged for failed requests
     // Gemini uses 'user'/'model' roles; split out system prompt if present
     const systemParts = [];
     const geminiContents = [];
@@ -113,6 +110,13 @@ export default async function handler(req, res) {
                 status: upstream.status
             });
         }
+
+        // ── Increment quota only after confirmed successful response ──────────
+        // Users are never charged for failed Gemini requests
+        const pipeline = redis.pipeline();
+        pipeline.incr(quotaKey);
+        if (used === 0) pipeline.expire(quotaKey, QUOTA_TTL);
+        await pipeline.exec().catch(() => {});
 
         // Stream as plain text — extension reads line by line
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
