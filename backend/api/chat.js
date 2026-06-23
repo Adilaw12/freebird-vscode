@@ -34,14 +34,17 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: 'Server misconfigured', code: 'NO_API_KEY' });
     }
 
-    const { messages, sessionId, maxTokens = 2048 } = req.body ?? {};
+    const { messages, sessionId: rawSession, maxTokens = 2048 } = req.body ?? {};
 
     if (!Array.isArray(messages) || messages.length === 0) {
         return res.status(400).json({ error: 'messages required', code: 'BAD_REQUEST' });
     }
-    if (!sessionId || typeof sessionId !== 'string') {
-        return res.status(400).json({ error: 'sessionId required', code: 'BAD_REQUEST' });
-    }
+
+    // sessionId is optional — older extension versions don't send it
+    // Fall back to IP-based tracking so they still get quota enforcement
+    const sessionId = (rawSession && typeof rawSession === 'string')
+        ? rawSession
+        : ((req.headers['x-forwarded-for'] || '').split(',')[0] || 'anon').trim();
 
     // ── Quota check ──────────────────────────────────────────────────────────
     const today       = new Date().toISOString().slice(0, 10);
@@ -52,7 +55,7 @@ export default async function handler(req, res) {
 
     if (used >= DAILY_LIMIT) {
         return res.status(429).json({
-            error: 'Daily cloud edit limit reached (5/day free). Upgrade to Pro for unlimited.',
+            error: 'Daily cloud edit limit reached. Upgrade to Pro for unlimited access.',
             code:  'QUOTA_EXCEEDED',
             used,
             limit: DAILY_LIMIT
