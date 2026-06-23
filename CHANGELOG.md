@@ -1,5 +1,14 @@
 # Changelog
 
+## \[0.6.9] — 2026-06-23
+
+### Added
+
+* **Backend health endpoint** — new `/api/health` serverless function pings Gemini with a
+minimal request and returns `200 ok`, `502 degraded`, or `503 down`. Wire it up to
+UptimeRobot (or any monitor) at `https://freebird-backend.vercel.app/api/health` to get
+alerted when the Gemini integration goes down.
+
 ## \[0.6.2] — 2026-06-23
 
 ### Fixed
