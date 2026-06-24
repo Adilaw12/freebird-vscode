@@ -1,5 +1,15 @@
 # Changelog
 
+## \[0.6.10] — 2026-06-25
+
+### Added
+
+* **Personalized quota wall for power users** — users with 15+ edits in a session see a
+founder message from Adisa offering a free 30-day Pro trial via email, instead of the
+generic upgrade wall. Regular users still see the standard quota wall.
+* **Announcement endpoint** — new `/api/announcement` serverless function for dynamic
+founder messages. Currently inactive; flip the commented config to broadcast to all users.
+
 ## \[0.6.9] — 2026-06-23
 
 ### Added
