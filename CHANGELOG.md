@@ -1,5 +1,14 @@
 # Changelog
 
+## \[0.6.12] — 2026-06-26
+
+### Changed
+
+* **README rewrite for SEO & traffic** — competitive comparison table (vs Copilot, Cursor),
+keyword-rich subtitle and meta line, new "What Freebird Replaces" section, updated free tier
+from 5 → 20 edits/day throughout, tighter copy and formatting across all sections. Removed
+the model customization section to reduce noise.
+
 ## \[0.6.11] — 2026-06-26
 
 ### Added
