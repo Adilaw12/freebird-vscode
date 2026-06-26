@@ -123,6 +123,60 @@ body {
   margin-top: 24px; font-size: 0.74em; opacity: 0.25;
   display: flex; align-items: center; gap: 6px;
 }
+
+/* ── suggested prompts ── */
+.welcome-prompts {
+  margin-top: 20px; width: 100%; max-width: 340px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.welcome-prompts-label {
+  font-size: 0.70em; opacity: 0.3; text-align: left;
+  margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.06em;
+}
+.welcome-prompt {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.06));
+  background: var(--vscode-editorWidget-background, rgba(255,255,255,0.02));
+  transition: border-color 0.15s, background 0.15s;
+  text-align: left;
+}
+.welcome-prompt:hover {
+  border-color: rgba(217,119,87,0.3);
+  background: rgba(217,119,87,0.04);
+}
+.welcome-prompt-icon {
+  font-size: 13px; flex-shrink: 0; opacity: 0.6;
+}
+.welcome-prompt-text {
+  font-size: 0.78em; color: var(--vscode-editor-foreground);
+  opacity: 0.65; line-height: 1.3;
+}
+
+/* ── usage stats bar ── */
+.usage-stats {
+  margin-top: 12px; padding: 8px 14px;
+  border-radius: 8px; width: 100%; max-width: 340px;
+  background: var(--vscode-editorWidget-background, rgba(255,255,255,0.02));
+  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.04));
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 0.72em;
+}
+.usage-stats-item {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+}
+.usage-stats-value {
+  font-size: 1.2em; font-weight: 600;
+  color: var(--vscode-editor-foreground);
+}
+.usage-stats-label {
+  opacity: 0.3; font-size: 0.88em; text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.usage-stats-divider {
+  width: 1px; height: 24px;
+  background: var(--vscode-widget-border, rgba(255,255,255,0.06));
+}
 kbd {
   background: var(--vscode-keybindingLabel-background, rgba(255,255,255,0.08));
   border: 1px solid var(--vscode-keybindingLabel-border, rgba(255,255,255,0.15));
@@ -612,6 +666,46 @@ em { font-style: italic; }
       </div>
     </div>
     <div class="welcome-hint">Type <kbd>/</kbd> for commands &nbsp;&middot;&nbsp; <kbd>@</kbd> for files</div>
+
+    <!-- Suggested prompts -->
+    <div class="welcome-prompts">
+      <div class="welcome-prompts-label">Try asking</div>
+      <button class="welcome-prompt" onclick="sendPrompt('Explain what this file does and suggest improvements')">
+        <span class="welcome-prompt-icon">🔍</span>
+        <span class="welcome-prompt-text">Explain this file and suggest improvements</span>
+      </button>
+      <button class="welcome-prompt" onclick="sendPrompt('Find bugs or potential issues in my code')">
+        <span class="welcome-prompt-icon">🐛</span>
+        <span class="welcome-prompt-text">Find bugs or potential issues in my code</span>
+      </button>
+      <button class="welcome-prompt" onclick="sendPrompt('Refactor this code to be cleaner and more readable')">
+        <span class="welcome-prompt-icon">✨</span>
+        <span class="welcome-prompt-text">Refactor this code to be cleaner</span>
+      </button>
+      <button class="welcome-prompt" onclick="sendPrompt('Write tests for the current file')">
+        <span class="welcome-prompt-icon">🧪</span>
+        <span class="welcome-prompt-text">Write tests for the current file</span>
+      </button>
+    </div>
+
+    <!-- Usage stats — populated by JS -->
+    <div class="usage-stats" id="usage-stats" style="display:none">
+      <div class="usage-stats-item">
+        <span class="usage-stats-value" id="stat-edits">0</span>
+        <span class="usage-stats-label">edits today</span>
+      </div>
+      <div class="usage-stats-divider"></div>
+      <div class="usage-stats-item">
+        <span class="usage-stats-value" id="stat-remaining">20</span>
+        <span class="usage-stats-label">remaining</span>
+      </div>
+      <div class="usage-stats-divider"></div>
+      <div class="usage-stats-item">
+        <span class="usage-stats-value" id="stat-sessions">—</span>
+        <span class="usage-stats-label">sessions</span>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -648,6 +742,26 @@ var currentBubble = null;
 var workspaceFiles= [];
 var acItems       = [];
 var acIndex       = -1;
+
+// ── Suggested prompt handler ──────────────────────────────────────────────────
+function sendPrompt(text) {
+  if (busy) return;
+  inputEl.value = text;
+  // Trigger send
+  sendBtn.click();
+}
+
+// ── Usage stats ───────────────────────────────────────────────────────────────
+function updateUsageStats(editsUsed, remaining) {
+  var statsEl = document.getElementById('usage-stats');
+  var editEl  = document.getElementById('stat-edits');
+  var remEl   = document.getElementById('stat-remaining');
+  if (!statsEl || !editEl || !remEl) return;
+  editEl.textContent  = editsUsed;
+  remEl.textContent   = remaining;
+  remEl.style.color   = remaining <= 3 ? '#e8a020' : '';
+  statsEl.style.display = 'flex';
+}
 var acMode        = null;
 
 var THINKING_PHRASES = [

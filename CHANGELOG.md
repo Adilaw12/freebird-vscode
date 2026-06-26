@@ -1,5 +1,14 @@
 # Changelog
 
+## \[0.6.11] — 2026-06-26
+
+### Added
+
+* **Suggested prompts on welcome screen** — four clickable prompt buttons (explain file,
+find bugs, refactor, write tests) to help new users get started immediately.
+* **Usage stats bar** — shows edits used today, remaining quota, and sessions on the
+welcome screen. Remaining count highlights amber when 3 or fewer edits are left.
+
 ## \[0.6.10] — 2026-06-25
 
 ### Added
