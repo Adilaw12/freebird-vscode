@@ -1,5 +1,12 @@
 # Changelog
 
+## \[0.6.13] — 2026-06-26
+
+### Fixed
+
+* **Broken README images** — restored correct file paths for the two "See It in Action"
+screenshots. Updated version badge to match current release.
+
 ## \[0.6.12] — 2026-06-26
 
 ### Changed
