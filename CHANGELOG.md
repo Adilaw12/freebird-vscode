@@ -1,5 +1,20 @@
 # Changelog
 
+## \[0.7.0] — 2026-06-28
+
+### Added
+
+* **Machine ID in telemetry** — telemetry now reports a stable per-machine ID, and the
+backend tracks `_unique_machines` per day for accurate unique-user analytics (relaunches no
+longer inflate the count).
+
+### Fixed
+
+* **Quota reset bypass** — the daily free-edit quota was keyed on a per-launch session ID, so
+quitting and reopening VS Code reset the quota. Quota is now keyed on a stable machine ID
+that persists across restarts, closing the bypass. Users who need more than the daily free
+edits are pointed to Pro ($6/mo).
+
 ## \[0.6.13] — 2026-06-26
 
 ### Fixed

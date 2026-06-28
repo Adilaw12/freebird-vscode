@@ -12,7 +12,7 @@ import { buildFileContext, resolveMentions, listWorkspaceFiles } from './context
 import { getLicenseStatus, UPGRADE_URL } from '../license/validator';
 import { getCloudEditsRemaining, consumeCloudEdit, DAILY_CLOUD_LIMIT } from '../license/usage';
 import { readProjectMemory, clearProjectMemory, MEMORY_RELATIVE_PATH } from '../agent/memory';
-import { trackEvent, getSessionId } from '../telemetry';
+import { trackEvent, getMachineId } from '../telemetry';
 
 const MAX_HISTORY_PAIRS = 20;
 
@@ -285,7 +285,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             const newHistory = await runAgentLoop({
                 userMessage: fullText,
                 history: this.trimHistory(this.history),
-                provider: getProvider(this.context, getSessionId()),
+                provider: getProvider(this.context, getMachineId()),
                 git: this.git,
                 onEvent: (event: AgentEvent) => this.handleAgentEvent(event),
                 onApprovalNeeded: (id, description, preview) =>
@@ -359,7 +359,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     // Ollama not available — fall back to Gemini via /api/fallback
                     // (no quota, rate-limited by IP instead)
                     trackEvent('ollama_not_reachable');
-                    const cloud = new CloudProvider(this.context, getSessionId(), 'fallback');
+                    const cloud = new CloudProvider(this.context, getMachineId(), 'fallback');
                     await cloud.stream(messages, chunk => {
                         response += chunk;
                         this.post({ type: 'set-text', text: response });
@@ -369,7 +369,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 }
             } else {
                 // mode = 'cloud' — use CloudProvider with normal quota
-                const cloud = new CloudProvider(this.context, getSessionId());
+                const cloud = new CloudProvider(this.context, getMachineId());
                 await cloud.stream(messages, chunk => {
                     response += chunk;
                     this.post({ type: 'set-text', text: response });
@@ -478,7 +478,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         let commitMsg = '';
         try {
             // Use getProvider with context + sessionId so routing logic applies
-            commitMsg = await getProvider(this.context, getSessionId()).complete([{
+            commitMsg = await getProvider(this.context, getMachineId()).complete([{
                 role: 'user',
                 content: `Write a concise conventional git commit message (imperative mood, max 72 chars subject line) for these changes. Reply with ONLY the commit message:\n\n${diff}`
             }]);

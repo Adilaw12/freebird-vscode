@@ -6,12 +6,14 @@ const SESSION_KEY = 'freebird.telemetrySession';
 
 let _enabled = false;
 let _context: vscode.ExtensionContext | undefined;
+let _machineId = '';
 let _sessionId = '';
 let _pendingEvents: Record<string, number> = {};
 let _flushTimer: ReturnType<typeof setInterval> | undefined;
 
 interface SessionData {
     sessionId: string;
+    machineId: string;
     startedAt: string;
     events: Record<string, number>;
 }
@@ -20,10 +22,19 @@ export function initTelemetry(context: vscode.ExtensionContext): void {
     _context = context;
     _enabled = vscode.workspace.getConfiguration('freebird').get<boolean>('telemetry.enabled', true);
 
-    _sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    // Stable per-machine ID. Used as the quota key (see getProvider / quota
+    // requests) so the daily limit can't be reset by quitting VS Code and
+    // reopening — machineId persists across restarts. Also reported in
+    // telemetry for unique-user analytics.
+    _machineId = `m-${vscode.env.machineId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 40)}`;
+
+    // Per-launch session ID for session-level analytics. Namespaced by machine
+    // so sessions can still be attributed to a machine.
+    _sessionId = `${_machineId}-${Date.now()}`;
 
     const session: SessionData = {
         sessionId: _sessionId,
+        machineId: _machineId,
         startedAt: new Date().toISOString(),
         events: {}
     };
@@ -62,6 +73,11 @@ export function getSessionId(): string {
     return _sessionId;
 }
 
+/** Stable per-machine ID used for quota enforcement and unique-user analytics. */
+export function getMachineId(): string {
+    return _machineId;
+}
+
 export function getSessionStats(): Record<string, number> | null {
     if (!_context) return null;
     const session = _context.globalState.get<SessionData>(SESSION_KEY);
@@ -90,6 +106,7 @@ async function flush(): Promise<void> {
         events: entries.map(([name, count]) => ({ name, count, ts: Date.now() })),
         meta: {
             sessionId: _sessionId,
+            machineId: _machineId,
             version: vscode.extensions.getExtension('TenLabs.freebird-ai')?.packageJSON?.version ?? 'unknown',
             platform: process.platform,
             backend: config.get<string>('backend', 'cloud')

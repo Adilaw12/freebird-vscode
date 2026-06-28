@@ -5,7 +5,7 @@ const redis = Redis.fromEnv();
 // Accept batched telemetry events from the VS Code extension.
 // Each event is a lightweight counter increment — no PII, no code content.
 //
-// Payload: { events: [{ name, count, ts }], meta: { version, platform, backend, sessionId } }
+// Payload: { events: [{ name, count, ts }], meta: { version, platform, backend, sessionId, machineId } }
 //
 // Storage layout in Redis:
 //   telemetry:daily:{YYYY-MM-DD}          hash  — event name → total count for the day
@@ -13,8 +13,8 @@ const redis = Redis.fromEnv();
 //   telemetry:platforms:{YYYY-MM-DD}      hash  — platform → count
 //   telemetry:versions:{YYYY-MM-DD}       hash  — extension version → count
 //   telemetry:errors:{YYYY-MM-DD}         list  — error event names (capped)
-//   telemetry:sessions                    set   — active session IDs (TTL via individual keys)
 //   telemetry:session:{sessionId}         string — "1", TTL 1 hour (dedup)
+//   telemetry:machines:{YYYY-MM-DD}       set   — unique machineIds seen that day
 
 const ERROR_EVENTS = new Set([
     'ollama_fallback', 'api_error', 'ollama_not_reachable',
@@ -75,6 +75,17 @@ export default async function handler(req, res) {
 
                 pipeline.hincrby(dailyKey, '_unique_sessions', 1);
             }
+        }
+
+        // Track unique machines per day (deduped via a daily Redis set).
+        // machineId is stable across restarts, so this counts real users —
+        // not relaunches, which inflate the per-session metric above.
+        const machineId = meta?.machineId;
+        if (machineId) {
+            const machinesKey = `telemetry:machines:${today}`;
+            const added = await redis.sadd(machinesKey, String(machineId).slice(0, 48));
+            pipeline.expire(machinesKey, 90 * 24 * 60 * 60);
+            if (added) pipeline.hincrby(dailyKey, '_unique_machines', 1);
         }
 
         // Expire all daily keys after 90 days
