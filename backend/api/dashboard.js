@@ -32,12 +32,14 @@ async function sendJson(req, res) {
         d.setDate(d.getDate() - i);
         const date = d.toISOString().slice(0, 10);
 
-        const [events, backends, platforms, versions, errors] = await Promise.all([
+        const [events, backends, platforms, versions, errors, cloudCalls, uniqueIps] = await Promise.all([
             redis.hgetall(`telemetry:daily:${date}`),
             redis.hgetall(`telemetry:backends:${date}`),
             redis.hgetall(`telemetry:platforms:${date}`),
             redis.hgetall(`telemetry:versions:${date}`),
-            redis.lrange(`telemetry:errors:${date}`, 0, 49)
+            redis.lrange(`telemetry:errors:${date}`, 0, 49),
+            redis.get(`quota:global:${date}`),
+            redis.scard(`monitor:ips:${date}`)
         ]);
 
         data.days.push({
@@ -46,7 +48,9 @@ async function sendJson(req, res) {
             backends: backends || {},
             platforms: platforms || {},
             versions: versions || {},
-            recentErrors: errors || []
+            recentErrors: errors || [],
+            cloudCalls: parseInt(cloudCalls ?? '0', 10),
+            uniqueIps: uniqueIps || 0
         });
     }
 
@@ -170,6 +174,9 @@ function render(data) {
   var ollamaFallbacks = totals.ollama_fallback || 0;
   var totalMachines = totals._unique_machines || 0;
   var totalSubscribed = totals.pro_subscribed || 0;
+  var todayCloudCalls = today.cloudCalls || 0;
+  var yesterdayCloudCalls = yesterday.cloudCalls || 0;
+  var todayUniqueIps = today.uniqueIps || 0;
 
   var html = '';
 
@@ -178,8 +185,8 @@ function render(data) {
   html += kpi('Sessions Today', todaySessions, trend(todaySessions, yesterdaySessions));
   html += kpi('Unique Machines', totalMachines, data.days.length + 'd window');
   html += kpi('Messages Today', todayMsgs, trend(todayMsgs, yesterdayMsgs));
-  html += kpi('Total Messages', totals.message_sent || 0, '');
-  html += kpi('Upgrades Clicked', todayUpgrades, 'today');
+  html += kpi('Cloud Calls Today', todayCloudCalls, trend(todayCloudCalls, yesterdayCloudCalls));
+  html += kpi('Unique IPs Today', todayUniqueIps, 'abuse check: calls ÷ IPs');
   html += kpi('New Subscriptions', totalSubscribed, data.days.length + 'd total');
   html += '</div>';
 
@@ -241,17 +248,18 @@ function render(data) {
 
   // Daily trend table
   html += '<div class="section"><h2>Daily Trend</h2>';
-  html += '<table><tr><th>Date</th><th>Sessions</th><th>Messages</th><th>Cloud Edits</th><th>Pro Msgs</th><th>Ollama</th><th>Upgrades</th></tr>';
+  html += '<table><tr><th>Date</th><th>Sessions</th><th>Cloud Calls</th><th>Unique IPs</th><th>Messages</th><th>Pro Msgs</th><th>Upgrades</th><th>Subs</th></tr>';
   data.days.forEach(function(d) {
     var e = d.events || {};
     html += '<tr>';
     html += '<td>' + d.date + '</td>';
     html += '<td class="num">' + (e._unique_sessions || 0) + '</td>';
+    html += '<td class="num">' + (d.cloudCalls || 0) + '</td>';
+    html += '<td class="num">' + (d.uniqueIps || 0) + '</td>';
     html += '<td class="num">' + (e.message_sent || 0) + '</td>';
-    html += '<td class="num">' + (e.cloud_edit_used || 0) + '</td>';
     html += '<td class="num">' + (e.pro_message || 0) + '</td>';
-    html += '<td class="num">' + (e.ollama_fallback || 0) + '</td>';
     html += '<td class="num">' + (e.upgrade_clicked || 0) + '</td>';
+    html += '<td class="num">' + (e.pro_subscribed || 0) + '</td>';
     html += '</tr>';
   });
   html += '</table></div>';

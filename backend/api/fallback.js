@@ -7,6 +7,7 @@
 // quota. Also keeps a short-term hourly IP burst limit for abuse protection.
 
 import { Redis } from '@upstash/redis';
+import { createHash } from 'crypto';
 
 const redis = Redis.fromEnv();
 
@@ -18,6 +19,11 @@ const GEMINI_URL     = `https://generativelanguage.googleapis.com/v1beta/models/
 const DAILY_LIMIT    = 20;  // per machine/session per day
 const IP_DAILY_LIMIT = 200; // per IP per day — higher so shared networks aren't blocked
 const QUOTA_TTL      = 24 * 60 * 60; // 1 day in seconds
+
+// Cost circuit breaker + monitoring — shared with /api/chat (same keys)
+const GLOBAL_DAILY_LIMIT = parseInt(process.env.GLOBAL_DAILY_LIMIT || '0', 10); // 0/unset = off
+const MONITOR_TTL        = 8 * 24 * 60 * 60;
+const hashIp = (ip) => createHash('sha256').update(ip).digest('hex').slice(0, 16);
 
 // Short-term abuse protection: 20 fallback calls per IP per hour
 const IP_RATE_LIMIT  = 20;
@@ -71,13 +77,24 @@ export default async function handler(req, res) {
 
     const sessionQuotaKey = `quota:${sessionId.slice(0, 48)}:${today}`;
     const ipQuotaKey      = `quota:ip:${ip}:${today}`;
+    const globalKey       = `quota:global:${today}`;
 
-    const [sessionCount, ipCount] = await Promise.all([
+    const [sessionCount, ipCount, globalCount] = await Promise.all([
         redis.get(sessionQuotaKey).catch(() => null),
-        redis.get(ipQuotaKey).catch(() => null)
+        redis.get(ipQuotaKey).catch(() => null),
+        redis.get(globalKey).catch(() => null)
     ]);
     const sessionUsed = parseInt(sessionCount ?? '0', 10);
     const ipUsed      = parseInt(ipCount ?? '0', 10);
+    const globalUsed  = parseInt(globalCount ?? '0', 10);
+
+    // Cost circuit breaker (off unless GLOBAL_DAILY_LIMIT is set)
+    if (GLOBAL_DAILY_LIMIT > 0 && globalUsed >= GLOBAL_DAILY_LIMIT) {
+        return res.status(503).json({
+            error: 'Free tier is temporarily at capacity. Please try again later or upgrade to Pro.',
+            code:  'GLOBAL_CAPACITY'
+        });
+    }
 
     if (sessionUsed >= DAILY_LIMIT || ipUsed >= IP_DAILY_LIMIT) {
         return res.status(429).json({
@@ -139,6 +156,11 @@ export default async function handler(req, res) {
         if (sessionUsed === 0) quotaPipeline.expire(sessionQuotaKey, QUOTA_TTL);
         quotaPipeline.incr(ipQuotaKey);
         if (ipUsed === 0) quotaPipeline.expire(ipQuotaKey, QUOTA_TTL);
+        // Monitoring: global daily call count + unique IPs (hashed for privacy)
+        quotaPipeline.incr(globalKey);
+        if (globalUsed === 0) quotaPipeline.expire(globalKey, MONITOR_TTL);
+        quotaPipeline.sadd(`monitor:ips:${today}`, hashIp(ip));
+        quotaPipeline.expire(`monitor:ips:${today}`, MONITOR_TTL);
         await quotaPipeline.exec().catch(() => {});
 
         const remaining = Math.max(0, Math.min(
