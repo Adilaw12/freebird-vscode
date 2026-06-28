@@ -1,5 +1,20 @@
 # Changelog
 
+## \[0.7.2] — 2026-06-28
+
+### Added
+
+* **Conversion funnel telemetry** — tracks the full path from `quota_wall_shown` →
+`upgrade_clicked` → `pro_subscribed` (recorded server-side from the Stripe webhook). The
+analytics dashboard now shows a Conversion Funnel section with wall→click→paid rates, plus
+unique-machine and new-subscription KPIs, so conversion can be diagnosed with data.
+
+### Security
+
+* **Resolved all dependency vulnerabilities** — upgraded the `@vscode/vsce` build tool
+(2.32.0 → 3.9.2) and patched its transitive deps (`undici`, `form-data`, `markdown-it`).
+These were dev/build-time only and never shipped to users; `npm audit` is now clean.
+
 ## \[0.7.1] — 2026-06-28
 
 ### Changed

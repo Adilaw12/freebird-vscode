@@ -983,6 +983,11 @@ function showQuotaWall() {
   var sessionMins = Math.round((Date.now() - _sessionStart) / 60000);
   var resetTime = getResetCountdown();
   var isPowerUser = _sessionEdits >= 15;
+
+  // Funnel: top of the conversion funnel — the user hit the wall and saw the
+  // upgrade prompt. Paired with 'upgrade_clicked' and 'pro_subscribed'.
+  vscode.postMessage({ type: 'quota-wall-shown', variant: isPowerUser ? 'power' : 'standard' });
+
   var wall = document.createElement('div');
   wall.className = 'quota-wall';
 

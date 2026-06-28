@@ -168,17 +168,34 @@ function render(data) {
   var todayUpgrades = parseInt(te.upgrade_clicked) || 0;
   var proMsgs = totals.pro_message || 0;
   var ollamaFallbacks = totals.ollama_fallback || 0;
+  var totalMachines = totals._unique_machines || 0;
+  var totalSubscribed = totals.pro_subscribed || 0;
 
   var html = '';
 
   // KPI row
   html += '<div class="kpi-row">';
   html += kpi('Sessions Today', todaySessions, trend(todaySessions, yesterdaySessions));
-  html += kpi('Total Sessions', totalSessions, data.days.length + 'd window');
+  html += kpi('Unique Machines', totalMachines, data.days.length + 'd window');
   html += kpi('Messages Today', todayMsgs, trend(todayMsgs, yesterdayMsgs));
   html += kpi('Total Messages', totals.message_sent || 0, '');
   html += kpi('Upgrades Clicked', todayUpgrades, 'today');
-  html += kpi('Pro Messages', proMsgs, 'period total');
+  html += kpi('New Subscriptions', totalSubscribed, data.days.length + 'd total');
+  html += '</div>';
+
+  // Conversion funnel: wall shown → upgrade clicked → subscribed
+  var fWall  = totals.quota_wall_shown || 0;
+  var fClick = totals.upgrade_clicked || 0;
+  var fPaid  = totals.pro_subscribed || 0;
+  var rClick = fWall ? (fClick / fWall * 100) : 0;
+  var rPaidOfClick = fClick ? (fPaid / fClick * 100) : 0;
+  var rPaidOverall = fWall ? (fPaid / fWall * 100) : 0;
+
+  html += '<div class="section"><h2>Conversion Funnel (' + data.days.length + 'd)</h2>';
+  html += funnelRow('Quota wall shown', fWall, 100, 'top of funnel');
+  html += funnelRow('Upgrade clicked', fClick, fWall ? (fClick / fWall * 100) : 0, rClick.toFixed(1) + '% of walls shown');
+  html += funnelRow('Subscribed (paid)', fPaid, fWall ? (fPaid / fWall * 100) : 0,
+    rPaidOfClick.toFixed(1) + '% of clicks · ' + rPaidOverall.toFixed(2) + '% overall');
   html += '</div>';
 
   // Feature popularity
@@ -260,6 +277,15 @@ function kpi(label, value, sub) {
   return '<div class="kpi"><div class="kpi-label">' + label + '</div><div class="kpi-value">' +
     (typeof value === 'number' ? value.toLocaleString() : value) +
     '</div><div class="kpi-sub">' + (sub || '') + '</div></div>';
+}
+
+function funnelRow(label, count, pct, sub) {
+  return '<div class="bar-row">'
+    + '<span class="bar-label">' + label + '</span>'
+    + '<div class="bar-track"><div class="bar-fill" style="width:' + Math.max(0, Math.min(100, pct)) + '%"></div></div>'
+    + '<span class="bar-count num">' + count.toLocaleString() + '</span>'
+    + '<span style="min-width:200px;font-size:0.78em;opacity:0.4">' + (sub || '') + '</span>'
+    + '</div>';
 }
 
 function trend(today, yesterday) {

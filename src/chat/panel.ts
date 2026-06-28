@@ -113,7 +113,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     }
                     break;
                 }
+                case 'quota-wall-shown':
+                    // Funnel stage 1: user hit the quota wall and saw the prompt
+                    trackEvent('quota_wall_shown');
+                    if (msg.variant === 'power') trackEvent('quota_wall_shown_power');
+                    break;
                 case 'upgrade':
+                    // Funnel stage 2: user clicked through to Stripe checkout
                     vscode.env.openExternal(vscode.Uri.parse(UPGRADE_URL));
                     trackEvent('upgrade_clicked');
                     break;

@@ -66,6 +66,14 @@ export default async function handler(req, res) {
                 // Store session → key for the success page (expires after 2 hours)
                 await redis.set(`session:${session.id}`, key, { ex: 7200 });
 
+                // Funnel stage 3: a checkout completed — the bottom of the
+                // conversion funnel. Recorded in the same daily telemetry hash
+                // as quota_wall_shown / upgrade_clicked so the dashboard can
+                // compute wall → click → paid conversion rates.
+                const paidKey = `telemetry:daily:${new Date().toISOString().slice(0, 10)}`;
+                await redis.hincrby(paidKey, 'pro_subscribed', 1).catch(() => {});
+                await redis.expire(paidKey, 90 * 24 * 60 * 60).catch(() => {});
+
                 console.log(`Freebird Pro activated: ${email} → ${key}`);
                 break;
             }
