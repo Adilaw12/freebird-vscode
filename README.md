@@ -2,7 +2,7 @@
 
 **No setup. No throttling. 20 free AI edits/day.**
 
-[![VS Marketplace](https://img.shields.io/badge/VS%20Marketplace-v0.7.3-0066B8?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=TenLabs.freebird-ai)
+[![VS Marketplace](https://img.shields.io/badge/VS%20Marketplace-v0.7.4-0066B8?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=TenLabs.freebird-ai)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](https://github.com/Adilaw12/freebird-vscode/blob/main/LICENSE)
 [![GitHub](https://img.shields.io/badge/GitHub-Adilaw12%2Ffreebird--vscode-181717?style=flat-square&logo=github)](https://github.com/Adilaw12/freebird-vscode)
 
@@ -16,6 +16,8 @@ Install Freebird AI and start coding in seconds — no API keys, no throttling, 
 Freebird never blocks you — it picks up where other tools stop.
 
 **[Start free — upgrade anytime for $6 USD/month →](https://buy.stripe.com/9B628t4WheMmeSMccZfAc03)**
+
+⭐ **If Freebird saves you time, a GitHub star helps others find it** — thank you!
 
 ---
 

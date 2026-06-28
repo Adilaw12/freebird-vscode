@@ -1,5 +1,11 @@
 # Changelog
 
+## \[0.7.4] — 2026-06-28
+
+### Changed
+
+* **README** — added a GitHub star call-to-action to help with discovery.
+
 ## \[0.7.3] — 2026-06-28
 
 ### Fixed
