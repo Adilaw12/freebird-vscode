@@ -1,5 +1,14 @@
 # Changelog
 
+## \[0.7.1] — 2026-06-28
+
+### Changed
+
+* **Pro is now the primary CTA on the power-user quota wall** — engaged users who hit the
+daily limit are led with "Upgrade to Pro — $6/month" instead of a free 30-day trial. The
+trial is demoted to a quiet inline link, and the wall now emphasizes Pro value (unlimited
+edits, BYOK, project memory) rather than free escape hatches.
+
 ## \[0.7.0] — 2026-06-28
 
 ### Added

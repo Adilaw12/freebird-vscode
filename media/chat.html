@@ -998,15 +998,14 @@ function showQuotaWall() {
         + '<div class="quota-wall-stat"><span class="quota-wall-stat-value">' + (sessionMins < 1 ? '<1m' : sessionMins + 'm') + '</span><span class="quota-wall-stat-label">active</span></div>'
       + '</div>'
       + '<div class="quota-wall-features">'
-        + '<div class="quota-wall-feature"><span class="quota-wall-check">👋</span> I'm Adisa, the founder of Freebird.</div>'
-        + '<div class="quota-wall-feature"><span class="quota-wall-check">🎁</span> Email me for a free 30-day Pro key — no card needed.</div>'
-        + '<div class="quota-wall-feature"><span class="quota-wall-check">✓</span> Unlimited edits, BYOK, project memory.</div>'
+        + '<div class="quota-wall-feature"><span class="quota-wall-check">👋</span> You're clearly getting real value from Freebird.</div>'
+        + '<div class="quota-wall-feature"><span class="quota-wall-check">✓</span> Pro removes the daily cap — unlimited edits.</div>'
+        + '<div class="quota-wall-feature"><span class="quota-wall-check">✓</span> BYOK (Claude, GPT-4o, DeepSeek) + project memory.</div>'
       + '</div>'
       + '<div class="quota-wall-actions">'
-        + '<a class="quota-wall-btn-primary" href="mailto:support@ten-labs.com.au?subject=Pro%20Trial%20Request&body=Hi%20Adisa%2C%20I%27d%20love%20a%20free%20Pro%20trial!" style="text-decoration:none;display:block;text-align:center;flex:1">Email for free 30-day Pro →</a>'
-        + '<button class="quota-wall-btn-secondary" onclick="vscode.postMessage({type:\'upgrade\'})">$6/month</button>'
+        + '<button class="quota-wall-btn-primary" onclick="vscode.postMessage({type:\'upgrade\'})">Upgrade to Pro — $6/month →</button>'
       + '</div>'
-      + '<div class="quota-wall-reset">Free edits reset in ' + resetTime + ' (midnight UTC)</div>';
+      + '<div class="quota-wall-reset">Free edits reset in ' + resetTime + ' (midnight UTC) &middot; <a href="mailto:support@ten-labs.com.au?subject=Pro%20Trial%20Request&body=Hi%20Adisa%2C%20I%27d%20love%20a%20free%20Pro%20trial!" style="color:inherit">or ask about a trial</a></div>';
   } else {
     wall.innerHTML =
       '<div class="quota-wall-header">'
