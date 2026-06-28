@@ -8,9 +8,10 @@ const QUOTA_KEY = 'freebird.cloudQuotaRemaining';
  * CloudProvider — calls the Freebird Vercel backend.
  *
  * Two modes:
- *   'quota'    → POST /api/chat    — enforces 5 free edits/day per session
- *   'fallback' → POST /api/fallback — no quota, used when Ollama fails,
- *                                     rate-limited by IP (20/hr) to prevent abuse
+ *   'quota'    → POST /api/chat    — enforces the daily free-edit quota
+ *   'fallback' → POST /api/fallback — used when Ollama fails; enforces the same
+ *                                     daily quota (shared keys) plus an hourly
+ *                                     IP burst limit to prevent abuse
  */
 export class CloudProvider implements AIProvider {
     private readonly context: vscode.ExtensionContext;
@@ -36,9 +37,9 @@ export class CloudProvider implements AIProvider {
             ? `${API_BASE}/api/fallback`
             : `${API_BASE}/api/chat`;
 
-        const body = this.mode === 'fallback'
-            ? { messages, maxTokens: opts?.maxTokens ?? 2048 }
-            : { messages, sessionId: this.sessionId, maxTokens: opts?.maxTokens ?? 2048 };
+        // Always send sessionId (machineId) — including in fallback mode — so the
+        // backend can enforce the same per-machine daily cap on both endpoints.
+        const body = { messages, sessionId: this.sessionId, maxTokens: opts?.maxTokens ?? 2048 };
 
         const res = await fetch(endpoint, {
             method:  'POST',

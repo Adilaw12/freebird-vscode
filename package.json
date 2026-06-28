@@ -2,7 +2,7 @@
   "name": "freebird-ai",
   "displayName": "Freebird AI",
   "description": "AI coding assistant — 20 free AI edits/day, no setup. Copilot alternative with multi-file edits, BYOK (Claude, GPT-4o, DeepSeek), local Ollama, inline edit, AI commit. Pro $6/mo.",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "publisher": "TenLabs",
   "license": "MIT",
   "icon": "media/icon.png",

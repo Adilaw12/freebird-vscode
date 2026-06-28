@@ -1,9 +1,10 @@
 // api/fallback.js  —  Freebird Ollama-failure fallback endpoint
-// Called only when Ollama is unreachable. No per-user quota — this is the
-// safety net that ensures users always get a response. Rate-limited by IP
-// to prevent abuse (20 requests/hour per IP).
+// Called only when Ollama is unreachable. This is the safety net that ensures
+// users always get a response.
 //
-// Distinct from /api/chat which enforces the 5 free-edit quota.
+// Quota: enforces the SAME daily caps as /api/chat (per-machine + per-IP) and
+// shares the same Redis keys, so fallback can't be used to bypass the chat
+// quota. Also keeps a short-term hourly IP burst limit for abuse protection.
 
 import { Redis } from '@upstash/redis';
 
@@ -13,7 +14,12 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL   = 'gemini-2.0-flash';
 const GEMINI_URL     = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`;
 
-// Abuse protection: 20 fallback calls per IP per hour
+// Daily quota — shared with /api/chat via identical Redis keys
+const DAILY_LIMIT    = 20;  // per machine/session per day
+const IP_DAILY_LIMIT = 200; // per IP per day — higher so shared networks aren't blocked
+const QUOTA_TTL      = 24 * 60 * 60; // 1 day in seconds
+
+// Short-term abuse protection: 20 fallback calls per IP per hour
 const IP_RATE_LIMIT  = 20;
 const IP_RATE_TTL    = 60 * 60; // 1 hour
 
@@ -31,11 +37,8 @@ export default async function handler(req, res) {
     }
 
     // ── IP rate limit ────────────────────────────────────────────────────────
-    const ip = (
-        req.headers['x-forwarded-for']?.split(',')[0] ||
-        req.socket?.remoteAddress ||
-        'unknown'
-    ).trim();
+    // Compute IP identically to /api/chat so the daily IP quota key is shared
+    const ip = ((req.headers['x-forwarded-for'] || '').split(',')[0] || 'anon').trim();
 
     const ipKey = `fallback:ip:${ip}`;
     try {
@@ -55,10 +58,33 @@ export default async function handler(req, res) {
         await pipeline.exec().catch(() => {});
     } catch { /* non-blocking — don't fail the request on Redis errors */ }
 
-    const { messages, maxTokens = 2048 } = req.body ?? {};
+    const { messages, maxTokens = 2048, sessionId: rawSession } = req.body ?? {};
 
     if (!Array.isArray(messages) || messages.length === 0) {
         return res.status(400).json({ error: 'messages required', code: 'BAD_REQUEST' });
+    }
+
+    // ── Daily quota (same two layers as /api/chat, shared Redis keys) ──────────
+    // Without this, fallback could be used to bypass the /api/chat daily quota.
+    const today = new Date().toISOString().slice(0, 10);
+    const sessionId = (rawSession && typeof rawSession === 'string') ? rawSession : ip;
+
+    const sessionQuotaKey = `quota:${sessionId.slice(0, 48)}:${today}`;
+    const ipQuotaKey      = `quota:ip:${ip}:${today}`;
+
+    const [sessionCount, ipCount] = await Promise.all([
+        redis.get(sessionQuotaKey).catch(() => null),
+        redis.get(ipQuotaKey).catch(() => null)
+    ]);
+    const sessionUsed = parseInt(sessionCount ?? '0', 10);
+    const ipUsed      = parseInt(ipCount ?? '0', 10);
+
+    if (sessionUsed >= DAILY_LIMIT || ipUsed >= IP_DAILY_LIMIT) {
+        return res.status(429).json({
+            error: 'Daily cloud edit limit reached. Upgrade to Pro for unlimited access.',
+            code:  'QUOTA_EXCEEDED',
+            limit: DAILY_LIMIT
+        });
     }
 
     // ── Build Gemini request ─────────────────────────────────────────────────
@@ -106,9 +132,24 @@ export default async function handler(req, res) {
             });
         }
 
+        // ── Increment both daily counters after a confirmed success ───────────
+        // Shared with /api/chat so neither endpoint can bypass the other's quota
+        const quotaPipeline = redis.pipeline();
+        quotaPipeline.incr(sessionQuotaKey);
+        if (sessionUsed === 0) quotaPipeline.expire(sessionQuotaKey, QUOTA_TTL);
+        quotaPipeline.incr(ipQuotaKey);
+        if (ipUsed === 0) quotaPipeline.expire(ipQuotaKey, QUOTA_TTL);
+        await quotaPipeline.exec().catch(() => {});
+
+        const remaining = Math.max(0, Math.min(
+            DAILY_LIMIT - sessionUsed - 1,
+            IP_DAILY_LIMIT - ipUsed - 1
+        ));
+
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
         res.setHeader('Transfer-Encoding', 'chunked');
         res.setHeader('X-Fallback-Active', 'true'); // extension can detect this
+        res.setHeader('X-Quota-Remaining', String(remaining));
 
         const reader  = upstream.body.getReader();
         const decoder = new TextDecoder();

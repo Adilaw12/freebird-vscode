@@ -1,5 +1,18 @@
 # Changelog
 
+## \[0.7.3] — 2026-06-28
+
+### Fixed
+
+* **Second quota-bypass layer (per-IP)** — the daily quota now enforces two layers: the
+per-machine cap (20/day) and a higher per-IP cap (200/day). Resetting the machine ID still
+counts against the IP, closing the bypass. The IP limit is set high (200) so shared networks
+(offices, VPNs, university campuses) aren't blocked.
+* **Fallback endpoint no longer bypasses quota** — `/api/fallback` previously had no daily
+quota, so it could be used to sidestep `/api/chat`. It now enforces the same per-machine and
+per-IP daily caps, sharing the same Redis keys. As a result, cloud fallback (when Ollama is
+unreachable) now counts toward the daily free-edit quota.
+
 ## \[0.7.2] — 2026-06-28
 
 ### Added
