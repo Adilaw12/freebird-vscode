@@ -69,6 +69,10 @@ function page(title, body) {
   a { color: #a89aff; }
   hr { border: none; border-top: 1px solid #3a3a6e; }
 </style>
+<script>
+  window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+</script>
+<script defer src="/_vercel/insights/script.js"></script>
 </head>
 <body>
 <h1>${title}</h1>
