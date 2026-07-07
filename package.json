@@ -166,7 +166,7 @@
         "freebird.licenseKey": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Freebird Pro license key (format: `FB-XXXX-XXXX-XXXX-XXXX`). Get one at [freebird.tenlabs.io/upgrade](https://freebird.tenlabs.io/upgrade)."
+          "markdownDescription": "Freebird Pro license key (format: `FB-XXXX-XXXX-XXXX-XXXX`). Get one at [buy.stripe.com](https://buy.stripe.com/9B628t4WheMmeSMccZfAc03)."
         },
         "freebird.tabCompletion.enabled": {
           "type": "boolean",
