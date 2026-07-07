@@ -10,6 +10,7 @@ import { initWorkspaceTreeCache } from './agent/tools';
 import { previewHtmlFile } from './agent/preview';
 import { checkOllamaSetup } from './ai/ollamaSetup';
 import { initTelemetry, disposeTelemetry, trackEvent } from './telemetry';
+import { checkAnnouncement } from './announcement';
 
 export function activate(context: vscode.ExtensionContext) {
     const git = new GitService();
@@ -22,6 +23,7 @@ export function activate(context: vscode.ExtensionContext) {
     initWorkspaceTreeCache(context);
     initTelemetry(context);
     checkOllamaSetup(context).catch(() => {});
+    checkAnnouncement(context).catch(() => {});
 
     // ── Sidebar chat ───────────────────────────────────────────────────────
     const chatProvider = new ChatViewProvider(context, git);
