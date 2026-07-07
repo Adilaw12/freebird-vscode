@@ -55,6 +55,7 @@ export default async function handler(req, res) {
         valid: true,
         email: license.email,
         plan: license.plan ?? 'pro',
+        isTeamOwner: license.plan === 'team' && license.teamOwnerKey === normalised,
         expiresAt: license.expiresAt ?? null
     });
 }

@@ -43,14 +43,16 @@ export default async function handler(req, res) {
 
                 // Determine plan from which Stripe Price was actually purchased —
                 // never trust anything client-supplied for this. Configure
-                // STRIPE_ENTERPRISE_PRICE_ID in Vercel to match the Enterprise
-                // Payment Link's price; anything else defaults to 'pro'.
+                // STRIPE_ENTERPRISE_PRICE_ID / STRIPE_TEAM_PRICE_ID in Vercel to
+                // match each Payment Link's price; anything else defaults to 'pro'.
                 let plan = 'pro';
                 try {
                     const lineItems = await stripe.checkout.sessions.listLineItems(session.id, { limit: 1 });
                     const priceId = lineItems?.data?.[0]?.price?.id;
                     if (priceId && process.env.STRIPE_ENTERPRISE_PRICE_ID && priceId === process.env.STRIPE_ENTERPRISE_PRICE_ID) {
                         plan = 'enterprise';
+                    } else if (priceId && process.env.STRIPE_TEAM_PRICE_ID && priceId === process.env.STRIPE_TEAM_PRICE_ID) {
+                        plan = 'team';
                     }
                 } catch (err) {
                     console.error('Could not read line items, defaulting to pro plan:', err.message);
@@ -72,11 +74,30 @@ export default async function handler(req, res) {
                     stripeSubscriptionId: session.subscription,
                     plan,
                     status:    'active',
+                    // Team plan only: this key's own record is the owner if
+                    // teamOwnerKey === key. Seat keys generated later via
+                    // api/team-seats.js point teamOwnerKey back to this one.
+                    ...(plan === 'team' && { teamOwnerKey: key }),
                     createdAt: existingCustomer?.createdAt ?? new Date().toISOString(),
                     updatedAt: new Date().toISOString()
                 };
 
                 await redis.set(`license:${key}`, license);
+
+                // New team subscription: set up the seat roster with the owner
+                // occupying the first of 5 seats. Skip if this is a resubscribe
+                // (the team record already exists).
+                if (plan === 'team' && !existingCustomer) {
+                    const teamRecord = {
+                        ownerKey:   key,
+                        ownerEmail: email,
+                        maxSeats:   5,
+                        seatKeys:   [key],
+                        createdAt:  license.createdAt
+                    };
+                    await redis.set(`team:${key}`, teamRecord);
+                }
+
                 await redis.set(`customer:${session.customer}`, { key, email, createdAt: license.createdAt });
                 // Store session → key for the success page (expires after 2 hours)
                 await redis.set(`session:${session.id}`, key, { ex: 7200 });
@@ -125,6 +146,26 @@ export default async function handler(req, res) {
                     status:    'cancelled',
                     updatedAt: new Date().toISOString()
                 });
+
+                // Team plan: cancelling the owner's subscription cancels every
+                // seat too — seats only exist because the owner is paying.
+                if (license.plan === 'team' && license.teamOwnerKey === customerData.key) {
+                    const team = await redis.get(`team:${customerData.key}`);
+                    if (team?.seatKeys?.length) {
+                        for (const seatKey of team.seatKeys) {
+                            if (seatKey === customerData.key) continue; // already updated above
+                            const seatLicense = await redis.get(`license:${seatKey}`);
+                            if (seatLicense) {
+                                await redis.set(`license:${seatKey}`, {
+                                    ...seatLicense,
+                                    status:    'cancelled',
+                                    updatedAt: new Date().toISOString()
+                                });
+                            }
+                        }
+                    }
+                }
+
                 console.log(`Subscription cancelled for ${license.email}`);
                 break;
             }

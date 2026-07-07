@@ -1216,7 +1216,7 @@ window.addEventListener('message',function(e){
       var badge=document.getElementById('pro-badge');
       if (m.isPro) {
         if (banner) banner.style.display='none';
-        if (badge) { badge.style.display='inline'; badge.textContent = m.plan === 'enterprise' ? 'ENTERPRISE' : 'PRO'; }
+        if (badge) { badge.style.display='inline'; badge.textContent = m.plan === 'enterprise' ? 'ENTERPRISE' : m.plan === 'team' ? 'TEAM' : 'PRO'; }
       } else {
         if (banner) banner.style.display='flex';
         if (badge)  badge.style.display='none';

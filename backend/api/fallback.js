@@ -58,7 +58,7 @@ export default async function handler(req, res) {
     if (licenseKey && typeof licenseKey === 'string') {
         try {
             const license = await redis.get(`license:${licenseKey.trim().toUpperCase()}`);
-            if (license && license.status === 'active' && (license.plan === 'pro' || license.plan === 'enterprise')) {
+            if (license && license.status === 'active' && ['pro', 'enterprise', 'team'].includes(license.plan)) {
                 unmetered = true;
             }
         } catch (err) {

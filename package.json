@@ -147,6 +147,10 @@
       {
         "command": "freebird.signOutGitHub",
         "title": "Freebird: Sign out of GitHub"
+      },
+      {
+        "command": "freebird.manageTeamSeats",
+        "title": "Freebird: Manage Team Seats"
       }
     ],
     "keybindings": [

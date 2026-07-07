@@ -3,7 +3,7 @@ import { ChatViewProvider } from './chat/panel';
 import { GitService } from './git/service';
 import { registerInlineEdit } from './inline/editor';
 import { registerTabCompletion } from './inline/completionProvider';
-import { getLicenseStatus, warmLicenseCache, activateLicense, clearLicenseCache, UPGRADE_URL } from './license/validator';
+import { getLicenseStatus, warmLicenseCache, activateLicense, clearLicenseCache, UPGRADE_URL, API_BASE } from './license/validator';
 import { getCloudEditsRemaining } from './license/usage';
 import { signInWithGitHub, getStoredSession, clearSession } from './auth/github';
 import { initWorkspaceTreeCache } from './agent/tools';
@@ -41,7 +41,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     async function refreshStatusBar() {
         const s = await getLicenseStatus(context);
-        const planLabel = s.plan === 'enterprise' ? 'Enterprise' : 'Pro';
+        const planLabel = s.plan === 'enterprise' ? 'Enterprise' : s.plan === 'team' ? 'Team' : 'Pro';
         if (s.isPro) {
             statusBar.text = `$(send) Freebird AI ${planLabel}`;
             statusBar.tooltip = `Freebird AI ${planLabel} — ${s.email ?? 'active'}`;
@@ -169,6 +169,111 @@ export function activate(context: vscode.ExtensionContext) {
             await clearSession(context);
             vscode.window.showInformationMessage('Signed out of Freebird GitHub sign-in.');
             refreshStatusBar();
+        }),
+
+        vscode.commands.registerCommand('freebird.manageTeamSeats', async () => {
+            const status = await getLicenseStatus(context);
+            if (status.plan !== 'team') {
+                vscode.window.showWarningMessage('Team seat management is only available on the Team plan.');
+                return;
+            }
+            if (!status.isTeamOwner) {
+                vscode.window.showWarningMessage(
+                    'Only the team owner can manage seats. Ask whoever purchased the Team plan to run this from their own license key.'
+                );
+                return;
+            }
+
+            const ownerKey = vscode.workspace.getConfiguration('freebird').get<string>('licenseKey', '').trim();
+
+            const choice = await vscode.window.showQuickPick(
+                [
+                    { label: '$(list-unordered) View seats',  value: 'list' },
+                    { label: '$(person-add) Add a teammate',  value: 'add' },
+                    { label: '$(person-remove) Remove a seat', value: 'remove' }
+                ],
+                { placeHolder: 'Manage Freebird Team seats', title: 'Freebird Team' }
+            );
+            if (!choice) return;
+
+            try {
+                if (choice.value === 'list') {
+                    const listRes = await fetch(`${API_BASE}/api/team-seats`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ownerLicenseKey: ownerKey, action: 'list' })
+                    });
+                    const data = await listRes.json() as any;
+                    if (!listRes.ok) throw new Error(data.error ?? 'Could not load seats');
+
+                    const lines = data.seats.map((s: any) =>
+                        `${s.isOwner ? '👑 ' : '   '}${s.email} — ${s.status}`
+                    );
+                    vscode.window.showInformationMessage(
+                        `Team seats (${data.usedSeats}/${data.maxSeats}):\n${lines.join('\n')}`,
+                        { modal: true }
+                    );
+
+                } else if (choice.value === 'add') {
+                    const email = await vscode.window.showInputBox({
+                        prompt: 'Teammate\'s email address',
+                        placeHolder: '[email protected]',
+                        validateInput: v => v && v.includes('@') ? null : 'Enter a valid email'
+                    });
+                    if (!email) return;
+
+                    const addRes = await vscode.window.withProgress(
+                        { location: vscode.ProgressLocation.Notification, title: 'Adding teammate…', cancellable: false },
+                        () => fetch(`${API_BASE}/api/team-seats`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ ownerLicenseKey: ownerKey, action: 'add', teammateEmail: email })
+                        })
+                    );
+                    const data = await addRes.json() as any;
+                    if (!addRes.ok) throw new Error(data.error ?? 'Could not add seat');
+
+                    await vscode.env.clipboard.writeText(data.key);
+                    vscode.window.showInformationMessage(
+                        `Seat added for ${data.email} (${data.usedSeats}/${data.maxSeats} used). ` +
+                        `License key copied to clipboard — send it to them to activate via "Freebird: Activate Pro License": ${data.key}`,
+                        { modal: true }
+                    );
+
+                } else if (choice.value === 'remove') {
+                    const listRes = await fetch(`${API_BASE}/api/team-seats`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ownerLicenseKey: ownerKey, action: 'list' })
+                    });
+                    const data = await listRes.json() as any;
+                    if (!listRes.ok) throw new Error(data.error ?? 'Could not load seats');
+
+                    const removable = data.seats.filter((s: any) => !s.isOwner);
+                    if (removable.length === 0) {
+                        vscode.window.showInformationMessage('No teammate seats to remove yet.');
+                        return;
+                    }
+
+                    const target = await vscode.window.showQuickPick(
+                        removable.map((s: any) => ({ label: s.email, description: s.status, value: s.key })),
+                        { placeHolder: 'Remove which teammate?' }
+                    );
+                    if (!target) return;
+
+                    const removeRes = await fetch(`${API_BASE}/api/team-seats`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ownerLicenseKey: ownerKey, action: 'remove', seatKey: (target as any).value })
+                    });
+                    const removeData = await removeRes.json() as any;
+                    if (!removeRes.ok) throw new Error(removeData.error ?? 'Could not remove seat');
+
+                    vscode.window.showInformationMessage(`Removed ${(target as any).label} (${removeData.usedSeats}/${removeData.maxSeats} used).`);
+                }
+            } catch (err: any) {
+                vscode.window.showErrorMessage(`Team seat management failed: ${err.message}`);
+            }
         }),
 
         vscode.commands.registerCommand('freebird.upgradeToPro', () => {

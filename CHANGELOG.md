@@ -22,11 +22,16 @@ a `licenseKey` and skip all quota checks entirely for an active Pro or Enterpris
 * **Enterprise plan** — a new self-serve Stripe plan, detected automatically from the
 purchased Price ID via the webhook and tagged as `plan: 'enterprise'`. Functionally
 identical to Pro (fully unmetered) — the difference is price and support tier.
+* **Team plan** — flat $25/month for up to 5 seats, aimed at small dev teams. One
+subscription = one team; the owner allocates seats from inside the extension
+(`Freebird: Manage Team Seats` — list/add/remove) via the new `/api/team-seats`
+endpoint, no separate dashboard. Cancelling the owner's subscription cancels all
+seats. Seats are fully unmetered, same as Pro/Enterprise.
 * **First-run walkthrough** — new installs now see a guided walkthrough (backend choice →
 GitHub sign-in → first edit → command reference → optional upgrade) instead of landing on
 an empty chat panel with no orientation.
-* Status bar and chat header now show **Enterprise** vs **Pro** distinctly, and reflect a
-signed-in GitHub account when on the free tier.
+* Status bar and chat header now show **Team** / **Enterprise** vs **Pro** distinctly, and
+reflect a signed-in GitHub account when on the free tier.
 
 ## \[0.7.4] — 2026-06-28
 

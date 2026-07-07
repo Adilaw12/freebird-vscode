@@ -107,7 +107,30 @@ fixed) — the only difference between them is price and support tier.
 
 ---
 
-## 8. Update the extension constants
+## 8. Team plan
+
+Team is flat-priced ($25/mo for up to 5 seats — aimed at small dev teams,
+priced for markets where per-seat SaaS pricing is a harder sell). One Stripe
+subscription = one team; the purchaser becomes the owner and can allocate the
+remaining 4 seats to teammates from inside the extension
+(`Freebird: Manage Team Seats`), no web dashboard needed.
+
+1. **Products → Add product** in Stripe: `Freebird Team`, price it at $25/mo
+2. Copy its **Price ID**
+3. In Vercel → **Environment Variables**, add `STRIPE_TEAM_PRICE_ID` set to
+   that price ID
+4. Create a Payment Link for it the same way as step 4 above
+5. The webhook tags the purchaser's license `plan: 'team'` and creates a
+   `team:<key>` record with `maxSeats: 5`. Seats are added/removed via
+   `POST /api/team-seats` — the owner's own license key acts as their admin
+   credential, same as everywhere else in this system.
+
+Cancelling the owner's subscription cancels every seat automatically
+(`customer.subscription.deleted` cascades to all seat keys).
+
+---
+
+## 9. Update the extension constants
 
 Open `src/license/validator.ts` and update two lines:
 
@@ -138,5 +161,6 @@ npx vsce publish
 |---|---|
 | `POST /api/validate` | Extension calls this to verify a license key |
 | `POST /api/auth-github` | Verifies a GitHub access token, issues a signed session token |
+| `POST /api/team-seats` | Team plan owner adds/removes/lists seats |
 | `POST /api/webhook` | Stripe calls this when subscriptions change |
 | `GET /api/success?session_id=xxx` | Shows the license key after payment |
