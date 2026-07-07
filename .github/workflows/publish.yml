@@ -6,7 +6,8 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -23,7 +24,10 @@ jobs:
       - name: Compile extension
         run: npm run compile
 
-      - name: Publish extension
-        run: npx @vscode/vsce publish
+      - name: Package extension
+        run: npx @vscode/vsce package
+
+      - name: Publish to VS Code Marketplace
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: npx @vscode/vsce publish --packagePath $(find . -maxdepth 1 -name "*.vsix" -print -quit)
