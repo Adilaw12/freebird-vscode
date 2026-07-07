@@ -19,6 +19,8 @@ Freebird never blocks you — it picks up where other tools stop.
 
 ⭐ **If Freebird saves you time, a GitHub star helps others find it** — thank you!
 
+🚀 **We're live on Product Hunt (July 15)** — [an upvote helps a lot](https://www.producthunt.com/posts/freebird-ai) if you've found this useful.
+
 ---
 
 ## Why Freebird
