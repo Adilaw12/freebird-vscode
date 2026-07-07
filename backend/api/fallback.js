@@ -8,6 +8,7 @@
 
 import { Redis } from '@upstash/redis';
 import { createHash } from 'crypto';
+import { verifySession } from '../lib/authToken.js';
 
 const redis = Redis.fromEnv();
 
@@ -19,6 +20,9 @@ const GEMINI_URL     = `https://generativelanguage.googleapis.com/v1beta/models/
 const DAILY_LIMIT    = 20;  // per machine/session per day
 const IP_DAILY_LIMIT = 200; // per IP per day — higher so shared networks aren't blocked
 const QUOTA_TTL      = 24 * 60 * 60; // 1 day in seconds
+
+// See chat.js — same rollout flag, same meaning.
+const REQUIRE_AUTH = process.env.REQUIRE_AUTH === 'true';
 
 // Cost circuit breaker + monitoring — shared with /api/chat (same keys)
 const GLOBAL_DAILY_LIMIT = parseInt(process.env.GLOBAL_DAILY_LIMIT || '0', 10); // 0/unset = off
@@ -42,40 +46,66 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: 'Server misconfigured', code: 'NO_API_KEY' });
     }
 
-    // ── IP rate limit ────────────────────────────────────────────────────────
-    // Compute IP identically to /api/chat so the daily IP quota key is shared
     const ip = ((req.headers['x-forwarded-for'] || '').split(',')[0] || 'anon').trim();
-
-    const ipKey = `fallback:ip:${ip}`;
-    try {
-        const current = await redis.get(ipKey).catch(() => null);
-        const count   = parseInt(current ?? '0', 10);
-
-        if (count >= IP_RATE_LIMIT) {
-            return res.status(429).json({
-                error: 'Too many fallback requests. Please try again later or upgrade to Pro.',
-                code:  'IP_RATE_LIMITED'
-            });
-        }
-
-        const pipeline = redis.pipeline();
-        pipeline.incr(ipKey);
-        if (count === 0) pipeline.expire(ipKey, IP_RATE_TTL);
-        await pipeline.exec().catch(() => {});
-    } catch { /* non-blocking — don't fail the request on Redis errors */ }
-
-    const { messages, maxTokens = 2048, sessionId: rawSession } = req.body ?? {};
+    const { messages, maxTokens = 2048, sessionId: rawSession, authToken, licenseKey } = req.body ?? {};
 
     if (!Array.isArray(messages) || messages.length === 0) {
         return res.status(400).json({ error: 'messages required', code: 'BAD_REQUEST' });
     }
 
+    // ── Pro/Enterprise: fully unmetered — skips the IP burst limit too ─────────
+    let unmetered = false;
+    if (licenseKey && typeof licenseKey === 'string') {
+        try {
+            const license = await redis.get(`license:${licenseKey.trim().toUpperCase()}`);
+            if (license && license.status === 'active' && (license.plan === 'pro' || license.plan === 'enterprise')) {
+                unmetered = true;
+            }
+        } catch (err) {
+            console.error('License lookup error (fallback):', err);
+        }
+    }
+
+    // ── IP burst rate limit ─────────────────────────────────────────────────
+    if (!unmetered) {
+        const ipKey = `fallback:ip:${ip}`;
+        try {
+            const current = await redis.get(ipKey).catch(() => null);
+            const count   = parseInt(current ?? '0', 10);
+
+            if (count >= IP_RATE_LIMIT) {
+                return res.status(429).json({
+                    error: 'Too many fallback requests. Please try again later or upgrade to Pro.',
+                    code:  'IP_RATE_LIMITED'
+                });
+            }
+
+            const pipeline = redis.pipeline();
+            pipeline.incr(ipKey);
+            if (count === 0) pipeline.expire(ipKey, IP_RATE_TTL);
+            await pipeline.exec().catch(() => {});
+        } catch { /* non-blocking — don't fail the request on Redis errors */ }
+    }
+
+    // ── Identity: GitHub-verified session preferred over legacy machine id ─────
+    const session = (!unmetered && authToken) ? verifySession(authToken) : null;
+
+    if (!unmetered && !session && REQUIRE_AUTH) {
+        return res.status(401).json({
+            error: 'Sign in with GitHub to use Freebird\'s free cloud tier.',
+            code:  'AUTH_REQUIRED'
+        });
+    }
+
+    const identityKey = session
+        ? `gh:${session.sub}`
+        : ((rawSession && typeof rawSession === 'string') ? rawSession : ip);
+
     // ── Daily quota (same two layers as /api/chat, shared Redis keys) ──────────
     // Without this, fallback could be used to bypass the /api/chat daily quota.
     const today = new Date().toISOString().slice(0, 10);
-    const sessionId = (rawSession && typeof rawSession === 'string') ? rawSession : ip;
 
-    const sessionQuotaKey = `quota:${sessionId.slice(0, 48)}:${today}`;
+    const sessionQuotaKey = `quota:${identityKey.slice(0, 48)}:${today}`;
     const ipQuotaKey      = `quota:ip:${ip}:${today}`;
     const globalKey       = `quota:global:${today}`;
 
@@ -88,20 +118,22 @@ export default async function handler(req, res) {
     const ipUsed      = parseInt(ipCount ?? '0', 10);
     const globalUsed  = parseInt(globalCount ?? '0', 10);
 
-    // Cost circuit breaker (off unless GLOBAL_DAILY_LIMIT is set)
-    if (GLOBAL_DAILY_LIMIT > 0 && globalUsed >= GLOBAL_DAILY_LIMIT) {
-        return res.status(503).json({
-            error: 'Free tier is temporarily at capacity. Please try again later or upgrade to Pro.',
-            code:  'GLOBAL_CAPACITY'
-        });
-    }
+    if (!unmetered) {
+        // Cost circuit breaker (off unless GLOBAL_DAILY_LIMIT is set)
+        if (GLOBAL_DAILY_LIMIT > 0 && globalUsed >= GLOBAL_DAILY_LIMIT) {
+            return res.status(503).json({
+                error: 'Free tier is temporarily at capacity. Please try again later or upgrade to Pro.',
+                code:  'GLOBAL_CAPACITY'
+            });
+        }
 
-    if (sessionUsed >= DAILY_LIMIT || ipUsed >= IP_DAILY_LIMIT) {
-        return res.status(429).json({
-            error: 'Daily cloud edit limit reached. Upgrade to Pro for unlimited access.',
-            code:  'QUOTA_EXCEEDED',
-            limit: DAILY_LIMIT
-        });
+        if (sessionUsed >= DAILY_LIMIT || ipUsed >= IP_DAILY_LIMIT) {
+            return res.status(429).json({
+                error: 'Daily cloud edit limit reached. Upgrade to Pro for unlimited access.',
+                code:  'QUOTA_EXCEEDED',
+                limit: DAILY_LIMIT
+            });
+        }
     }
 
     // ── Build Gemini request ─────────────────────────────────────────────────
@@ -150,28 +182,35 @@ export default async function handler(req, res) {
         }
 
         // ── Increment both daily counters after a confirmed success ───────────
-        // Shared with /api/chat so neither endpoint can bypass the other's quota
-        const quotaPipeline = redis.pipeline();
-        quotaPipeline.incr(sessionQuotaKey);
-        if (sessionUsed === 0) quotaPipeline.expire(sessionQuotaKey, QUOTA_TTL);
-        quotaPipeline.incr(ipQuotaKey);
-        if (ipUsed === 0) quotaPipeline.expire(ipQuotaKey, QUOTA_TTL);
-        // Monitoring: global daily call count + unique IPs (hashed for privacy)
-        quotaPipeline.incr(globalKey);
-        if (globalUsed === 0) quotaPipeline.expire(globalKey, MONITOR_TTL);
-        quotaPipeline.sadd(`monitor:ips:${today}`, hashIp(ip));
-        quotaPipeline.expire(`monitor:ips:${today}`, MONITOR_TTL);
-        await quotaPipeline.exec().catch(() => {});
-
-        const remaining = Math.max(0, Math.min(
-            DAILY_LIMIT - sessionUsed - 1,
-            IP_DAILY_LIMIT - ipUsed - 1
-        ));
+        // Shared with /api/chat so neither endpoint can bypass the other's quota.
+        // Skipped entirely for unmetered (Pro/Enterprise) requests.
+        if (!unmetered) {
+            const quotaPipeline = redis.pipeline();
+            quotaPipeline.incr(sessionQuotaKey);
+            if (sessionUsed === 0) quotaPipeline.expire(sessionQuotaKey, QUOTA_TTL);
+            quotaPipeline.incr(ipQuotaKey);
+            if (ipUsed === 0) quotaPipeline.expire(ipQuotaKey, QUOTA_TTL);
+            // Monitoring: global daily call count + unique IPs (hashed for privacy)
+            quotaPipeline.incr(globalKey);
+            if (globalUsed === 0) quotaPipeline.expire(globalKey, MONITOR_TTL);
+            quotaPipeline.sadd(`monitor:ips:${today}`, hashIp(ip));
+            quotaPipeline.expire(`monitor:ips:${today}`, MONITOR_TTL);
+            await quotaPipeline.exec().catch(() => {});
+        }
 
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
         res.setHeader('Transfer-Encoding', 'chunked');
         res.setHeader('X-Fallback-Active', 'true'); // extension can detect this
-        res.setHeader('X-Quota-Remaining', String(remaining));
+
+        if (unmetered) {
+            res.setHeader('X-Quota-Unmetered', 'true');
+        } else {
+            const remaining = Math.max(0, Math.min(
+                DAILY_LIMIT - sessionUsed - 1,
+                IP_DAILY_LIMIT - ipUsed - 1
+            ));
+            res.setHeader('X-Quota-Remaining', String(remaining));
+        }
 
         const reader  = upstream.body.getReader();
         const decoder = new TextDecoder();

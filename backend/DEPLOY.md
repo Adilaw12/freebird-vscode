@@ -65,7 +65,49 @@ Total time: ~20 minutes. Everything is free-tier friendly.
 
 ---
 
-## 5. Update the extension constants
+## 6. GitHub sign-in (identity for the free tier)
+
+The old free-tier quota was tracked by a self-reported machine ID, which
+advanced users could bypass by resetting or spoofing it. As of v0.8.0, free
+cloud edits are tracked per **verified GitHub account** instead.
+
+1. Go to [github.com/settings/developers](https://github.com/settings/developers)
+   → **OAuth Apps → New OAuth App**
+2. Fill in any Application name/homepage URL/callback URL (device flow doesn't
+   use the callback URL, but GitHub requires one — any valid URL works, e.g.
+   your `ten-labs.com.au` homepage)
+3. After creating it, check **"Enable Device Flow"** in the app settings
+4. Copy the **Client ID** (no secret needed — device flow doesn't use it)
+5. Open `src/auth/github.ts` and replace `GITHUB_CLIENT_ID` with that value
+6. In Vercel → **Environment Variables**, add `AUTH_SECRET` — any long random
+   string (e.g. `openssl rand -hex 32`). This signs the session tokens issued
+   by `/api/auth-github`; keep it secret and never reuse it elsewhere.
+7. Optional, once most users are on v0.8.0+: set `REQUIRE_AUTH=true` in Vercel
+   to reject unauthenticated free-tier requests outright instead of falling
+   back to the old machine-id scheme. Leave it unset/`false` during rollout.
+
+---
+
+## 7. Enterprise plan
+
+Enterprise reuses the same license-key system as Pro but is priced
+separately and tagged with its own plan value.
+
+1. **Products → Add product** in Stripe: `Freebird Enterprise`, set your price
+2. Copy its **Price ID**
+3. In Vercel → **Environment Variables**, add `STRIPE_ENTERPRISE_PRICE_ID` set
+   to that price ID
+4. Create a Payment Link for it the same way as step 4 above
+5. The webhook (`api/webhook.js`) automatically tags any checkout using that
+   price ID as `plan: 'enterprise'` instead of `'pro'` — no other changes needed
+
+Note: both Pro and Enterprise are now fully unmetered server-side (the old gap
+where Pro users on the default cloud backend still hit the 20/day quota is
+fixed) — the only difference between them is price and support tier.
+
+---
+
+## 8. Update the extension constants
 
 Open `src/license/validator.ts` and update two lines:
 
@@ -95,5 +137,6 @@ npx vsce publish
 | Endpoint | Purpose |
 |---|---|
 | `POST /api/validate` | Extension calls this to verify a license key |
+| `POST /api/auth-github` | Verifies a GitHub access token, issues a signed session token |
 | `POST /api/webhook` | Stripe calls this when subscriptions change |
 | `GET /api/success?session_id=xxx` | Shows the license key after payment |

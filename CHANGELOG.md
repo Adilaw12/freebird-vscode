@@ -1,5 +1,33 @@
 # Changelog
 
+## \[0.8.0] — 2026-07-07
+
+### Security
+
+* **GitHub sign-in replaces spoofable machine ID for free-tier identity** — the previous
+identity (`vscode.env.machineId`, self-reported in the request body) could be reset or
+spoofed by resetting/reinstalling, defeating the per-machine daily quota even with the
+0.7.3 per-IP layer in place. Free cloud edits are now tracked against a GitHub account,
+verified server-side against GitHub's own API (`/api/auth-github`) and bound to a signed
+session token the client can't forge. The per-IP layer remains as a second check. Rollout
+is gradual: `REQUIRE_AUTH` stays off until most installs are updated, then flips on to
+fully close the legacy path.
+* **Fixed: Pro subscribers were still hitting the free-tier daily quota** — `/api/chat` and
+`/api/fallback` never actually checked license status server-side, so Pro users on the
+default cloud backend were capped at 20/day same as free users. Both endpoints now accept
+a `licenseKey` and skip all quota checks entirely for an active Pro or Enterprise license.
+
+### Added
+
+* **Enterprise plan** — a new self-serve Stripe plan, detected automatically from the
+purchased Price ID via the webhook and tagged as `plan: 'enterprise'`. Functionally
+identical to Pro (fully unmetered) — the difference is price and support tier.
+* **First-run walkthrough** — new installs now see a guided walkthrough (backend choice →
+GitHub sign-in → first edit → command reference → optional upgrade) instead of landing on
+an empty chat panel with no orientation.
+* Status bar and chat header now show **Enterprise** vs **Pro** distinctly, and reflect a
+signed-in GitHub account when on the free tier.
+
 ## \[0.7.4] — 2026-06-28
 
 ### Changed

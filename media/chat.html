@@ -979,6 +979,24 @@ function showCloudEditUsed(remaining) {
   msgsEl.appendChild(h); scroll();
 }
 
+function showAuthWall() {
+  var wall = document.createElement('div');
+  wall.className = 'quota-wall';
+  wall.innerHTML =
+    '<div class="quota-wall-header">'
+      + '<svg width="16" height="16" viewBox="0 0 16 16" style="stroke:#d97757;fill:none;stroke-width:1.8;stroke-linecap:round;flex-shrink:0"><path d="M8 1a5 5 0 0 0-5 5c0 2.2 1.4 4 3.4 4.6-.05.4-.05.9.1 1.4L4 15h2l1.2-1.8c.3 0 .5.05.8.05s.5-.05.8-.05L10 15h2l-2.5-3c.15-.5.15-1 .1-1.4C11.6 10 13 8.2 13 6a5 5 0 0 0-5-5z"/></svg>'
+      + '<span class="quota-wall-title">Sign in with GitHub to continue</span>'
+    + '</div>'
+    + '<div class="quota-wall-features">'
+      + '<div class="quota-wall-feature"><span class="quota-wall-check">✓</span> Takes 10 seconds, just verifies you\'re a real GitHub account.</div>'
+      + '<div class="quota-wall-feature"><span class="quota-wall-check">✓</span> Keeps free daily edits fair for everyone.</div>'
+    + '</div>'
+    + '<div class="quota-wall-actions">'
+      + '<button class="quota-wall-btn-primary" onclick="vscode.postMessage({type:\'sign-in-github\'})">Sign in with GitHub →</button>'
+    + '</div>';
+  msgsEl.appendChild(wall); scroll();
+}
+
 function showQuotaWall() {
   var sessionMins = Math.round((Date.now() - _sessionStart) / 60000);
   var resetTime = getResetCountdown();
@@ -1182,6 +1200,7 @@ window.addEventListener('message',function(e){
     case 'user':             _sessionMessages++; addUserMsg(m.text); break;
     case 'assistant-start':  startAssistantMsg(); break;
     case 'quota-exceeded':   showQuotaWall(); setBusy(false); break;
+    case 'auth-required':    showAuthWall(); setBusy(false); break;
     case 'set-text':         setCurrentText(m.text); break;
     case 'tool-status':      addToolStatus(m.id,m.state,m.label); break;
     case 'tool-update':      updateToolStatus(m.id,m.state,m.output); break;
@@ -1197,7 +1216,7 @@ window.addEventListener('message',function(e){
       var badge=document.getElementById('pro-badge');
       if (m.isPro) {
         if (banner) banner.style.display='none';
-        if (badge)  badge.style.display='inline';
+        if (badge) { badge.style.display='inline'; badge.textContent = m.plan === 'enterprise' ? 'ENTERPRISE' : 'PRO'; }
       } else {
         if (banner) banner.style.display='flex';
         if (badge)  badge.style.display='none';

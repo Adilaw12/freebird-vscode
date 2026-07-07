@@ -2,7 +2,7 @@
   "name": "freebird-ai",
   "displayName": "Freebird AI",
   "description": "AI coding assistant — 20 free AI edits/day, no setup. Copilot alternative with multi-file edits, BYOK (Claude, GPT-4o, DeepSeek), local Ollama, inline edit, AI commit. Pro $6/mo.",
-  "version": "0.7.4",
+  "version": "0.8.0",
   "publisher": "TenLabs",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -49,6 +49,50 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "walkthroughs": [
+      {
+        "id": "freebirdWelcome",
+        "title": "Get started with Freebird AI",
+        "description": "20 free cloud edits a day, no setup — from install to your first AI edit in under a minute.",
+        "steps": [
+          {
+            "id": "chooseBackend",
+            "title": "Pick how Freebird runs",
+            "description": "Freebird works out of the box with **20 free cloud edits/day** (Gemini Flash) — no setup needed. Prefer unlimited local AI or your own API key? Configure that here anytime.\n[Configure AI Backend](command:freebird.configure)",
+            "media": { "markdown": "media/walkthrough/choose-backend.md" },
+            "completionEvents": [ "onCommand:freebird.configure" ]
+          },
+          {
+            "id": "signIn",
+            "title": "Sign in with GitHub",
+            "description": "Signing in with GitHub verifies your free daily quota is really yours — it takes 10 seconds and doesn't need a password.\n[Sign in with GitHub](command:freebird.signInWithGitHub)",
+            "media": { "markdown": "media/walkthrough/sign-in.md" },
+            "completionEvents": [ "onCommand:freebird.signInWithGitHub" ]
+          },
+          {
+            "id": "firstEdit",
+            "title": "Make your first AI edit",
+            "description": "Open the Freebird chat, select some code and press **Ctrl+Alt+K** (**Cmd+Alt+K** on Mac) for an inline edit, or just ask a question in the sidebar.\n[Open Freebird Chat](command:freebird.openChat)",
+            "media": { "markdown": "media/walkthrough/first-edit.md" },
+            "completionEvents": [ "onCommand:freebird.openChat" ]
+          },
+          {
+            "id": "learnCommands",
+            "title": "Learn the shortcuts",
+            "description": "Type `/help` in the chat anytime for the full command list — `/commit`, `/status`, `@filename` mentions, and your current quota.\n`Ctrl+Alt+O` / `Cmd+Alt+O` — open chat\n`Ctrl+Alt+K` / `Cmd+Alt+K` — inline edit selection",
+            "media": { "markdown": "media/walkthrough/commands.md" },
+            "completionEvents": [ "onView:freebird.chatView" ]
+          },
+          {
+            "id": "goPro",
+            "title": "Need more? Go unlimited",
+            "description": "Pro removes the daily cap entirely and adds BYOK (Claude, GPT-4o, DeepSeek) plus project memory — $6/month.\n[Upgrade to Pro](command:freebird.upgradeToPro)",
+            "media": { "markdown": "media/walkthrough/go-pro.md" },
+            "completionEvents": [ "onCommand:freebird.upgradeToPro" ]
+          }
+        ]
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {
@@ -95,6 +139,14 @@
       {
         "command": "freebird.previewHtml",
         "title": "Freebird: Preview HTML"
+      },
+      {
+        "command": "freebird.signInWithGitHub",
+        "title": "Freebird: Sign in with GitHub"
+      },
+      {
+        "command": "freebird.signOutGitHub",
+        "title": "Freebird: Sign out of GitHub"
       }
     ],
     "keybindings": [

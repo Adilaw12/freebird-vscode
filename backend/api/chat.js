@@ -13,6 +13,7 @@
 
 import { Redis } from '@upstash/redis';
 import { createHash } from 'crypto';
+import { verifySession } from '../lib/authToken.js';
 
 const redis = Redis.fromEnv();
 
@@ -23,6 +24,13 @@ const GEMINI_URL     = `https://generativelanguage.googleapis.com/v1beta/models/
 const DAILY_LIMIT    = 20;  // per machine/session per day
 const IP_DAILY_LIMIT = 200; // per IP per day — higher so shared networks (offices, VPNs) aren't blocked
 const QUOTA_TTL      = 24 * 60 * 60; // 1 day in seconds
+
+// Once REQUIRE_AUTH=true is set in Vercel, unauthenticated requests (no valid
+// GitHub session token) are rejected outright instead of falling back to the
+// old, spoofable machine-id/IP scheme. Leave unset/false during rollout so
+// installs still on older extension versions keep working, then flip it on
+// once telemetry shows most active users are on a version that signs in.
+const REQUIRE_AUTH = process.env.REQUIRE_AUTH === 'true';
 
 // Cost circuit breaker: max free cloud calls across ALL users per day.
 // OFF by default (0/unset) — costs are tiny until very high volume. Set the
@@ -45,25 +53,52 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: 'Server misconfigured', code: 'NO_API_KEY' });
     }
 
-    const { messages, sessionId: rawSession, maxTokens = 2048 } = req.body ?? {};
+    const { messages, sessionId: rawSession, authToken, licenseKey, maxTokens = 2048 } = req.body ?? {};
 
     if (!Array.isArray(messages) || messages.length === 0) {
         return res.status(400).json({ error: 'messages required', code: 'BAD_REQUEST' });
     }
 
-    // sessionId is optional — older extension versions don't send it
-    // Fall back to IP-based tracking so they still get quota enforcement
-    const sessionId = (rawSession && typeof rawSession === 'string')
-        ? rawSession
-        : ((req.headers['x-forwarded-for'] || '').split(',')[0] || 'anon').trim();
-
-    // ── Quota check (two layers: machine/session + IP) ────────────────────────
-    // Machine ID alone was bypassable, so we also cap per IP per day. A request
-    // is blocked if EITHER the session/machine quota or the IP quota is exhausted.
     const today = new Date().toISOString().slice(0, 10);
     const ip    = ((req.headers['x-forwarded-for'] || '').split(',')[0] || 'anon').trim();
 
-    const sessionQuotaKey = `quota:${sessionId.slice(0, 48)}:${today}`;
+    // ── Pro/Enterprise: fully unmetered, no quota checks at all ────────────────
+    // Checked first and independently of identity — a valid active license on
+    // either plan skips every limit below.
+    let unmetered = false;
+    if (licenseKey && typeof licenseKey === 'string') {
+        try {
+            const license = await redis.get(`license:${licenseKey.trim().toUpperCase()}`);
+            if (license && license.status === 'active' && (license.plan === 'pro' || license.plan === 'enterprise')) {
+                unmetered = true;
+            }
+        } catch (err) {
+            console.error('License lookup error (chat):', err);
+            // fail closed — treat as unlicensed rather than blocking the request
+        }
+    }
+
+    // ── Identity: GitHub-verified session preferred over legacy machine id ─────
+    // A session token can only exist if api/auth-github.js independently
+    // verified a real GitHub access token, so it can't be spoofed by sending an
+    // arbitrary string the way the old plain sessionId could.
+    const session = (!unmetered && authToken) ? verifySession(authToken) : null;
+
+    if (!unmetered && !session && REQUIRE_AUTH) {
+        return res.status(401).json({
+            error: 'Sign in with GitHub to use Freebird\'s free cloud tier.',
+            code:  'AUTH_REQUIRED'
+        });
+    }
+
+    const identityKey = session
+        ? `gh:${session.sub}`
+        : ((rawSession && typeof rawSession === 'string') ? rawSession : ip);
+
+    // ── Quota check (two layers: identity + IP) ────────────────────────────────
+    // A request is blocked if EITHER the identity quota or the IP quota is
+    // exhausted. Skipped entirely when `unmetered` (active Pro/Enterprise license).
+    const sessionQuotaKey = `quota:${identityKey.slice(0, 48)}:${today}`;
     const ipQuotaKey      = `quota:ip:${ip}:${today}`;
     const globalKey       = `quota:global:${today}`;
 
@@ -77,21 +112,23 @@ export default async function handler(req, res) {
     const ipUsed      = parseInt(ipCount ?? '0', 10);
     const globalUsed  = parseInt(globalCount ?? '0', 10);
 
-    // Cost circuit breaker (off unless GLOBAL_DAILY_LIMIT is set)
-    if (GLOBAL_DAILY_LIMIT > 0 && globalUsed >= GLOBAL_DAILY_LIMIT) {
-        return res.status(503).json({
-            error: 'Free tier is temporarily at capacity. Please try again later or upgrade to Pro.',
-            code:  'GLOBAL_CAPACITY'
-        });
-    }
+    if (!unmetered) {
+        // Cost circuit breaker (off unless GLOBAL_DAILY_LIMIT is set)
+        if (GLOBAL_DAILY_LIMIT > 0 && globalUsed >= GLOBAL_DAILY_LIMIT) {
+            return res.status(503).json({
+                error: 'Free tier is temporarily at capacity. Please try again later or upgrade to Pro.',
+                code:  'GLOBAL_CAPACITY'
+            });
+        }
 
-    // Block if EITHER layer is exhausted — the per-machine cap or the higher IP cap
-    if (sessionUsed >= DAILY_LIMIT || ipUsed >= IP_DAILY_LIMIT) {
-        return res.status(429).json({
-            error: 'Daily cloud edit limit reached. Upgrade to Pro for unlimited access.',
-            code:  'QUOTA_EXCEEDED',
-            limit: DAILY_LIMIT
-        });
+        // Block if EITHER layer is exhausted — the per-machine cap or the higher IP cap
+        if (sessionUsed >= DAILY_LIMIT || ipUsed >= IP_DAILY_LIMIT) {
+            return res.status(429).json({
+                error: 'Daily cloud edit limit reached. Upgrade to Pro for unlimited access.',
+                code:  'QUOTA_EXCEEDED',
+                limit: DAILY_LIMIT
+            });
+        }
     }
 
     // ── Build Gemini request ─────────────────────────────────────────────────
@@ -144,30 +181,39 @@ export default async function handler(req, res) {
 
         // ── Increment quota only after confirmed successful response ──────────
         // Users are never charged for failed Gemini requests. Increment BOTH the
-        // session/machine counter and the IP counter so neither layer can be
-        // bypassed (resetting the machine ID still hits the IP cap, and vice versa).
-        const pipeline = redis.pipeline();
-        pipeline.incr(sessionQuotaKey);
-        if (sessionUsed === 0) pipeline.expire(sessionQuotaKey, QUOTA_TTL);
-        pipeline.incr(ipQuotaKey);
-        if (ipUsed === 0) pipeline.expire(ipQuotaKey, QUOTA_TTL);
-        // Monitoring: global daily call count + unique IPs (hashed for privacy)
-        pipeline.incr(globalKey);
-        if (globalUsed === 0) pipeline.expire(globalKey, MONITOR_TTL);
-        pipeline.sadd(`monitor:ips:${today}`, hashIp(ip));
-        pipeline.expire(`monitor:ips:${today}`, MONITOR_TTL);
-        await pipeline.exec().catch(() => {});
+        // identity counter and the IP counter so neither layer can be bypassed.
+        // Skipped entirely for unmetered (Pro/Enterprise) requests — no quota to
+        // track, and no reason to write monitoring keys for calls that can't hit
+        // the free-tier circuit breaker.
+        if (!unmetered) {
+            const pipeline = redis.pipeline();
+            pipeline.incr(sessionQuotaKey);
+            if (sessionUsed === 0) pipeline.expire(sessionQuotaKey, QUOTA_TTL);
+            pipeline.incr(ipQuotaKey);
+            if (ipUsed === 0) pipeline.expire(ipQuotaKey, QUOTA_TTL);
+            // Monitoring: global daily call count + unique IPs (hashed for privacy)
+            pipeline.incr(globalKey);
+            if (globalUsed === 0) pipeline.expire(globalKey, MONITOR_TTL);
+            pipeline.sadd(`monitor:ips:${today}`, hashIp(ip));
+            pipeline.expire(`monitor:ips:${today}`, MONITOR_TTL);
+            await pipeline.exec().catch(() => {});
+        }
 
         // Stream as plain text — extension reads line by line
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
         res.setHeader('Transfer-Encoding', 'chunked');
-        // Remaining reflects whichever layer binds first (machine vs IP)
-        const remaining = Math.max(0, Math.min(
-            DAILY_LIMIT - sessionUsed - 1,
-            IP_DAILY_LIMIT - ipUsed - 1
-        ));
-        res.setHeader('X-Quota-Used',      String(sessionUsed + 1));
-        res.setHeader('X-Quota-Remaining', String(remaining));
+
+        if (unmetered) {
+            res.setHeader('X-Quota-Unmetered', 'true');
+        } else {
+            // Remaining reflects whichever layer binds first (identity vs IP)
+            const remaining = Math.max(0, Math.min(
+                DAILY_LIMIT - sessionUsed - 1,
+                IP_DAILY_LIMIT - ipUsed - 1
+            ));
+            res.setHeader('X-Quota-Used',      String(sessionUsed + 1));
+            res.setHeader('X-Quota-Remaining', String(remaining));
+        }
 
         const reader  = upstream.body.getReader();
         const decoder = new TextDecoder();

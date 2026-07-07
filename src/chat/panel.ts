@@ -130,6 +130,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 case 'activate-license':
                     vscode.commands.executeCommand('freebird.activateLicense');
                     break;
+                case 'sign-in-github':
+                    vscode.commands.executeCommand('freebird.signInWithGitHub');
+                    break;
             }
         });
 
@@ -141,7 +144,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     async showLicenseStatus() {
         const status = await getLicenseStatus(this.context);
-        this.post({ type: 'license-status', isPro: status.isPro, email: status.email });
+        this.post({ type: 'license-status', isPro: status.isPro, plan: status.plan, email: status.email });
     }
 
     triggerCommand(command: string) {
@@ -386,7 +389,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         } catch (err: any) {
             trackEvent('api_error');
-            if (err?.code === 'QUOTA_EXCEEDED') {
+            if (err?.code === 'AUTH_REQUIRED') {
+                trackEvent('auth_required_shown');
+                this.post({ type: 'auth-required' });
+                return;
+            } else if (err?.code === 'QUOTA_EXCEEDED') {
                 this.post({ type: 'quota-exceeded' });
                 trackEvent('upgrade_prompt_shown');
                 return;

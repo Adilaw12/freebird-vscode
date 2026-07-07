@@ -5,6 +5,7 @@ import { registerInlineEdit } from './inline/editor';
 import { registerTabCompletion } from './inline/completionProvider';
 import { getLicenseStatus, warmLicenseCache, activateLicense, clearLicenseCache, UPGRADE_URL } from './license/validator';
 import { getCloudEditsRemaining } from './license/usage';
+import { signInWithGitHub, getStoredSession, clearSession } from './auth/github';
 import { initWorkspaceTreeCache } from './agent/tools';
 import { previewHtmlFile } from './agent/preview';
 import { checkOllamaSetup } from './ai/ollamaSetup';
@@ -40,13 +41,35 @@ export function activate(context: vscode.ExtensionContext) {
 
     async function refreshStatusBar() {
         const s = await getLicenseStatus(context);
-        statusBar.text = s.isPro ? '$(send) Freebird AI Pro' : '$(send) Freebird AI';
-        statusBar.tooltip = s.isPro
-            ? `Freebird AI Pro — ${s.email ?? 'active'}`
-            : 'Freebird AI Free — click to open chat';
+        const planLabel = s.plan === 'enterprise' ? 'Enterprise' : 'Pro';
+        if (s.isPro) {
+            statusBar.text = `$(send) Freebird AI ${planLabel}`;
+            statusBar.tooltip = `Freebird AI ${planLabel} — ${s.email ?? 'active'}`;
+        } else {
+            const session = await getStoredSession(context);
+            statusBar.text = '$(send) Freebird AI';
+            statusBar.tooltip = session
+                ? `Freebird AI Free — signed in as ${session.login} — click to open chat`
+                : 'Freebird AI Free — click to open chat';
+        }
         if (ChatViewProvider.current) ChatViewProvider.current.showLicenseStatus();
     }
     refreshStatusBar();
+
+    // ── First-run onboarding walkthrough ────────────────────────────────────
+    // Opens once per install, guiding: choose a backend → sign in/try an edit
+    // → learn commands → (optionally) upgrade. Safe to call repeatedly — VS
+    // Code no-ops if the user already dismissed or completed it, but we still
+    // gate on our own flag so it never reopens after the very first run.
+    const WALKTHROUGH_SHOWN_KEY = 'freebird.walkthroughShown';
+    if (!context.globalState.get<boolean>(WALKTHROUGH_SHOWN_KEY)) {
+        context.globalState.update(WALKTHROUGH_SHOWN_KEY, true);
+        vscode.commands.executeCommand(
+            'workbench.action.openWalkthrough',
+            'TenLabs.freebird-ai#freebirdWelcome',
+            false
+        );
+    }
 
     // ── Helper: require Pro or daily cloud edits ────────────────────────────
     async function requireProOrCloudEdit(featureName: string): Promise<boolean> {
@@ -125,6 +148,27 @@ export function activate(context: vscode.ExtensionContext) {
                     }
                 }
             );
+        }),
+
+        vscode.commands.registerCommand('freebird.signInWithGitHub', async () => {
+            try {
+                const session = await vscode.window.withProgress(
+                    { location: vscode.ProgressLocation.Notification, title: 'Waiting for GitHub sign-in…', cancellable: false },
+                    () => signInWithGitHub(context)
+                );
+                trackEvent('github_signed_in');
+                vscode.window.showInformationMessage(`Signed in to Freebird as ${session.login}.`);
+                refreshStatusBar();
+            } catch (err: any) {
+                if (err?.message === 'CANCELLED') return;
+                vscode.window.showErrorMessage(`GitHub sign-in failed: ${err.message}`);
+            }
+        }),
+
+        vscode.commands.registerCommand('freebird.signOutGitHub', async () => {
+            await clearSession(context);
+            vscode.window.showInformationMessage('Signed out of Freebird GitHub sign-in.');
+            refreshStatusBar();
         }),
 
         vscode.commands.registerCommand('freebird.upgradeToPro', () => {

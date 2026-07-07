@@ -4,7 +4,7 @@ const redis = Redis.fromEnv();
 
 // Only allow requests from VS Code extension runtime and your own domains
 const ALLOWED_ORIGINS = [
-    'https://freebird.tenlabs.io',
+    'https://ten-labs.com.au',
     'vscode-webview://'  // VS Code webview origin
 ];
 

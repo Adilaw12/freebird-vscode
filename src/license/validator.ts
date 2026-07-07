@@ -8,6 +8,7 @@ const OFFLINE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days offline grace
 
 export interface LicenseStatus {
     isPro: boolean;
+    plan?: 'pro' | 'enterprise';
     email?: string;
     expiresAt?: string;
 }
@@ -55,9 +56,10 @@ export async function getLicenseStatus(context: vscode.ExtensionContext): Promis
 
         if (!res.ok) return fallbackToCache(persisted, key);
 
-        const data = await res.json() as { valid: boolean; email?: string; expiresAt?: string };
+        const data = await res.json() as { valid: boolean; email?: string; plan?: string; expiresAt?: string };
         const status: LicenseStatus = {
             isPro: data.valid === true,
+            plan: data.plan === 'enterprise' ? 'enterprise' : 'pro',
             email: data.email,
             expiresAt: data.expiresAt
         };

@@ -41,6 +41,21 @@ export default async function handler(req, res) {
                     break;
                 }
 
+                // Determine plan from which Stripe Price was actually purchased —
+                // never trust anything client-supplied for this. Configure
+                // STRIPE_ENTERPRISE_PRICE_ID in Vercel to match the Enterprise
+                // Payment Link's price; anything else defaults to 'pro'.
+                let plan = 'pro';
+                try {
+                    const lineItems = await stripe.checkout.sessions.listLineItems(session.id, { limit: 1 });
+                    const priceId = lineItems?.data?.[0]?.price?.id;
+                    if (priceId && process.env.STRIPE_ENTERPRISE_PRICE_ID && priceId === process.env.STRIPE_ENTERPRISE_PRICE_ID) {
+                        plan = 'enterprise';
+                    }
+                } catch (err) {
+                    console.error('Could not read line items, defaulting to pro plan:', err.message);
+                }
+
                 // Check if this customer already has a key (e.g. resubscribed)
                 const existingCustomer = await redis.get(`customer:${session.customer}`);
                 let key = existingCustomer?.key;
@@ -55,7 +70,7 @@ export default async function handler(req, res) {
                     key,
                     stripeCustomerId:     session.customer,
                     stripeSubscriptionId: session.subscription,
-                    plan:      'pro',
+                    plan,
                     status:    'active',
                     createdAt: existingCustomer?.createdAt ?? new Date().toISOString(),
                     updatedAt: new Date().toISOString()
@@ -74,7 +89,7 @@ export default async function handler(req, res) {
                 await redis.hincrby(paidKey, 'pro_subscribed', 1).catch(() => {});
                 await redis.expire(paidKey, 90 * 24 * 60 * 60).catch(() => {});
 
-                console.log(`Freebird Pro activated: ${email} → ${key}`);
+                console.log(`Freebird ${plan} activated: ${email} → ${key}`);
                 break;
             }
 

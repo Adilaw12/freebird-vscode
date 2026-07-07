@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { AIProvider, Message, CompletionOptions } from './provider';
+import { getStoredSession } from '../auth/github';
 
 const API_BASE  = 'https://freebird-backend.vercel.app';
 const QUOTA_KEY = 'freebird.cloudQuotaRemaining';
@@ -37,9 +38,20 @@ export class CloudProvider implements AIProvider {
             ? `${API_BASE}/api/fallback`
             : `${API_BASE}/api/chat`;
 
-        // Always send sessionId (machineId) — including in fallback mode — so the
-        // backend can enforce the same per-machine daily cap on both endpoints.
-        const body = { messages, sessionId: this.sessionId, maxTokens: opts?.maxTokens ?? 2048 };
+        // sessionId (machineId) is still sent as a legacy fallback identity for
+        // as long as the backend supports it during rollout. authToken — issued
+        // after GitHub sign-in — is the real, unspoofable identity. licenseKey
+        // lets Pro/Enterprise subscribers skip quota entirely server-side.
+        const session    = await getStoredSession(this.context);
+        const licenseKey = vscode.workspace.getConfiguration('freebird').get<string>('licenseKey', '').trim();
+
+        const body = {
+            messages,
+            sessionId:  this.sessionId,
+            authToken:  session?.sessionToken,
+            licenseKey: licenseKey || undefined,
+            maxTokens:  opts?.maxTokens ?? 2048
+        };
 
         const res = await fetch(endpoint, {
             method:  'POST',
@@ -47,6 +59,13 @@ export class CloudProvider implements AIProvider {
             body:    JSON.stringify(body),
             signal:  AbortSignal.timeout(30_000)
         });
+
+        if (res.status === 401) {
+            const errorBody = await res.json().catch(() => ({})) as Record<string, unknown>;
+            const err = new Error('AUTH_REQUIRED') as any;
+            err.code  = (errorBody.code as string) ?? 'AUTH_REQUIRED';
+            throw err;
+        }
 
         if (res.status === 429) {
             const errorBody = await res.json().catch(() => ({})) as Record<string, unknown>;
@@ -79,10 +98,14 @@ export class CloudProvider implements AIProvider {
             throw new Error(`Cloud AI error (${res.status}): ${detail}`);
         }
 
-        // Update local quota cache from response header (quota mode only)
-        const remaining = res.headers.get('X-Quota-Remaining');
-        if (remaining !== null) {
-            await this.context.globalState.update(QUOTA_KEY, parseInt(remaining, 10));
+        // Update local quota cache from response headers (quota mode only)
+        if (res.headers.get('X-Quota-Unmetered') === 'true') {
+            await this.context.globalState.update(QUOTA_KEY, Number.POSITIVE_INFINITY);
+        } else {
+            const remaining = res.headers.get('X-Quota-Remaining');
+            if (remaining !== null) {
+                await this.context.globalState.update(QUOTA_KEY, parseInt(remaining, 10));
+            }
         }
 
         // Stream plain-text response
