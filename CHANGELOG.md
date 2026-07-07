@@ -2,6 +2,17 @@
 
 ## \[0.8.0] — 2026-07-07
 
+### Critical fix
+
+* **Chat panel has been completely non-functional since v0.6.10** — two unescaped
+apostrophes inside single-quoted JS strings (`You're a serious Freebird user`, `You're
+clearly getting real value from Freebird`, both in the quota-wall messaging) broke the
+entire inline `<script>` block's parse, silently killing every event handler in the chat
+webview. Nothing renders, nothing throws a visible error, sending a message just does
+nothing. This has been live since v0.6.10 and shipped in every version through v0.7.4.
+Inline edit (a separate code path) was unaffected. Fixed by escaping both apostrophes;
+verified the whole script block now parses cleanly.
+
 ### Security
 
 * **GitHub sign-in replaces spoofable machine ID for free-tier identity** — the previous
