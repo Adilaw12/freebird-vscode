@@ -151,6 +151,10 @@
       {
         "command": "freebird.manageTeamSeats",
         "title": "Freebird: Manage Team Seats"
+      },
+      {
+        "command": "freebird.startTrial",
+        "title": "Freebird: Start Free Pro Trial"
       }
     ],
     "keybindings": [

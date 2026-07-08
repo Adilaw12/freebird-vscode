@@ -1,5 +1,18 @@
 # Changelog
 
+## \[Unreleased]
+
+### Added
+
+* **Self-serve 7-day Pro trial** — replaces the old "email the founder" trial
+request with a one-click "start a 7-day free trial" link in the quota wall.
+Gated on GitHub sign-in (same identity used for free-tier quota) so a trial
+can only be claimed once per GitHub account; no manual key copy/paste — it
+activates immediately. Trial licenses are fully unmetered (like Pro) until
+they expire, then automatically stop working with no cron job needed.
+Tracked in the conversion funnel as a new `trial_started` stage between
+"quota wall shown" and "subscribed".
+
 ## \[0.8.0] — 2026-07-07
 
 ### Critical fix

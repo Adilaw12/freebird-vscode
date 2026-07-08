@@ -9,6 +9,7 @@
 import { Redis } from '@upstash/redis';
 import { createHash } from 'crypto';
 import { verifySession } from '../lib/authToken.js';
+import { isLicenseActive } from '../lib/license.js';
 
 const redis = Redis.fromEnv();
 
@@ -58,7 +59,7 @@ export default async function handler(req, res) {
     if (licenseKey && typeof licenseKey === 'string') {
         try {
             const license = await redis.get(`license:${licenseKey.trim().toUpperCase()}`);
-            if (license && license.status === 'active' && ['pro', 'enterprise', 'team'].includes(license.plan)) {
+            if (isLicenseActive(license)) {
                 unmetered = true;
             }
         } catch (err) {

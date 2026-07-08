@@ -133,6 +133,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 case 'sign-in-github':
                     vscode.commands.executeCommand('freebird.signInWithGitHub');
                     break;
+                case 'start-trial':
+                    vscode.commands.executeCommand('freebird.startTrial');
+                    break;
             }
         });
 
