@@ -3,7 +3,7 @@ import { ChatViewProvider } from './chat/panel';
 import { GitService } from './git/service';
 import { registerInlineEdit } from './inline/editor';
 import { registerTabCompletion } from './inline/completionProvider';
-import { getLicenseStatus, warmLicenseCache, activateLicense, clearLicenseCache, UPGRADE_URL, API_BASE } from './license/validator';
+import { getLicenseStatus, warmLicenseCache, activateLicense, clearLicenseCache, startTrial, UPGRADE_URL, API_BASE } from './license/validator';
 import { getCloudEditsRemaining } from './license/usage';
 import { signInWithGitHub, getStoredSession, clearSession } from './auth/github';
 import { initWorkspaceTreeCache } from './agent/tools';
@@ -43,10 +43,15 @@ export function activate(context: vscode.ExtensionContext) {
 
     async function refreshStatusBar() {
         const s = await getLicenseStatus(context);
-        const planLabel = s.plan === 'enterprise' ? 'Enterprise' : s.plan === 'team' ? 'Team' : 'Pro';
+        const planLabel = s.plan === 'enterprise' ? 'Enterprise' : s.plan === 'team' ? 'Team' : s.plan === 'trial' ? 'Trial' : 'Pro';
         if (s.isPro) {
             statusBar.text = `$(send) Freebird AI ${planLabel}`;
-            statusBar.tooltip = `Freebird AI ${planLabel} — ${s.email ?? 'active'}`;
+            if (s.plan === 'trial' && s.expiresAt) {
+                const daysLeft = Math.max(0, Math.ceil((new Date(s.expiresAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000)));
+                statusBar.tooltip = `Freebird AI Trial — ${daysLeft} day${daysLeft === 1 ? '' : 's'} left`;
+            } else {
+                statusBar.tooltip = `Freebird AI ${planLabel} — ${s.email ?? 'active'}`;
+            }
         } else {
             const session = await getStoredSession(context);
             statusBar.text = '$(send) Freebird AI';
@@ -171,6 +176,58 @@ export function activate(context: vscode.ExtensionContext) {
             await clearSession(context);
             vscode.window.showInformationMessage('Signed out of Freebird GitHub sign-in.');
             refreshStatusBar();
+        }),
+
+        vscode.commands.registerCommand('freebird.startTrial', async () => {
+            let session = await getStoredSession(context);
+
+            if (!session) {
+                const choice = await vscode.window.showInformationMessage(
+                    'Starting your free 7-day Pro trial needs a quick GitHub sign-in (so trials can\'t be reused) — no email required.',
+                    'Sign in with GitHub', 'Cancel'
+                );
+                if (choice !== 'Sign in with GitHub') return;
+
+                try {
+                    session = await vscode.window.withProgress(
+                        { location: vscode.ProgressLocation.Notification, title: 'Waiting for GitHub sign-in…', cancellable: false },
+                        () => signInWithGitHub(context)
+                    );
+                    trackEvent('github_signed_in');
+                } catch (err: any) {
+                    if (err?.message === 'CANCELLED') return;
+                    vscode.window.showErrorMessage(`GitHub sign-in failed: ${err.message}`);
+                    return;
+                }
+            }
+
+            const activeSession = session;
+            await vscode.window.withProgress(
+                { location: vscode.ProgressLocation.Notification, title: 'Starting your Pro trial…', cancellable: false },
+                async () => {
+                    const result = await startTrial(context, activeSession.sessionToken);
+
+                    if (result.ok) {
+                        trackEvent('trial_started');
+                        vscode.window.showInformationMessage(
+                            '🎉 7-day Freebird Pro trial activated — unlimited edits, BYOK, and project memory. Enjoy!'
+                        );
+                        refreshStatusBar();
+                    } else if (result.code === 'TRIAL_USED') {
+                        trackEvent('trial_already_used');
+                        const action = await vscode.window.showWarningMessage(
+                            'You\'ve already used your free trial on this GitHub account.',
+                            'Upgrade to Pro'
+                        );
+                        if (action === 'Upgrade to Pro') {
+                            trackEvent('upgrade_clicked');
+                            vscode.env.openExternal(vscode.Uri.parse(UPGRADE_URL));
+                        }
+                    } else {
+                        vscode.window.showErrorMessage(result.error ?? 'Could not start trial. Please try again.');
+                    }
+                }
+            );
         }),
 
         vscode.commands.registerCommand('freebird.manageTeamSeats', async () => {

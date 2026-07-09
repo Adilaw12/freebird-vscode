@@ -22,6 +22,19 @@ quota-exhaustion routing event, not a failure, and was making the error count lo
 alarming for what's actually a sign of real usage. Added `byok_blocked_no_license` to
 Feature Popularity so the fix above is measurable going forward.
 
+## \[0.8.2] — 2026-07-09
+
+### Added
+
+* **Self-serve 7-day Pro trial** — replaces the old "email the founder" trial
+request with a one-click "start a 7-day free trial" link in the quota wall.
+Gated on GitHub sign-in (same identity used for free-tier quota) so a trial
+can only be claimed once per GitHub account; no manual key copy/paste — it
+activates immediately. Trial licenses are fully unmetered (like Pro) until
+they expire, then automatically stop working with no cron job needed.
+Tracked in the conversion funnel as a new `trial_started` stage between
+"quota wall shown" and "subscribed".
+
 ## \[0.8.0] — 2026-07-07
 
 ### Critical fix

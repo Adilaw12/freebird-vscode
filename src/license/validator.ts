@@ -8,10 +8,17 @@ const OFFLINE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days offline grace
 
 export interface LicenseStatus {
     isPro: boolean;
-    plan?: 'pro' | 'enterprise' | 'team';
+    plan?: 'pro' | 'enterprise' | 'team' | 'trial';
     isTeamOwner?: boolean;
     email?: string;
     expiresAt?: string;
+}
+
+export interface StartTrialResult {
+    ok: boolean;
+    trialEndsAt?: number;
+    error?: string;
+    code?: string;
 }
 
 interface CacheEntry {
@@ -60,7 +67,7 @@ export async function getLicenseStatus(context: vscode.ExtensionContext): Promis
         const data = await res.json() as { valid: boolean; email?: string; plan?: string; isTeamOwner?: boolean; expiresAt?: string };
         const status: LicenseStatus = {
             isPro: data.valid === true,
-            plan: data.plan === 'enterprise' ? 'enterprise' : data.plan === 'team' ? 'team' : 'pro',
+            plan: data.plan === 'enterprise' ? 'enterprise' : data.plan === 'team' ? 'team' : data.plan === 'trial' ? 'trial' : 'pro',
             isTeamOwner: data.isTeamOwner === true,
             email: data.email,
             expiresAt: data.expiresAt
@@ -130,4 +137,33 @@ export function getCachedLicenseStatus(): LicenseStatus {
         return _memCache.status;
     }
     return { isPro: false };
+}
+
+/**
+ * Claims a self-serve 7-day Pro trial for the signed-in GitHub account and,
+ * on success, activates it immediately — no manual key copy/paste needed.
+ */
+export async function startTrial(
+    context: vscode.ExtensionContext,
+    sessionToken: string
+): Promise<StartTrialResult> {
+    try {
+        const res = await fetch(`${API_BASE}/api/start-trial`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ authToken: sessionToken }),
+            signal: AbortSignal.timeout(10_000)
+        });
+
+        const data = await res.json() as { key?: string; trialEndsAt?: number; error?: string; code?: string };
+
+        if (!res.ok || !data.key) {
+            return { ok: false, error: data.error ?? 'Could not start trial.', code: data.code };
+        }
+
+        await activateLicense(context, data.key);
+        return { ok: true, trialEndsAt: data.trialEndsAt };
+    } catch (err: any) {
+        return { ok: false, error: err?.message ?? 'Network error starting trial.' };
+    }
 }

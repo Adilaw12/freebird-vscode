@@ -1,4 +1,5 @@
 import { Redis } from '@upstash/redis';
+import { isLicenseActive } from '../lib/license.js';
 
 const redis = Redis.fromEnv();
 
@@ -46,7 +47,7 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: 'Validation service unavailable' });
     }
 
-    if (!license || license.status !== 'active') {
+    if (!isLicenseActive(license)) {
         return res.status(200).json({ valid: false });
     }
 
@@ -56,6 +57,8 @@ export default async function handler(req, res) {
         email: license.email,
         plan: license.plan ?? 'pro',
         isTeamOwner: license.plan === 'team' && license.teamOwnerKey === normalised,
-        expiresAt: license.expiresAt ?? null
+        expiresAt: license.plan === 'trial'
+            ? new Date(license.trialEndsAt).toISOString()
+            : (license.expiresAt ?? null)
     });
 }

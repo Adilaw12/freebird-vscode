@@ -190,8 +190,9 @@ function render(data) {
   html += kpi('New Subscriptions', totalSubscribed, data.days.length + 'd total');
   html += '</div>';
 
-  // Conversion funnel: wall shown → upgrade clicked → subscribed
+  // Conversion funnel: wall shown → trial started / upgrade clicked → subscribed
   var fWall  = totals.quota_wall_shown || 0;
+  var fTrial = totals.trial_started || 0;
   var fClick = totals.upgrade_clicked || 0;
   var fPaid  = totals.pro_subscribed || 0;
   var rClick = fWall ? (fClick / fWall * 100) : 0;
@@ -200,6 +201,7 @@ function render(data) {
 
   html += '<div class="section"><h2>Conversion Funnel (' + data.days.length + 'd)</h2>';
   html += funnelRow('Quota wall shown', fWall, 100, 'top of funnel');
+  html += funnelRow('Trial started', fTrial, fWall ? (fTrial / fWall * 100) : 0, fWall ? (fTrial / fWall * 100).toFixed(1) + '% of walls shown' : 'self-serve, no email');
   html += funnelRow('Upgrade clicked', fClick, fWall ? (fClick / fWall * 100) : 0, rClick.toFixed(1) + '% of walls shown');
   html += funnelRow('Subscribed (paid)', fPaid, fWall ? (fPaid / fWall * 100) : 0,
     rPaidOfClick.toFixed(1) + '% of clicks · ' + rPaidOverall.toFixed(2) + '% overall');
@@ -208,7 +210,7 @@ function render(data) {
   // Feature popularity
   var featureEvents = ['message_sent','pro_message','cloud_edit_used','ollama_fallback',
     'inline_edit','ai_commit','chat_opened','upgrade_clicked','backend_configured',
-    'license_activated','byok_blocked_no_license'];
+    'license_activated','byok_blocked_no_license','trial_started'];
   var featureData = featureEvents.map(function(k) { return { name: k, count: totals[k] || 0 }; })
     .sort(function(a,b) { return b.count - a.count; });
   var maxFeature = featureData.length ? featureData[0].count : 1;

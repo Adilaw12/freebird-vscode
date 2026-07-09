@@ -1028,7 +1028,7 @@ function showQuotaWall() {
       + '<div class="quota-wall-actions">'
         + '<button class="quota-wall-btn-primary" onclick="vscode.postMessage({type:\'upgrade\'})">Upgrade to Pro — $6/month →</button>'
       + '</div>'
-      + '<div class="quota-wall-reset">Free edits reset in ' + resetTime + ' (midnight UTC) &middot; <a href="mailto:support@ten-labs.com.au?subject=Pro%20Trial%20Request&body=Hi%20Adisa%2C%20I%27d%20love%20a%20free%20Pro%20trial!" style="color:inherit">or ask about a trial</a></div>';
+      + '<div class="quota-wall-reset">Free edits reset in ' + resetTime + ' (midnight UTC) &middot; <a href="#" onclick="vscode.postMessage({type:\'start-trial\'}); return false;" style="color:inherit">or start a 7-day free trial</a></div>';
   } else {
     wall.innerHTML =
       '<div class="quota-wall-header">'
@@ -1050,7 +1050,7 @@ function showQuotaWall() {
         + '<button class="quota-wall-btn-primary" onclick="vscode.postMessage({type:\'upgrade\'})">Upgrade to Pro — $6/month →</button>'
         + '<button class="quota-wall-btn-secondary" onclick="vscode.postMessage({type:\'install-ollama\'})">Install Ollama (free)</button>'
       + '</div>'
-      + '<div class="quota-wall-reset">Free edits reset in ' + resetTime + ' (midnight UTC)</div>';
+      + '<div class="quota-wall-reset">Free edits reset in ' + resetTime + ' (midnight UTC) &middot; <a href="#" onclick="vscode.postMessage({type:\'start-trial\'}); return false;" style="color:inherit">or start a 7-day free trial</a></div>';
   }
 
   msgsEl.appendChild(wall); scroll();
