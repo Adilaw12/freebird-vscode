@@ -116,3 +116,18 @@ export function clearLicenseCache(context: vscode.ExtensionContext): void {
     context.globalState.update('licenseCache', undefined);
     _memCache = null;
 }
+
+/**
+ * Synchronous, cache-only license check. For gates that can't await (like
+ * getProvider, called from hot paths such as tab completion). Fails CLOSED —
+ * if the cache hasn't warmed yet or has expired, this returns isPro: false
+ * rather than risk treating an unverified user as licensed. warmLicenseCache
+ * is called at activation specifically so this cache is populated well before
+ * any BYOK call would need it.
+ */
+export function getCachedLicenseStatus(): LicenseStatus {
+    if (_memCache && Date.now() - _memCache.ts < CACHE_TTL_MS) {
+        return _memCache.status;
+    }
+    return { isPro: false };
+}

@@ -1,5 +1,27 @@
 # Changelog
 
+## \[Unreleased]
+
+### Security
+
+* **Fixed: BYOK backends had zero license check — any free user could bypass the entire
+paywall via a settings dropdown.** `getProvider()` returned `AnthropicProvider`/
+`OpenAIProvider`/`DeepSeekProvider`/`QwenProvider` directly with no check that the user
+held an active Pro/Team/Enterprise license, despite the README stating "All BYOK models
+require Pro." This affected all four call sites that route through `getProvider`: inline
+edit, tab completion, `/commit`, and the Pro chat path — meaning a free user could set
+`Freebird: Backend` to `openai`, supply their own API key, and get fully unmetered,
+unlimited use with no subscription, no quota, and no spoofing required. Fixed by gating
+BYOK backends behind a synchronous cached license check (`getCachedLicenseStatus`) at the
+single `getProvider()` choke point; unlicensed users now transparently fall back to the
+free cloud tier with a one-time explanatory notification instead of silently getting BYOK
+for free. This was surfaced by telemetry showing users on the `openai` backend without a
+way to confirm they were actually licensed.
+* Dashboard: removed `ollama_fallback` from the error classification — it's a normal
+quota-exhaustion routing event, not a failure, and was making the error count look
+alarming for what's actually a sign of real usage. Added `byok_blocked_no_license` to
+Feature Popularity so the fix above is measurable going forward.
+
 ## \[0.8.0] — 2026-07-07
 
 ### Critical fix

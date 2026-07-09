@@ -7,9 +7,12 @@ import { DeepSeekProvider } from './deepseek';
 import { QwenProvider } from './qwen';
 import { CloudProvider } from './cloud';
 import { trackEvent } from '../telemetry';
+import { getCachedLicenseStatus, UPGRADE_URL } from '../license/validator';
 
 // Re-export so callers don't need to import CloudProvider separately
 export { CloudProvider };
+
+const BYOK_BACKENDS = new Set(['anthropic', 'openai', 'deepseek', 'qwen']);
 
 /**
  * Returns the appropriate AI provider based on user config.
@@ -17,11 +20,18 @@ export { CloudProvider };
  * Routing logic:
  *
  * BYOK backends (anthropic / openai / deepseek / qwen):
- *   → Return provider directly. User has explicitly configured these.
+ *   → Requires an active Pro/Team/Enterprise license (checked against the
+ *     cache warmed at activation — see getCachedLicenseStatus). Without one,
+ *     silently routes to CloudProvider instead of honoring the BYOK setting.
+ *     This closes a real gap: previously any free user could switch
+ *     Backend to e.g. "openai", supply their own key, and get fully
+ *     unmetered use with zero license required — no spoofing needed, just
+ *     a settings dropdown.
  *
  * ollama (explicit):
  *   → Return a FallbackProvider: tries Ollama first, falls back to Cloud
  *     if Ollama is unreachable. Shows a one-time notification on fallback.
+ *     Ollama is always free — no license required.
  *
  * default (new installs / no config):
  *   → Return CloudProvider directly. No Ollama dependency on first run.
@@ -31,12 +41,23 @@ export function getProvider(context: vscode.ExtensionContext, sessionId: string)
     const config  = vscode.workspace.getConfiguration('freebird');
     const backend = config.get<string>('backend', 'cloud');
 
-    switch (backend) {
-        case 'anthropic': return new AnthropicProvider();
-        case 'openai':    return new OpenAIProvider();
-        case 'deepseek':  return new DeepSeekProvider();
-        case 'qwen':      return new QwenProvider();
+    if (BYOK_BACKENDS.has(backend)) {
+        if (getCachedLicenseStatus().isPro) {
+            switch (backend) {
+                case 'anthropic': return new AnthropicProvider();
+                case 'openai':    return new OpenAIProvider();
+                case 'deepseek':  return new DeepSeekProvider();
+                case 'qwen':      return new QwenProvider();
+            }
+        }
+        // Not licensed — fall back to the free cloud tier instead of honoring
+        // the BYOK setting, and let them know once per session why.
+        trackEvent('byok_blocked_no_license');
+        notifyByokRequiresPro(context);
+        return new CloudProvider(context, sessionId);
+    }
 
+    switch (backend) {
         case 'ollama':
             // Explicit Ollama: try it, fall back to cloud on failure
             return new FallbackProvider(
@@ -49,6 +70,22 @@ export function getProvider(context: vscode.ExtensionContext, sessionId: string)
             // 'cloud' or unrecognised — use cloud tier (Gemini Flash, 5/day free)
             return new CloudProvider(context, sessionId);
     }
+}
+
+let byokWarningShown = false;
+function notifyByokRequiresPro(context: vscode.ExtensionContext): void {
+    if (byokWarningShown) return;
+    byokWarningShown = true;
+
+    vscode.window.showWarningMessage(
+        'Your Backend setting is a bring-your-own-key model, but that requires an active Pro/Team/Enterprise license — using the free cloud tier instead for now.',
+        'Upgrade to Pro',
+        'Dismiss'
+    ).then(choice => {
+        if (choice === 'Upgrade to Pro') {
+            vscode.env.openExternal(vscode.Uri.parse(UPGRADE_URL));
+        }
+    });
 }
 
 /**

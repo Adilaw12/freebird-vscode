@@ -16,8 +16,12 @@ const redis = Redis.fromEnv();
 //   telemetry:session:{sessionId}         string — "1", TTL 1 hour (dedup)
 //   telemetry:machines:{YYYY-MM-DD}       set   — unique machineIds seen that day
 
+// ollama_fallback deliberately excluded — it's a normal, expected routing
+// event (quota exhausted → try Ollama → fall back to cloud), not a failure.
+// Classifying it as an error made the dashboard look alarming when it was
+// actually a sign of real usage.
 const ERROR_EVENTS = new Set([
-    'ollama_fallback', 'api_error', 'ollama_not_reachable',
+    'api_error', 'ollama_not_reachable',
     'commit_failed', 'push_failed', 'tool_error'
 ]);
 
