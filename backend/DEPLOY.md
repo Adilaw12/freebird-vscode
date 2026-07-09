@@ -162,5 +162,6 @@ npx vsce publish
 | `POST /api/validate` | Extension calls this to verify a license key |
 | `POST /api/auth-github` | Verifies a GitHub access token, issues a signed session token |
 | `POST /api/team-seats` | Team plan owner adds/removes/lists seats |
+| `POST /api/embed` | Codebase semantic search embeddings (cloud tier) — uses the same `GEMINI_API_KEY`, no new env var needed |
 | `POST /api/webhook` | Stripe calls this when subscriptions change |
 | `GET /api/success?session_id=xxx` | Shows the license key after payment |

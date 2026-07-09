@@ -299,6 +299,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 history: this.trimHistory(this.history),
                 provider: getProvider(this.context, getMachineId()),
                 git: this.git,
+                context: this.context,
+                sessionId: getMachineId(),
                 onEvent: (event: AgentEvent) => this.handleAgentEvent(event),
                 onApprovalNeeded: (id, description, preview) =>
                     new Promise<boolean>(resolve => {

@@ -1,5 +1,33 @@
 # Changelog
 
+## \[Unreleased]
+
+### Added
+
+* **Codebase semantic search** — new `search_codebase_semantic` agent tool alongside the
+existing regex-based `search_code`, so the agent can find conceptually related code even
+when the query words don't literally appear (e.g. "where do we handle auth expiry" finds
+the right file even if it never says "expiry"). Architecture, deliberately kept cheap:
+  - **No hosted vector database.** Embeddings are stored locally per-workspace
+  (`.freebird/codeindex.json`) and searched via brute-force cosine similarity — completely
+  fine at single-repo scale, and means code never leaves the user's machine except for the
+  one API call needed to compute each embedding.
+  - **Three embedding backends, mirroring the existing chat backend routing**: Ollama
+  (`nomic-embed-text`, local, always free), cloud (Gemini `text-embedding-004`, proxied
+  through the same `GEMINI_API_KEY` chat already uses — no new env var), and OpenAI BYOK
+  (gated behind an active license, same rule as `getProvider()`'s BYOK gate).
+  - **Incremental, not a full rebuild every time**: a content-hash check skips re-embedding
+  unchanged files; a file-save watcher keeps the index current automatically once one
+  exists. Indexing is opt-in by use (first `search_codebase_semantic` call, or
+  `Freebird: Build Codebase Index`) — not a cost every workspace pays on activation whether
+  or not the agent is ever used.
+  - New `backend/api/embed.js`: much more generous daily limits than chat (embeddings cost
+  roughly two orders of magnitude less per token, and indexing is a one-time-per-file cost,
+  not per-message) — still unmetered for an active Pro/Team/Enterprise/trial license.
+* 9 new tests (`test/chunker.test.js`, `test/vector-math.test.js`, `test/index-store.test.js`)
+covering chunking edge cases, cosine similarity math, and the store's persistence/dedup
+behavior — all pure logic, no vscode mock needed for these three.
+
 ## \[0.8.3] — 2026-07-09
 
 ### Security

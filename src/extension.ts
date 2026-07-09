@@ -6,10 +6,11 @@ import { registerTabCompletion } from './inline/completionProvider';
 import { getLicenseStatus, warmLicenseCache, activateLicense, clearLicenseCache, startTrial, UPGRADE_URL, API_BASE } from './license/validator';
 import { getCloudEditsRemaining } from './license/usage';
 import { signInWithGitHub, getStoredSession, clearSession } from './auth/github';
+import { buildIndex, updateFileInIndex, removeFileFromIndex, getIndexStats } from './index/indexer';
 import { initWorkspaceTreeCache } from './agent/tools';
 import { previewHtmlFile } from './agent/preview';
 import { checkOllamaSetup } from './ai/ollamaSetup';
-import { initTelemetry, disposeTelemetry, trackEvent } from './telemetry';
+import { initTelemetry, disposeTelemetry, trackEvent, getMachineId } from './telemetry';
 import { checkAnnouncement } from './announcement';
 
 export function activate(context: vscode.ExtensionContext) {
@@ -379,6 +380,43 @@ export function activate(context: vscode.ExtensionContext) {
             vscode.window.showInformationMessage(`Freebird AI configured to use ${backend.label}`);
             clearLicenseCache(context);
             refreshStatusBar();
+        }),
+
+        vscode.commands.registerCommand('freebird.buildCodebaseIndex', async () => {
+            trackEvent('codebase_index_build_started');
+            await vscode.window.withProgress(
+                { location: vscode.ProgressLocation.Notification, title: 'Freebird: indexing codebase for semantic search', cancellable: false },
+                async progressReporter => {
+                    const result = await buildIndex(context, getMachineId(), p => {
+                        if (p.totalFiles > 0) {
+                            progressReporter.report({
+                                message: `${p.filesProcessed}/${p.totalFiles}${p.currentFile ? ' — ' + p.currentFile : ''}`
+                            });
+                        }
+                    });
+                    const stats = getIndexStats();
+                    vscode.window.showInformationMessage(
+                        `Codebase index updated: ${result.indexed} file(s) indexed, ${result.skipped} unchanged` +
+                        (result.failed ? `, ${result.failed} failed` : '') +
+                        (stats ? ` (${stats.chunkCount} chunks across ${stats.fileCount} files total).` : '.')
+                    );
+                }
+            );
+        })
+    );
+
+    // ── Incremental codebase index updates ──────────────────────────────────
+    // Only acts if an index already exists — semantic search is opt-in by use
+    // (via freebird.buildCodebaseIndex or the agent's search tool), not a cost
+    // every workspace pays whether or not anyone touches the agent.
+    context.subscriptions.push(
+        vscode.workspace.onDidSaveTextDocument(doc => {
+            if (getIndexStats() === null) return;
+            updateFileInIndex(context, getMachineId(), doc.uri).catch(() => {});
+        }),
+        vscode.workspace.onDidDeleteFiles(e => {
+            if (getIndexStats() === null) return;
+            for (const uri of e.files) removeFileFromIndex(uri);
         })
     );
 }

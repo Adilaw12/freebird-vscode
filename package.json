@@ -155,6 +155,10 @@
       {
         "command": "freebird.startTrial",
         "title": "Freebird: Start Free Pro Trial"
+      },
+      {
+        "command": "freebird.buildCodebaseIndex",
+        "title": "Freebird: Build Codebase Index (Semantic Search)"
       }
     ],
     "keybindings": [

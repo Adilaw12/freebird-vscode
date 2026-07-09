@@ -19,7 +19,10 @@ const { summary } = require('./helpers');
 const suites = [
     require('./chat-html-syntax.test.js'),
     require('./byok-gate.test.js'),
-    require('./license-status.test.js')
+    require('./license-status.test.js'),
+    require('./chunker.test.js'),
+    require('./vector-math.test.js'),
+    require('./index-store.test.js')
 ];
 
 (async () => {

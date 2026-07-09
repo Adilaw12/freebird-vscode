@@ -7,6 +7,7 @@ import { exec, ExecException } from 'child_process';
 import { GitService } from '../git/service';
 import { previewHtmlFile } from './preview';
 import { ToolSchema } from '../ai/provider';
+import { searchCodebaseSemantic } from '../index/indexer';
 
 export interface ToolCall {
     action: string;
@@ -40,12 +41,24 @@ export const NATIVE_TOOL_SCHEMAS: ToolSchema[] = [
     },
     {
         name: 'search_code',
-        description: 'Search for a regex pattern across workspace files. Returns matching lines with file paths and line numbers.',
+        description: 'Search for a regex pattern across workspace files. Returns matching lines with file paths and line numbers. Use this for exact strings, symbol names, or regex patterns.',
         input_schema: {
             type: 'object',
             properties: {
                 query: { type: 'string', description: 'Regex pattern to search for' },
                 filePattern: { type: 'string', description: 'Glob to filter files (default: **/*)', default: '**/*' }
+            },
+            required: ['query']
+        }
+    },
+    {
+        name: 'search_codebase_semantic',
+        description: 'Search the codebase by meaning rather than exact text — finds conceptually related code even when the query words don\'t appear literally (e.g. "where do we handle auth expiry" finds the right code even if it never says the word "expiry"). Prefer this over search_code when you\'re looking for a concept, behavior, or "where is X handled" rather than a known exact string/symbol name. Builds a local index on first use (may take a few seconds on a large repo).',
+        input_schema: {
+            type: 'object',
+            properties: {
+                query: { type: 'string', description: 'Natural-language description of what you\'re looking for' },
+                topK: { type: 'number', description: 'How many results to return (default 8)', default: 8 }
             },
             required: ['query']
         }
@@ -154,7 +167,8 @@ You have access to tools to read and modify the codebase. To invoke a tool write
 AVAILABLE TOOLS:
 - read_file     {"action":"read_file","path":"src/main.ts"}                                       read a file
 - list_files    {"action":"list_files","pattern":"**/*.ts"}                                       list files by glob
-- search_code   {"action":"search_code","query":"myFunc","filePattern":"*.ts"}                    grep across files
+- search_code   {"action":"search_code","query":"myFunc","filePattern":"*.ts"}                    grep across files (exact text/regex)
+- search_codebase_semantic {"action":"search_codebase_semantic","query":"how does auth expiry work"}  search by meaning, not exact text — use for concepts/behavior, not known symbol names
 - write_file    {"action":"write_file","path":"src/new.ts","content":"..."}                       create / overwrite
 - edit_file     {"action":"edit_file","path":"src/x.ts","oldStr":"exact","newStr":"replacement"}  targeted edit
 - preview_html  {"action":"preview_html","path":"index.html"}                                    open a live preview tab
@@ -168,6 +182,7 @@ AVAILABLE TOOLS:
 GUIDELINES:
 - For tasks that need multiple steps or touch several files, start your reply with a short plan — a numbered list of 2-5 steps — before making any tool calls, so the user knows what you're about to do. Skip the plan for simple one-step requests (answering a question, reading or editing a single file).
 - Always read files before editing — never assume their contents
+- Use search_code for exact strings/symbol names; use search_codebase_semantic for concepts or "where is X handled" when you don't know the exact wording
 - Use edit_file for targeted changes; write_file only for new files or complete rewrites
 - edit_file matches oldStr exactly when possible; if that fails it falls back to a whitespace-insensitive line match, so minor spacing differences are OK — but still copy oldStr from the file as closely as you can
 - After creating or editing an HTML file, call preview_html on it so the user can see the rendered page in a tab inside VS Code — don't tell them to install a separate live-server extension
@@ -181,6 +196,7 @@ GUIDELINES:
 export const NATIVE_TOOL_GUIDELINES = `GUIDELINES:
 - For tasks that need multiple steps or touch several files, start your reply with a short plan before making any tool calls.
 - Always read files before editing — never assume their contents.
+- Use search_code for exact strings/symbol names; use search_codebase_semantic for concepts or "where is X handled" when you don't know the exact wording.
 - Use edit_file for targeted changes; write_file only for new files or complete rewrites.
 - All paths are relative to the workspace root.
 - When the user asks you to build/create something, use write_file to create actual files — don't just print code.
@@ -279,13 +295,16 @@ function resolveWorkspacePath(relPath: string): string {
 export async function executeToolCall(
     tool: ToolCall,
     git: GitService,
-    onApprovalNeeded: ApprovalFn
+    onApprovalNeeded: ApprovalFn,
+    context: vscode.ExtensionContext,
+    sessionId: string
 ): Promise<ToolResult> {
     try {
         switch (tool.action) {
             case 'read_file':      return await readFileTool(tool);
             case 'list_files':     return await listFilesTool(tool);
             case 'search_code':    return await searchCodeTool(tool);
+            case 'search_codebase_semantic': return await searchCodebaseSemanticTool(tool, context, sessionId);
             case 'write_file':     return await writeFileTool(tool, onApprovalNeeded);
             case 'edit_file':      return await editFileTool(tool, onApprovalNeeded);
             case 'preview_html':   return await previewHtmlTool(tool);
@@ -363,6 +382,27 @@ async function searchCodeTool(tool: ToolCall): Promise<ToolResult> {
     }
 
     return { success: true, output: matches.length ? matches.join('\n') : 'No matches found.' };
+}
+
+async function searchCodebaseSemanticTool(
+    tool: ToolCall,
+    context: vscode.ExtensionContext,
+    sessionId: string
+): Promise<ToolResult> {
+    const query = String(tool.query ?? '');
+    if (!query) return { success: false, output: 'search_codebase_semantic requires "query".' };
+    const topK = typeof tool.topK === 'number' ? tool.topK : 8;
+
+    const results = await searchCodebaseSemantic(context, sessionId, query, topK);
+    if (results.length === 0) {
+        return { success: true, output: 'No semantically relevant results found (or the workspace has no indexable files yet).' };
+    }
+
+    const formatted = results.map(r =>
+        `${r.filePath}:${r.startLine + 1}-${r.endLine + 1} (relevance ${(r.score * 100).toFixed(0)}%)\n${truncate(r.text, 800)}`
+    ).join('\n\n---\n\n');
+
+    return { success: true, output: formatted };
 }
 
 async function ripgrepSearch(query: string, filePattern: string): Promise<string | null> {

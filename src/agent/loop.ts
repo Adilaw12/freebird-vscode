@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import { Message, AIProvider, RichMessage, ToolResultEntry } from '../ai/provider';
 import { parseToolCalls, executeToolCall, getWorkspaceTree, stripToolBlocks, nativeToToolCall,
          TOOL_SYSTEM_PROMPT, NATIVE_TOOL_GUIDELINES, NATIVE_TOOL_SCHEMAS, ToolCall } from './tools';
@@ -29,6 +30,8 @@ export interface AgentRunOptions {
     history: Message[];
     provider: AIProvider;
     git: GitService;
+    context: vscode.ExtensionContext;
+    sessionId: string;
     onEvent: (event: AgentEvent) => void;
     onApprovalNeeded: (id: string, description: string, preview: string) => Promise<boolean>;
 }
@@ -45,7 +48,7 @@ export async function runAgentLoop(opts: AgentRunOptions): Promise<Message[]> {
 // ── Native tool calling loop (Anthropic/OpenAI/DeepSeek/Qwen) ────────────────
 
 async function runNativeToolLoop(opts: AgentRunOptions): Promise<Message[]> {
-    const { userMessage, history, provider, git, onEvent, onApprovalNeeded } = opts;
+    const { userMessage, history, provider, git, context, sessionId, onEvent, onApprovalNeeded } = opts;
 
     const fileContext = buildFileContext();
     const workspaceTree = await getWorkspaceTree();
@@ -106,7 +109,7 @@ async function runNativeToolLoop(opts: AgentRunOptions): Promise<Message[]> {
             const internalTool = nativeToToolCall(tc.name, tc.input);
             const id = `${tc.name}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
             onEvent({ type: 'tool-start', id, tool: internalTool });
-            const toolResult = await executeToolCall(internalTool, git, onApprovalNeeded);
+            const toolResult = await executeToolCall(internalTool, git, onApprovalNeeded, context, sessionId);
             onEvent({ type: 'tool-result', id, tool: internalTool, success: toolResult.success, output: toolResult.output });
 
             toolResults.push({
@@ -132,7 +135,7 @@ async function runNativeToolLoop(opts: AgentRunOptions): Promise<Message[]> {
 // ── Text-parsed loop (Ollama fallback) ───────────────────────────────────────
 
 async function runTextParsedLoop(opts: AgentRunOptions): Promise<Message[]> {
-    const { userMessage, history, provider, git, onEvent, onApprovalNeeded } = opts;
+    const { userMessage, history, provider, git, context, sessionId, onEvent, onApprovalNeeded } = opts;
 
     const fileContext = buildFileContext();
     const workspaceTree = await getWorkspaceTree();
@@ -191,7 +194,7 @@ async function runTextParsedLoop(opts: AgentRunOptions): Promise<Message[]> {
         for (const tool of toolCalls) {
             const id = `${tool.action}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
             onEvent({ type: 'tool-start', id, tool });
-            const result = await executeToolCall(tool, git, onApprovalNeeded);
+            const result = await executeToolCall(tool, git, onApprovalNeeded, context, sessionId);
             onEvent({ type: 'tool-result', id, tool, success: result.success, output: result.output });
             toolResultParts.push(
                 `Result of ${tool.action}:\n` +
