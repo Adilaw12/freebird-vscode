@@ -48,7 +48,7 @@ class OllamaEmbeddingProvider implements EmbeddingProvider {
 }
 
 class CloudEmbeddingProvider implements EmbeddingProvider {
-    readonly id = 'cloud:text-embedding-004';
+    readonly id = 'cloud:gemini-embedding-001';
 
     constructor(private sessionId: string) {}
 

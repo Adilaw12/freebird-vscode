@@ -2,6 +2,23 @@
 
 ## \[Unreleased]
 
+### Critical fix
+
+* **Free-tier chat and fallback were down (502s) — Gemini deprecated the models we were using.**
+`gemini-2.5-flash` (chat.js, health.js) and `gemini-2.0-flash` (fallback.js) both stopped
+working — Google's own changelog confirms `gemini-2.0-flash` was shut down June 1, 2026, and
+production logs showed `gemini-2.5-flash` returning 404 "no longer available" as of July 9,
+2026, ahead of whatever official date is eventually published. All three now point to
+`gemini-3.1-flash-lite` (Google's current stable, cost-optimized Flash-tier model — same
+role `gemini-2.0-flash` used to play). Also caught before it ever shipped: the semantic
+search embedding proxy (`api/embed.js`, built earlier this session, not yet deployed) was
+built against `text-embedding-004`, which Google's changelog shows is also already shut
+down — switched to `gemini-embedding-001` before this ever went live.
+* **Lesson for next time:** hardcoded model IDs are a production liability with Gemini's
+current deprecation cadence (multiple forced migrations within months of each other per
+Google's own release notes). Worth a periodic health-check habit, or eventually routing
+through a model-alias/config value rather than a literal string in three separate files.
+
 ### Added
 
 * **Codebase semantic search** — new `search_codebase_semantic` agent tool alongside the
@@ -13,7 +30,7 @@ the right file even if it never says "expiry"). Architecture, deliberately kept 
   fine at single-repo scale, and means code never leaves the user's machine except for the
   one API call needed to compute each embedding.
   - **Three embedding backends, mirroring the existing chat backend routing**: Ollama
-  (`nomic-embed-text`, local, always free), cloud (Gemini `text-embedding-004`, proxied
+  (`nomic-embed-text`, local, always free), cloud (Gemini `gemini-embedding-001`, proxied
   through the same `GEMINI_API_KEY` chat already uses — no new env var), and OpenAI BYOK
   (gated behind an active license, same rule as `getProvider()`'s BYOK gate).
   - **Incremental, not a full rebuild every time**: a content-hash check skips re-embedding

@@ -1,4 +1,4 @@
-// api/embed.js — cloud-tier embedding proxy (Gemini text-embedding-004) for
+// api/embed.js — cloud-tier embedding proxy (Gemini gemini-embedding-001) for
 // codebase semantic search.
 //
 // Deliberately much more generous limits than /api/chat: embeddings cost
@@ -14,7 +14,7 @@ import { isLicenseActive } from '../lib/license.js';
 const redis = Redis.fromEnv();
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const EMBED_MODEL = 'text-embedding-004';
+const EMBED_MODEL = 'gemini-embedding-001';
 const EMBED_URL = `https://generativelanguage.googleapis.com/v1beta/models/${EMBED_MODEL}:batchEmbedContents?key=${GEMINI_API_KEY}`;
 
 // Generous on purpose — see comment above. This bounds abuse (someone using

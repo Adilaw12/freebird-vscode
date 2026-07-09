@@ -14,7 +14,7 @@ import { isLicenseActive } from '../lib/license.js';
 const redis = Redis.fromEnv();
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL   = 'gemini-2.0-flash';
+const GEMINI_MODEL   = 'gemini-3.1-flash-lite';
 const GEMINI_URL     = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`;
 
 // Daily quota — shared with /api/chat via identical Redis keys
