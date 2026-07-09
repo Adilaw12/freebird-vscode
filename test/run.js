@@ -22,7 +22,8 @@ const suites = [
     require('./license-status.test.js'),
     require('./chunker.test.js'),
     require('./vector-math.test.js'),
-    require('./index-store.test.js')
+    require('./index-store.test.js'),
+    require('./gemini-fallback.test.js')
 ];
 
 (async () => {

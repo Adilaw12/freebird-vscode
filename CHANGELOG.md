@@ -8,16 +8,34 @@
 `gemini-2.5-flash` (chat.js, health.js) and `gemini-2.0-flash` (fallback.js) both stopped
 working — Google's own changelog confirms `gemini-2.0-flash` was shut down June 1, 2026, and
 production logs showed `gemini-2.5-flash` returning 404 "no longer available" as of July 9,
-2026, ahead of whatever official date is eventually published. All three now point to
-`gemini-3.1-flash-lite` (Google's current stable, cost-optimized Flash-tier model — same
-role `gemini-2.0-flash` used to play). Also caught before it ever shipped: the semantic
-search embedding proxy (`api/embed.js`, built earlier this session, not yet deployed) was
-built against `text-embedding-004`, which Google's changelog shows is also already shut
-down — switched to `gemini-embedding-001` before this ever went live.
+2026, ahead of whatever official date is eventually published. Also caught before it ever
+shipped: the semantic search embedding proxy (built earlier this session, not yet deployed)
+was built against `text-embedding-004`, also already shut down per Google's changelog —
+switched to `gemini-embedding-001` before this ever went live.
+
+### Added — safety net against this recurring
+
+* **`backend/lib/geminiModel.js`**: a single source of truth for which Gemini model(s) to
+use, with an automatic fallback chain (`gemini-3.1-flash-lite` → `gemini-2.5-flash-lite` →
+`gemini-2.5-flash`). `chat.js` and `fallback.js` now go through this instead of a hardcoded
+model string each — a single model's deprecation no longer takes the whole tier down; a
+404 on one candidate automatically tries the next before failing the request. Only retries
+on 404 (model gone) — a 429 (rate limit) or 5xx isn't retried across models, since switching
+models won't fix those. Responses include an `X-Model-Used` header so a fallback engaging
+in production is visible, not silent.
+* **`health.js` rewritten to check every candidate in the chain, not just the primary** —
+returns `degraded` (502, non-2xx) the moment the *primary* model fails even while a fallback
+is quietly covering for it, so the existing "alert on non-2xx" UptimeRobot config catches a
+model going down immediately, not only once the entire fallback chain is exhausted. Also
+reports `backupsRemaining` so you can see the safety margin shrinking before it hits zero.
+* 4 new tests (`test/gemini-fallback.test.js`) covering: primary success (no fallback
+triggered), primary 404 → correctly advances to the next candidate, primary 429 → correctly
+does NOT retry across models, and full exhaustion when every candidate fails.
 * **Lesson for next time:** hardcoded model IDs are a production liability with Gemini's
 current deprecation cadence (multiple forced migrations within months of each other per
-Google's own release notes). Worth a periodic health-check habit, or eventually routing
-through a model-alias/config value rather than a literal string in three separate files.
+Google's own release notes) — worth periodically checking `ai.google.dev/gemini-api/docs/deprecations`
+even with this safety net in place, since the chain only has 3 candidates before it's
+genuinely out of runway.
 
 ### Added
 

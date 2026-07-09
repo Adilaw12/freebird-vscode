@@ -155,6 +155,31 @@ npx vsce publish
 
 ---
 
+## Gemini model maintenance
+
+Google deprecates Gemini models on a fast, sometimes-undocumented cadence —
+`gemini-2.0-flash` and `gemini-2.5-flash` both went dead within the same
+week in July 2026 with no advance warning reflected in production. To stop
+a single deprecation from taking down the whole free tier:
+
+- **`backend/lib/geminiModel.js`** is the *only* place the model name should
+  ever be set — `chat.js` and `fallback.js` both import `GEMINI_MODEL_CANDIDATES`
+  from here rather than hardcoding a model string each. It's an ordered list;
+  a 404 on the first candidate automatically tries the next before failing
+  the request.
+- **`GET /api/health`** checks every candidate in the chain, not just the
+  primary, and returns a non-2xx `degraded` status the moment the *primary*
+  fails even while a fallback is covering for it — so your existing
+  "alert on non-2xx" UptimeRobot config catches a model going down
+  immediately, not only once the whole chain is exhausted.
+- **When Google deprecates a model**: add its replacement to the front of
+  `GEMINI_MODEL_CANDIDATES` (don't just swap the old one out — keep 2-3
+  entries so there's always a real safety margin), then check
+  `https://ai.google.dev/gemini-api/docs/deprecations` periodically rather
+  than waiting for the next outage to notice.
+
+---
+
 ## Endpoints summary
 
 | Endpoint | Purpose |

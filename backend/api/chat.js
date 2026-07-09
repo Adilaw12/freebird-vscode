@@ -15,12 +15,11 @@ import { Redis } from '@upstash/redis';
 import { createHash } from 'crypto';
 import { verifySession } from '../lib/authToken.js';
 import { isLicenseActive } from '../lib/license.js';
+import { fetchGeminiWithFallback } from '../lib/geminiModel.js';
 
 const redis = Redis.fromEnv();
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL   = 'gemini-3.1-flash-lite';
-const GEMINI_URL     = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`;
 
 const DAILY_LIMIT    = 20;  // per machine/session per day
 const IP_DAILY_LIMIT = 200; // per IP per day — higher so shared networks (offices, VPNs) aren't blocked
@@ -163,12 +162,11 @@ export default async function handler(req, res) {
 
     // ── Stream Gemini response back to extension ─────────────────────────────
     try {
-        const upstream = await fetch(GEMINI_URL, {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify(geminiBody),
-            signal:  AbortSignal.timeout(30_000)
-        });
+        const { response: upstream, modelUsed } = await fetchGeminiWithFallback(
+            'streamGenerateContent',
+            geminiBody,
+            { signal: AbortSignal.timeout(30_000) }
+        );
 
         if (!upstream.ok) {
             const errText = await upstream.text().catch(() => upstream.statusText);
@@ -203,6 +201,7 @@ export default async function handler(req, res) {
         // Stream as plain text — extension reads line by line
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
         res.setHeader('Transfer-Encoding', 'chunked');
+        res.setHeader('X-Model-Used', modelUsed); // helps spot a fallback engaging in the wild
 
         if (unmetered) {
             res.setHeader('X-Quota-Unmetered', 'true');
