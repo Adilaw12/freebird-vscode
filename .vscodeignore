@@ -10,3 +10,4 @@ generate-icon.js
 **/*.vsix
 backend/**
 .claude/**
+test/**

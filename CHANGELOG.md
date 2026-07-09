@@ -1,6 +1,6 @@
 # Changelog
 
-## \[Unreleased]
+## \[0.8.3] — 2026-07-09
 
 ### Security
 
@@ -21,6 +21,22 @@ way to confirm they were actually licensed.
 quota-exhaustion routing event, not a failure, and was making the error count look
 alarming for what's actually a sign of real usage. Added `byok_blocked_no_license` to
 Feature Popularity so the fix above is measurable going forward.
+
+### Added
+
+* **First committed test suite** (`test/`, run via `npm test`) — this repo had zero
+automated tests until now, which is exactly how both the BYOK gap above and the
+12-day chat-panel outage (see v0.8.0 below) shipped and went unnoticed. Covers:
+  - A permanent regression guard on `media/chat.html`'s inline script actually parsing
+  (the exact bug class that broke chat for 12 days — a syntax error anywhere in that
+  one `<script>` tag silently kills every handler in it)
+  - The BYOK license gate, against 5 scenarios (unlicensed, rejected license, active
+  Pro, active trial, and a sanity check that Ollama was never wrongly gated)
+  - License status parsing across every plan type (pro/team/enterprise/trial) plus
+  fail-closed behavior on server errors
+  Tests run against the actual compiled output in `out/`, not a re-implementation of
+  the logic, using a minimal committed `vscode` mock (`test/mocks/vscode.js`) — not a
+  full test framework, since the suite is still small enough not to need one yet.
 
 ## \[0.8.2] — 2026-07-09
 
