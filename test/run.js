@@ -23,7 +23,8 @@ const suites = [
     require('./chunker.test.js'),
     require('./vector-math.test.js'),
     require('./index-store.test.js'),
-    require('./gemini-fallback.test.js')
+    require('./gemini-fallback.test.js'),
+    require('./quota-race.test.js')
 ];
 
 (async () => {

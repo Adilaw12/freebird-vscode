@@ -11,6 +11,34 @@ deduplicated count via `SUNION` across the per-day `telemetry:machines:{date}` s
 number now actually means what the label says. Falls back to the old (now-labeled) sum
 estimate if the union query fails for any reason, rather than showing nothing.
 
+## \[Unreleased]
+
+### Critical fix
+
+* **Free-tier quota could overshoot its cap under concurrent requests — the actual cause of
+users reporting a quota reading of 21 instead of capping at 20.** The old logic read the
+current count, made the (multi-second, for a streaming chat response) AI provider call, and
+only incremented *after* success. That left a race window spanning the entire round-trip:
+two nearly-simultaneous requests from the same identity (a double-click, two chat panels
+open, a client retry) could both read the same stale count, both pass the `< 20` check, both
+succeed, and both increment — overshooting the cap. Worse, this was trivially exploitable:
+firing many requests in parallel while under the limit could let all of them slip past the
+check before any single increment landed, getting far more than 20 for free with no
+technical sophistication required.
+* Fixed by extracting the quota logic into **`backend/lib/quota.js`** (previously
+near-duplicated between `chat.js` and `fallback.js`) using an **atomic reserve-then-refund**
+pattern: increment first (before any slow work), check the result, and refund the
+reservation if it's over the limit or if the AI provider call itself fails. `INCR` is atomic
+per-key even inside a non-atomic Redis pipeline, so reserving before the slow work closes
+the race window entirely — no request can be counted twice, and no request is ever charged
+for quota it didn't actually get served for.
+* 7 new tests (`test/quota-race.test.js`) that actually fire 30 concurrent requests at the
+real quota logic against a mock Redis client with realistic artificial latency (without
+that latency, a single-threaded test would never interleave concurrent calls and would pass
+regardless of whether the underlying code was actually race-free) — verifies exactly 20 of
+30 succeed, the rest are blocked, the final stored count is exactly 20 (not 21+), and that
+both blocked and failed-upstream requests are correctly refunded rather than leaking quota.
+
 ## \[0.8.4] — 2026-07-10
 
 ### Critical fix

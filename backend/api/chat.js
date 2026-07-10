@@ -16,6 +16,7 @@ import { createHash } from 'crypto';
 import { verifySession } from '../lib/authToken.js';
 import { isLicenseActive } from '../lib/license.js';
 import { fetchGeminiWithFallback } from '../lib/geminiModel.js';
+import { quotaKeysFor, reserveQuota, refundQuota } from '../lib/quota.js';
 
 const redis = Redis.fromEnv();
 
@@ -95,34 +96,32 @@ export default async function handler(req, res) {
         ? `gh:${session.sub}`
         : ((rawSession && typeof rawSession === 'string') ? rawSession : ip);
 
-    // ── Quota check (two layers: identity + IP) ────────────────────────────────
-    // A request is blocked if EITHER the identity quota or the IP quota is
-    // exhausted. Skipped entirely when `unmetered` (active Pro/Enterprise license).
-    const sessionQuotaKey = `quota:${identityKey.slice(0, 48)}:${today}`;
-    const ipQuotaKey      = `quota:ip:${ip}:${today}`;
-    const globalKey       = `quota:global:${today}`;
-
-    const [sessionCount, ipCount, globalCount] = await Promise.all([
-        redis.get(sessionQuotaKey).catch(() => null),
-        redis.get(ipQuotaKey).catch(() => null),
-        redis.get(globalKey).catch(() => null)
-    ]);
-
-    const sessionUsed = parseInt(sessionCount ?? '0', 10);
-    const ipUsed      = parseInt(ipCount ?? '0', 10);
-    const globalUsed  = parseInt(globalCount ?? '0', 10);
+    // ── Quota (two layers: identity + IP) ───────────────────────────────────
+    // ATOMIC reserve-then-refund, not check-then-increment — see
+    // backend/lib/quota.js for the full race-condition rationale (this is
+    // exactly how users ended up with a quota reading of 21 instead of
+    // capping at 20).
+    const quotaKeys = quotaKeysFor(identityKey, ip, today);
+    let sessionUsed = 0, ipUsed = 0;
 
     if (!unmetered) {
-        // Cost circuit breaker (off unless GLOBAL_DAILY_LIMIT is set)
-        if (GLOBAL_DAILY_LIMIT > 0 && globalUsed >= GLOBAL_DAILY_LIMIT) {
+        const result = await reserveQuota(redis, quotaKeys, {
+            dailyLimit: DAILY_LIMIT,
+            ipDailyLimit: IP_DAILY_LIMIT,
+            globalDailyLimit: GLOBAL_DAILY_LIMIT,
+            quotaTtl: QUOTA_TTL,
+            monitorTtl: MONITOR_TTL
+        });
+        sessionUsed = result.sessionUsed;
+        ipUsed = result.ipUsed;
+
+        if (result.blocked && result.blockReason === 'GLOBAL_CAPACITY') {
             return res.status(503).json({
                 error: 'Free tier is temporarily at capacity. Please try again later or upgrade to Pro.',
                 code:  'GLOBAL_CAPACITY'
             });
         }
-
-        // Block if EITHER layer is exhausted — the per-machine cap or the higher IP cap
-        if (sessionUsed >= DAILY_LIMIT || ipUsed >= IP_DAILY_LIMIT) {
+        if (result.blocked) {
             return res.status(429).json({
                 error: 'Daily cloud edit limit reached. Upgrade to Pro for unlimited access.',
                 code:  'QUOTA_EXCEEDED',
@@ -171,6 +170,7 @@ export default async function handler(req, res) {
         if (!upstream.ok) {
             const errText = await upstream.text().catch(() => upstream.statusText);
             console.error('Gemini error:', upstream.status, errText);
+            if (!unmetered) await refundQuota(redis, quotaKeys); // never charge for a failed upstream request
             return res.status(502).json({
                 error: 'AI provider error',
                 code:  'UPSTREAM_ERROR',
@@ -178,24 +178,12 @@ export default async function handler(req, res) {
             });
         }
 
-        // ── Increment quota only after confirmed successful response ──────────
-        // Users are never charged for failed Gemini requests. Increment BOTH the
-        // identity counter and the IP counter so neither layer can be bypassed.
-        // Skipped entirely for unmetered (Pro/Enterprise) requests — no quota to
-        // track, and no reason to write monitoring keys for calls that can't hit
-        // the free-tier circuit breaker.
+        // Quota was already reserved atomically before this request began (see
+        // above) — no increment needed here. Just track unique-IP monitoring,
+        // which isn't limit-critical so a race on it doesn't matter.
         if (!unmetered) {
-            const pipeline = redis.pipeline();
-            pipeline.incr(sessionQuotaKey);
-            if (sessionUsed === 0) pipeline.expire(sessionQuotaKey, QUOTA_TTL);
-            pipeline.incr(ipQuotaKey);
-            if (ipUsed === 0) pipeline.expire(ipQuotaKey, QUOTA_TTL);
-            // Monitoring: global daily call count + unique IPs (hashed for privacy)
-            pipeline.incr(globalKey);
-            if (globalUsed === 0) pipeline.expire(globalKey, MONITOR_TTL);
-            pipeline.sadd(`monitor:ips:${today}`, hashIp(ip));
-            pipeline.expire(`monitor:ips:${today}`, MONITOR_TTL);
-            await pipeline.exec().catch(() => {});
+            await redis.sadd(`monitor:ips:${today}`, hashIp(ip)).catch(() => {});
+            await redis.expire(`monitor:ips:${today}`, MONITOR_TTL).catch(() => {});
         }
 
         // Stream as plain text — extension reads line by line
@@ -206,12 +194,12 @@ export default async function handler(req, res) {
         if (unmetered) {
             res.setHeader('X-Quota-Unmetered', 'true');
         } else {
-            // Remaining reflects whichever layer binds first (identity vs IP)
+            // sessionUsed/ipUsed are already POST-increment (this request included)
             const remaining = Math.max(0, Math.min(
-                DAILY_LIMIT - sessionUsed - 1,
-                IP_DAILY_LIMIT - ipUsed - 1
+                DAILY_LIMIT - sessionUsed,
+                IP_DAILY_LIMIT - ipUsed
             ));
-            res.setHeader('X-Quota-Used',      String(sessionUsed + 1));
+            res.setHeader('X-Quota-Used',      String(sessionUsed));
             res.setHeader('X-Quota-Remaining', String(remaining));
         }
 
