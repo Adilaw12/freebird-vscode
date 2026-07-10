@@ -13,6 +13,18 @@ estimate if the union query fails for any reason, rather than showing nothing.
 
 ## \[Unreleased]
 
+### Added
+
+* **Dashboard: "Days Since Last Paid Conversion" KPI and a "Growth Toward 10,000" section** —
+scans the loaded window for the most recent `pro_subscribed` event, and computes a
+week-over-week active-machine trend (via the same `SUNION` dedup approach as the Unique
+Machines fix) with a linear projection toward 10,000 unique machines. Deliberately labeled
+as a rough estimate in the UI itself, not just explained once elsewhere — compares weekly
+*active* machines (a returning user counts in both windows, so it's not a pure new-installs
+rate) and assumes the current trend holds linearly, which growth rarely does around a launch
+spike. Requires a 14d+ window to compute; shows a clear "not enough history yet" message
+otherwise rather than a misleading number.
+
 ### Critical fix
 
 * **Free-tier quota could overshoot its cap under concurrent requests — the actual cause of

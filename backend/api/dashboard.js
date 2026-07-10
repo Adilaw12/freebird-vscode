@@ -68,6 +68,26 @@ async function sendJson(req, res) {
         data.uniqueMachinesInWindow = null; // dashboard falls back to the (labeled) summed estimate
     }
 
+    // Week-over-week active-machine trend, for a rough growth trajectory.
+    // NOTE: this is "distinct machines active in the last 7 days" vs the
+    // previous 7 days — an active-base delta, not a precise new-installs
+    // count (a returning user counts in both windows). Only computed when
+    // there's enough history for a clean 7-vs-7 comparison.
+    if (days >= 14) {
+        try {
+            const [last7Union, prev7Union] = await Promise.all([
+                redis.sunion(...machineSetKeys.slice(0, 7)),
+                redis.sunion(...machineSetKeys.slice(7, 14))
+            ]);
+            data.last7ActiveMachines = Array.isArray(last7Union) ? last7Union.length : 0;
+            data.prev7ActiveMachines = Array.isArray(prev7Union) ? prev7Union.length : 0;
+        } catch (err) {
+            console.error('sunion failed for week-over-week growth calc:', err);
+            data.last7ActiveMachines = null;
+            data.prev7ActiveMachines = null;
+        }
+    }
+
     res.setHeader('Content-Type', 'application/json');
     return res.status(200).json(data);
 }
@@ -100,6 +120,7 @@ function dashboardHtml() {
   /* Sections */
   .section { background: #1e1e2e; border: 1px solid #313244; border-radius: 10px; padding: 20px; margin-bottom: 16px; }
   .section h2 { font-size: 1em; margin-bottom: 12px; color: #89b4fa; }
+  .hint { font-size: 0.78em; opacity: 0.4; line-height: 1.5; margin-top: 8px; }
 
   /* Tables */
   table { width: 100%; border-collapse: collapse; font-size: 0.85em; }
@@ -193,6 +214,14 @@ function render(data) {
   var yesterdayCloudCalls = yesterday.cloudCalls || 0;
   var todayUniqueIps = today.uniqueIps || 0;
 
+  // Days since the most recent paid conversion, scanning the loaded window
+  // (data.days[0] is today, data.days[1] is yesterday, etc.)
+  var daysSinceConversion = null;
+  for (var di = 0; di < data.days.length; di++) {
+    var dEvents = data.days[di].events || {};
+    if ((parseInt(dEvents.pro_subscribed) || 0) > 0) { daysSinceConversion = di; break; }
+  }
+
   var html = '';
 
   // KPI row
@@ -204,6 +233,9 @@ function render(data) {
   html += kpi('Cloud Calls Today', todayCloudCalls, trend(todayCloudCalls, yesterdayCloudCalls));
   html += kpi('Unique IPs Today', todayUniqueIps, 'abuse check: calls ÷ IPs');
   html += kpi('New Subscriptions', totalSubscribed, data.days.length + 'd total');
+  html += kpi('Days Since Last Paid Conversion',
+              daysSinceConversion === null ? (data.days.length + 'd+') : daysSinceConversion,
+              daysSinceConversion === null ? 'none in ' + data.days.length + 'd window' : (daysSinceConversion === 0 ? 'today!' : 'last: ' + data.days[daysSinceConversion].date));
   html += '</div>';
 
   // Conversion funnel: wall shown → trial started / upgrade clicked → subscribed
@@ -221,6 +253,37 @@ function render(data) {
   html += funnelRow('Upgrade clicked', fClick, fWall ? (fClick / fWall * 100) : 0, rClick.toFixed(1) + '% of walls shown');
   html += funnelRow('Subscribed (paid)', fPaid, fWall ? (fPaid / fWall * 100) : 0,
     rPaidOfClick.toFixed(1) + '% of clicks · ' + rPaidOverall.toFixed(2) + '% overall');
+  html += '</div>';
+
+  // Growth trajectory toward 10,000 unique machines. Deliberately labeled as
+  // a rough estimate, not a forecast — growth is rarely linear, especially
+  // around a launch spike (Product Hunt, etc.), and this compares WEEKLY
+  // ACTIVE machines (a returning user counts in both windows), not strictly
+  // new installs. Treat it as a directional signal, not a promise.
+  html += '<div class="section"><h2>Growth Toward 10,000</h2>';
+  if (typeof data.last7ActiveMachines === 'number' && typeof data.prev7ActiveMachines === 'number') {
+    var current = trueUniqueMachines !== null ? trueUniqueMachines : totalMachines;
+    var weeklyDelta = data.last7ActiveMachines - data.prev7ActiveMachines;
+    var dailyRate = weeklyDelta / 7;
+
+    html += '<div class="kpi-row">';
+    html += kpi('Active Machines (last 7d)', data.last7ActiveMachines, 'vs ' + data.prev7ActiveMachines + ' previous 7d');
+    html += kpi('Weekly Change', (weeklyDelta >= 0 ? '+' : '') + weeklyDelta, dailyRate >= 0 ? '~+' + dailyRate.toFixed(1) + '/day' : '~' + dailyRate.toFixed(1) + '/day');
+
+    if (dailyRate > 0.1 && current < 10000) {
+      var daysTo10k = Math.ceil((10000 - current) / dailyRate);
+      var eta = new Date(); eta.setDate(eta.getDate() + daysTo10k);
+      html += kpi('Est. Days to 10,000', daysTo10k, '~' + eta.toISOString().slice(0, 10) + ' at current rate');
+    } else if (current >= 10000) {
+      html += kpi('Est. Days to 10,000', '🎉', 'already past 10,000');
+    } else {
+      html += kpi('Est. Days to 10,000', '—', 'flat/declining — no reliable projection');
+    }
+    html += '</div>';
+    html += '<p class="hint">Rough estimate only: compares distinct active machines week-over-week (a returning user counts in both weeks, so this isn\'t a pure new-installs rate), and assumes the current trend holds linearly — which growth rarely does, especially around a launch spike.</p>';
+  } else {
+    html += '<p class="hint">Not enough history yet for a week-over-week comparison — need at least 14 days of data. Select a 14d+ window above once available.</p>';
+  }
   html += '</div>';
 
   // Feature popularity
