@@ -15,6 +15,12 @@ estimate if the union query fails for any reason, rather than showing nothing.
 
 ### Added
 
+* **Country tracking** — `telemetry:countries:{date}` hash, sourced from Vercel's own
+edge-set `x-vercel-ip-country` header (not client-reported, can't be spoofed the way a
+client-supplied field could). Same mechanism the (since-reverted) PPP pricing feature used,
+here purely observational — no pricing impact. Dashboard now shows a distinct-country count
+and per-country session breakdown for the selected window, useful both for understanding
+where usage is coming from and as evidence of genuine international reach.
 * **Dashboard: "Days Since Last Paid Conversion" KPI and a "Growth Toward 10,000" section** —
 scans the loaded window for the most recent `pro_subscribed` event, and computes a
 week-over-week active-machine trend (via the same `SUNION` dedup approach as the Unique

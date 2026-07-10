@@ -34,11 +34,12 @@ async function sendJson(req, res) {
         const date = d.toISOString().slice(0, 10);
         machineSetKeys.push(`telemetry:machines:${date}`);
 
-        const [events, backends, platforms, versions, errors, cloudCalls, uniqueIps] = await Promise.all([
+        const [events, backends, platforms, versions, countries, errors, cloudCalls, uniqueIps] = await Promise.all([
             redis.hgetall(`telemetry:daily:${date}`),
             redis.hgetall(`telemetry:backends:${date}`),
             redis.hgetall(`telemetry:platforms:${date}`),
             redis.hgetall(`telemetry:versions:${date}`),
+            redis.hgetall(`telemetry:countries:${date}`),
             redis.lrange(`telemetry:errors:${date}`, 0, 49),
             redis.get(`quota:global:${date}`),
             redis.scard(`monitor:ips:${date}`)
@@ -50,6 +51,7 @@ async function sendJson(req, res) {
             backends: backends || {},
             platforms: platforms || {},
             versions: versions || {},
+            countries: countries || {},
             recentErrors: errors || [],
             cloudCalls: parseInt(cloudCalls ?? '0', 10),
             uniqueIps: uniqueIps || 0
@@ -189,6 +191,7 @@ function render(data) {
   var backendTotals = {};
   var platformTotals = {};
   var versionTotals = {};
+  var countryTotals = {};
 
   data.days.forEach(function(d) {
     Object.keys(d.events || {}).forEach(function(k) {
@@ -198,6 +201,7 @@ function render(data) {
     Object.keys(d.backends || {}).forEach(function(k) { backendTotals[k] = (backendTotals[k] || 0) + (parseInt(d.backends[k]) || 0); });
     Object.keys(d.platforms || {}).forEach(function(k) { platformTotals[k] = (platformTotals[k] || 0) + (parseInt(d.platforms[k]) || 0); });
     Object.keys(d.versions || {}).forEach(function(k) { versionTotals[k] = (versionTotals[k] || 0) + (parseInt(d.versions[k]) || 0); });
+    Object.keys(d.countries || {}).forEach(function(k) { countryTotals[k] = (countryTotals[k] || 0) + (parseInt(d.countries[k]) || 0); });
   });
 
   var todaySessions = parseInt(te._unique_sessions) || 0;
@@ -326,6 +330,22 @@ function render(data) {
   });
   html += '</table></div>';
 
+  html += '</div>';
+
+  // Countries — from Vercel's own edge-set geo header, not client-reported.
+  // The distinct-country count here is the same kind of evidence useful for
+  // showing genuine international reach/spread, not just raw install volume.
+  var countryList = sorted(countryTotals);
+  html += '<div class="section"><h2>Countries (' + countryList.length + ' distinct, ' + data.days.length + 'd window)</h2>';
+  if (countryList.length === 0) {
+    html += '<p class="hint">No country data yet for this window.</p>';
+  } else {
+    html += '<table><tr><th>Country</th><th>Sessions</th></tr>';
+    countryList.forEach(function(r) {
+      html += '<tr><td>' + r[0] + '</td><td class="num">' + r[1] + '</td></tr>';
+    });
+    html += '</table>';
+  }
   html += '</div>';
 
   // Daily trend table

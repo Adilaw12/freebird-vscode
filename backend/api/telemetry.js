@@ -12,6 +12,7 @@ const redis = Redis.fromEnv();
 //   telemetry:backends:{YYYY-MM-DD}       hash  — backend name → count of sessions using it
 //   telemetry:platforms:{YYYY-MM-DD}      hash  — platform → count
 //   telemetry:versions:{YYYY-MM-DD}       hash  — extension version → count
+//   telemetry:countries:{YYYY-MM-DD}      hash  — country code → count of sessions from it
 //   telemetry:errors:{YYYY-MM-DD}         list  — error event names (capped)
 //   telemetry:session:{sessionId}         string — "1", TTL 1 hour (dedup)
 //   telemetry:machines:{YYYY-MM-DD}       set   — unique machineIds seen that day
@@ -47,7 +48,15 @@ export default async function handler(req, res) {
     const backendsKey = `telemetry:backends:${today}`;
     const platformsKey = `telemetry:platforms:${today}`;
     const versionsKey = `telemetry:versions:${today}`;
+    const countriesKey = `telemetry:countries:${today}`;
     const errorsKey = `telemetry:errors:${today}`;
+
+    // Country from Vercel's own edge network — set automatically per request,
+    // not client-reported, so it can't be spoofed the way a client-supplied
+    // country field could. Same header used (and since reverted) for PPP
+    // pricing; here it's purely observational, no pricing impact.
+    const rawCountry = req.headers['x-vercel-ip-country'];
+    const country = (Array.isArray(rawCountry) ? rawCountry[0] : rawCountry) || null;
 
     try {
         const pipeline = redis.pipeline();
@@ -76,6 +85,7 @@ export default async function handler(req, res) {
                 if (meta.backend) pipeline.hincrby(backendsKey, String(meta.backend).slice(0, 32), 1);
                 if (meta.platform) pipeline.hincrby(platformsKey, String(meta.platform).slice(0, 32), 1);
                 if (meta.version) pipeline.hincrby(versionsKey, String(meta.version).slice(0, 16), 1);
+                if (country) pipeline.hincrby(countriesKey, country.slice(0, 4), 1);
 
                 pipeline.hincrby(dailyKey, '_unique_sessions', 1);
             }
@@ -98,6 +108,7 @@ export default async function handler(req, res) {
         pipeline.expire(backendsKey, TTL);
         pipeline.expire(platformsKey, TTL);
         pipeline.expire(versionsKey, TTL);
+        pipeline.expire(countriesKey, TTL);
         pipeline.expire(errorsKey, TTL);
 
         // Cap error list
