@@ -1,5 +1,16 @@
 # Changelog
 
+## \[Unreleased]
+
+### Fixed
+
+* **Dashboard's "Unique Machines" KPI was silently wrong** — it summed each day's `_unique_machines`
+count across the selected window, which double/triple/N-counts anyone active on more than one
+day (a machine active daily for 14 days contributed 14, not 1). Now computed as a true
+deduplicated count via `SUNION` across the per-day `telemetry:machines:{date}` sets — the
+number now actually means what the label says. Falls back to the old (now-labeled) sum
+estimate if the union query fails for any reason, rather than showing nothing.
+
 ## \[0.8.4] — 2026-07-10
 
 ### Critical fix

@@ -26,11 +26,13 @@ export default async function handler(req, res) {
 async function sendJson(req, res) {
     const days = Math.min(parseInt(req.query.days, 10) || 14, 90);
     const data = { days: [] };
+    const machineSetKeys = [];
 
     for (let i = 0; i < days; i++) {
         const d = new Date();
         d.setDate(d.getDate() - i);
         const date = d.toISOString().slice(0, 10);
+        machineSetKeys.push(`telemetry:machines:${date}`);
 
         const [events, backends, platforms, versions, errors, cloudCalls, uniqueIps] = await Promise.all([
             redis.hgetall(`telemetry:daily:${date}`),
@@ -52,6 +54,18 @@ async function sendJson(req, res) {
             cloudCalls: parseInt(cloudCalls ?? '0', 10),
             uniqueIps: uniqueIps || 0
         });
+    }
+
+    // TRUE deduplicated machine count across the whole window — NOT the sum
+    // of each day's _unique_machines (which double/triple/N-counts anyone
+    // active on more than one day). This is the number that's actually
+    // comparable to "how many distinct people are using Freebird."
+    try {
+        const union = await redis.sunion(...machineSetKeys);
+        data.uniqueMachinesInWindow = Array.isArray(union) ? union.length : 0;
+    } catch (err) {
+        console.error('sunion failed for machine dedup count:', err);
+        data.uniqueMachinesInWindow = null; // dashboard falls back to the (labeled) summed estimate
     }
 
     res.setHeader('Content-Type', 'application/json');
@@ -172,7 +186,8 @@ function render(data) {
   var todayUpgrades = parseInt(te.upgrade_clicked) || 0;
   var proMsgs = totals.pro_message || 0;
   var ollamaFallbacks = totals.ollama_fallback || 0;
-  var totalMachines = totals._unique_machines || 0;
+  var totalMachines = totals._unique_machines || 0; // sum of daily counts — double-counts anyone active >1 day, kept only as a fallback
+  var trueUniqueMachines = (typeof data.uniqueMachinesInWindow === 'number') ? data.uniqueMachinesInWindow : null;
   var totalSubscribed = totals.pro_subscribed || 0;
   var todayCloudCalls = today.cloudCalls || 0;
   var yesterdayCloudCalls = yesterday.cloudCalls || 0;
@@ -183,7 +198,8 @@ function render(data) {
   // KPI row
   html += '<div class="kpi-row">';
   html += kpi('Sessions Today', todaySessions, trend(todaySessions, yesterdaySessions));
-  html += kpi('Unique Machines', totalMachines, data.days.length + 'd window');
+  html += kpi('Unique Machines', trueUniqueMachines !== null ? trueUniqueMachines : totalMachines,
+              trueUniqueMachines !== null ? data.days.length + 'd window, deduplicated' : data.days.length + 'd window (sum estimate — dedup unavailable)');
   html += kpi('Messages Today', todayMsgs, trend(todayMsgs, yesterdayMsgs));
   html += kpi('Cloud Calls Today', todayCloudCalls, trend(todayCloudCalls, yesterdayCloudCalls));
   html += kpi('Unique IPs Today', todayUniqueIps, 'abuse check: calls ÷ IPs');
