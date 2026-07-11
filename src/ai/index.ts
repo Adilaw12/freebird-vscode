@@ -51,8 +51,12 @@ export function getProvider(context: vscode.ExtensionContext, sessionId: string)
             }
         }
         // Not licensed — fall back to the free cloud tier instead of honoring
-        // the BYOK setting, and let them know once per session why.
-        trackEvent('byok_blocked_no_license');
+        // the BYOK setting, and let them know once per session why. The
+        // telemetry event is separately deduped to once per day (tab
+        // completion can re-trigger this gate on every keystroke pause,
+        // which was inflating byok_blocked_no_license into a raw fire-count
+        // rather than a meaningful "how many people hit this today" number).
+        trackByokBlockedOncePerDay(context);
         notifyByokRequiresPro(context);
         return new CloudProvider(context, sessionId);
     }
@@ -70,6 +74,17 @@ export function getProvider(context: vscode.ExtensionContext, sessionId: string)
             // 'cloud' or unrecognised — use cloud tier (Gemini Flash, 5/day free)
             return new CloudProvider(context, sessionId);
     }
+}
+
+const BYOK_BLOCKED_TRACKED_DATE_KEY = 'freebird.byokBlockedTrackedDate';
+
+function trackByokBlockedOncePerDay(context: vscode.ExtensionContext): void {
+    const today = new Date().toISOString().slice(0, 10);
+    const lastTracked = context.globalState.get<string>(BYOK_BLOCKED_TRACKED_DATE_KEY);
+    if (lastTracked === today) return; // already recorded once today
+
+    context.globalState.update(BYOK_BLOCKED_TRACKED_DATE_KEY, today);
+    trackEvent('byok_blocked_no_license');
 }
 
 let byokWarningShown = false;

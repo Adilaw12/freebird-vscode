@@ -1,9 +1,15 @@
 # Changelog
 
-## \[Unreleased]
+## \[0.8.5] — 2026-07-11
 
 ### Fixed
 
+* **`byok_blocked_no_license` telemetry was a raw fire-count, not a meaningful daily signal** —
+tab completion re-triggers the BYOK gate on every keystroke pause, so one person typing
+continuously with an unlicensed BYOK backend configured could rack up dozens of these events
+in a single sitting. Now deduped to once per identity per day (same pattern as the other
+`_unique_*` metrics), so the number actually reflects "how many people hit this today," not
+"how many keystrokes triggered it."
 * **Dashboard's "Unique Machines" KPI was silently wrong** — it summed each day's `_unique_machines`
 count across the selected window, which double/triple/N-counts anyone active on more than one
 day (a machine active daily for 14 days contributed 14, not 1). Now computed as a true
