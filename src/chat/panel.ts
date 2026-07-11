@@ -393,7 +393,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             if (response) setCachedResponse(key, response);
 
         } catch (err: any) {
-            trackEvent('api_error');
+            // Only count this as an "error" for genuinely unexpected failures —
+            // QUOTA_EXCEEDED/AUTH_REQUIRED/IP_RATE_LIMITED are expected outcomes
+            // (someone hit their daily cap, needs to sign in, etc.), each
+            // already tracked under its own specific event below. Firing
+            // api_error unconditionally here made completely normal quota hits
+            // look like production errors in the dashboard.
             if (err?.code === 'AUTH_REQUIRED') {
                 trackEvent('auth_required_shown');
                 this.post({ type: 'auth-required' });
@@ -403,11 +408,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 trackEvent('upgrade_prompt_shown');
                 return;
             } else if (err?.code === 'IP_RATE_LIMITED') {
+                trackEvent('rate_limited');
                 response =
                     `**Too many requests** — you've hit the fallback rate limit (20/hr).\n\n` +
                     `[Upgrade to Pro](${UPGRADE_URL}) for unlimited access, or install ` +
                     `[Ollama](https://ollama.com) for unlimited free local AI.`;
             } else {
+                trackEvent('api_error');
                 response =
                     `**Error:** ${err.message}\n\n` +
                     `Try running \`Freebird: Configure AI Backend\` to check your settings, ` +

@@ -4,6 +4,14 @@
 
 ### Fixed
 
+* **`api_error` telemetry fired unconditionally, before checking whether the failure was
+actually expected.** A quota-exceeded response (429 — someone hit their daily cap, working
+exactly as intended), an auth-required response, and a rate-limit response all got counted
+as generic "errors" alongside genuine unexpected failures, on top of each already being
+tracked under its own specific event. This made completely normal daily quota hits look like
+production errors in the dashboard, even when Vercel's own logs showed nothing but expected
+429s. Now `api_error` only fires for the actual catch-all/unexpected case; `IP_RATE_LIMITED`
+gets its own `rate_limited` event instead of silently falling into the generic bucket.
 * **`byok_blocked_no_license` telemetry was a raw fire-count, not a meaningful daily signal** —
 tab completion re-triggers the BYOK gate on every keystroke pause, so one person typing
 continuously with an unlicensed BYOK backend configured could rack up dozens of these events
