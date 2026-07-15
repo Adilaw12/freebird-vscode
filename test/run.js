@@ -24,7 +24,9 @@ const suites = [
     require('./vector-math.test.js'),
     require('./index-store.test.js'),
     require('./gemini-fallback.test.js'),
-    require('./quota-race.test.js')
+    require('./quota-race.test.js'),
+    require('./checkpoint.test.js'),
+    require('./fetch-url.test.js')
 ];
 
 (async () => {

@@ -3,11 +3,14 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as https from 'https';
 import * as http from 'http';
+import * as dns from 'dns';
+import * as net from 'net';
 import { exec, ExecException } from 'child_process';
 import { GitService } from '../git/service';
 import { previewHtmlFile } from './preview';
 import { ToolSchema } from '../ai/provider';
 import { searchCodebaseSemantic } from '../index/indexer';
+import * as checkpoint from './checkpoint';
 
 export interface ToolCall {
     action: string;
@@ -61,6 +64,15 @@ export const NATIVE_TOOL_SCHEMAS: ToolSchema[] = [
                 topK: { type: 'number', description: 'How many results to return (default 8)', default: 8 }
             },
             required: ['query']
+        }
+    },
+    {
+        name: 'fetch_url',
+        description: 'Fetch a webpage and return its readable text content (HTML tags/scripts/styles stripped). Use this to look up documentation, read an article, or check a URL the user gave you. Not for downloading files (use download_file) or arbitrary APIs expecting non-HTML responses.',
+        input_schema: {
+            type: 'object',
+            properties: { url: { type: 'string', description: 'http(s) URL to fetch' } },
+            required: ['url']
         }
     },
     {
@@ -169,6 +181,7 @@ AVAILABLE TOOLS:
 - list_files    {"action":"list_files","pattern":"**/*.ts"}                                       list files by glob
 - search_code   {"action":"search_code","query":"myFunc","filePattern":"*.ts"}                    grep across files (exact text/regex)
 - search_codebase_semantic {"action":"search_codebase_semantic","query":"how does auth expiry work"}  search by meaning, not exact text — use for concepts/behavior, not known symbol names
+- fetch_url     {"action":"fetch_url","url":"https://example.com/docs"}                           fetch a webpage's readable text (docs, articles, a URL the user gave you)
 - write_file    {"action":"write_file","path":"src/new.ts","content":"..."}                       create / overwrite
 - edit_file     {"action":"edit_file","path":"src/x.ts","oldStr":"exact","newStr":"replacement"}  targeted edit
 - preview_html  {"action":"preview_html","path":"index.html"}                                    open a live preview tab
@@ -266,6 +279,9 @@ const MAX_READ_CHARS = 50_000;
 const MAX_SEARCH_MATCHES = 200;
 const MAX_TOOL_OUTPUT_CHARS = 4_000;
 const COMMAND_TIMEOUT_MS = 60_000;
+const MAX_FETCH_URL_CHARS = 8_000;
+const MAX_FETCH_URL_BYTES = 5 * 1024 * 1024; // 5 MB — this is for reading text, not saving arbitrary files
+const MAX_FETCH_REDIRECTS = 3;
 
 export type ApprovalFn = (id: string, description: string, preview: string) => Promise<boolean>;
 
@@ -297,7 +313,8 @@ export async function executeToolCall(
     git: GitService,
     onApprovalNeeded: ApprovalFn,
     context: vscode.ExtensionContext,
-    sessionId: string
+    sessionId: string,
+    turnId: string
 ): Promise<ToolResult> {
     try {
         switch (tool.action) {
@@ -305,15 +322,16 @@ export async function executeToolCall(
             case 'list_files':     return await listFilesTool(tool);
             case 'search_code':    return await searchCodeTool(tool);
             case 'search_codebase_semantic': return await searchCodebaseSemanticTool(tool, context, sessionId);
-            case 'write_file':     return await writeFileTool(tool, onApprovalNeeded);
-            case 'edit_file':      return await editFileTool(tool, onApprovalNeeded);
+            case 'fetch_url':      return await fetchUrlTool(tool);
+            case 'write_file':     return await writeFileTool(tool, onApprovalNeeded, turnId);
+            case 'edit_file':      return await editFileTool(tool, onApprovalNeeded, turnId);
             case 'preview_html':   return await previewHtmlTool(tool);
-            case 'run_command':    return await runCommandTool(tool, onApprovalNeeded);
-            case 'download_file':  return await downloadFileTool(tool, onApprovalNeeded);
+            case 'run_command':    return await runCommandTool(tool, onApprovalNeeded, turnId);
+            case 'download_file':  return await downloadFileTool(tool, onApprovalNeeded, turnId);
             case 'create_diagram': return await createDiagramTool(tool);
-            case 'copy_file':      return await copyFileTool(tool, onApprovalNeeded);
+            case 'copy_file':      return await copyFileTool(tool, onApprovalNeeded, turnId);
             case 'git_status':     return { success: true, output: await git.getStatus() };
-            case 'git_push':       return await gitPushTool(git, onApprovalNeeded);
+            case 'git_push':       return await gitPushTool(git, onApprovalNeeded, turnId);
             default:
                 return { success: false, output: `Unknown tool action: "${tool.action}"` };
         }
@@ -424,7 +442,162 @@ function escapeRegex(s: string): string {
     return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-async function writeFileTool(tool: ToolCall, onApprovalNeeded: ApprovalFn): Promise<ToolResult> {
+// ── fetch_url ─────────────────────────────────────────────────────────────
+//
+// Resolves the hostname and rejects private/loopback/link-local IPs before
+// connecting, to stop the agent being tricked into hitting internal services
+// (localhost, cloud metadata endpoints, LAN devices) via a model-supplied URL.
+// Each redirect hop is re-validated the same way, since a public URL
+// redirecting to an internal address is the more realistic version of this.
+// This doesn't defend against DNS rebinding between the check and the actual
+// connect (a TOCTOU window) — full protection would mean connecting by IP
+// with manual SNI/Host handling, which is more machinery than this feature's
+// risk level (fetching docs pages for an AI assistant) currently justifies.
+
+export function isPrivateAddress(ip: string): boolean {
+    if (ip === '::1' || ip === '0.0.0.0') return true;
+    if (ip.startsWith('::ffff:')) ip = ip.slice(7);
+
+    // IPv6 unique-local / link-local
+    if (ip.includes(':')) {
+        const lower = ip.toLowerCase();
+        return lower.startsWith('fc') || lower.startsWith('fd') || lower.startsWith('fe80');
+    }
+
+    const parts = ip.split('.').map(Number);
+    if (parts.length !== 4 || parts.some(n => Number.isNaN(n))) return true; // malformed — fail closed
+
+    const [a, b] = parts;
+    if (a === 127) return true;                          // loopback
+    if (a === 10) return true;                            // 10.0.0.0/8
+    if (a === 172 && b >= 16 && b <= 31) return true;      // 172.16.0.0/12
+    if (a === 192 && b === 168) return true;               // 192.168.0.0/16
+    if (a === 169 && b === 254) return true;               // link-local + cloud metadata (169.254.169.254)
+    if (a === 0) return true;                              // "this network"
+    return false;
+}
+
+export function stripHtmlToText(html: string): string {
+    let text = html
+        .replace(/<(script|style|noscript)[\s\S]*?<\/\1>/gi, ' ')
+        .replace(/<!--[\s\S]*?-->/g, ' ')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/(p|div|li|h[1-6]|tr)>/gi, '\n')
+        .replace(/<[^>]+>/g, ' ');
+
+    text = text
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&quot;/gi, '"')
+        .replace(/&#39;/gi, "'");
+
+    return text
+        .split('\n')
+        .map(line => line.replace(/[ \t]+/g, ' ').trim())
+        .filter(Boolean)
+        .join('\n');
+}
+
+// Hooks the actual DNS resolution Node performs when opening the socket —
+// not a separate upfront lookup — so there's no gap between "checked" and
+// "connected" for a DNS-rebinding attack to land in.
+function safeLookup(
+    hostname: string,
+    options: dns.LookupOptions,
+    callback: (err: NodeJS.ErrnoException | null, address: string | dns.LookupAddress[], family?: number) => void
+): void {
+    dns.lookup(hostname, options, (err, address, family) => {
+        const ip = Array.isArray(address) ? address[0]?.address : address;
+        if (!err && ip && isPrivateAddress(ip)) {
+            callback(new Error(`Refusing to connect to ${hostname} — resolves to a private/internal address.`), '');
+            return;
+        }
+        callback(err, address, family);
+    });
+}
+
+async function fetchUrlOnce(url: string): Promise<{ body: string; redirectTo?: string }> {
+    const parsed = new URL(url);
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+        throw new Error('Only http/https URLs are supported.');
+    }
+
+    // Node never invokes a custom `lookup` function when the host is already a literal
+    // IP (nothing to resolve) — so a URL like http://169.254.169.254/ would otherwise
+    // connect straight through the safeLookup guard below. Check literal IPs directly;
+    // it's a plain equality check against the address the request will actually use,
+    // not a separate resolution, so there's no rebinding window to race here.
+    const hostname = parsed.hostname.replace(/^\[|\]$/g, ''); // strip [] from literal IPv6 hosts
+    if (net.isIP(hostname) && isPrivateAddress(hostname)) {
+        throw new Error(`Refusing to connect to ${hostname} — a private/internal address.`);
+    }
+
+    const protocol = parsed.protocol === 'https:' ? https : http;
+
+    return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Request timed out (15s exceeded).')), 15_000);
+
+        const request = protocol.get(url, { timeout: 15_000, lookup: safeLookup }, response => {
+            clearTimeout(timeout);
+
+            if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+                response.resume();
+                resolve({ body: '', redirectTo: new URL(response.headers.location, url).toString() });
+                return;
+            }
+
+            if (!response.statusCode || response.statusCode >= 400) {
+                reject(new Error(`HTTP ${response.statusCode}: ${response.statusMessage}`));
+                return;
+            }
+
+            let size = 0;
+            const chunks: Buffer[] = [];
+            response.on('data', (chunk: Buffer) => {
+                size += chunk.length;
+                if (size > MAX_FETCH_URL_BYTES) {
+                    request.destroy();
+                    reject(new Error(`Response too large (limit ${MAX_FETCH_URL_BYTES} bytes).`));
+                    return;
+                }
+                chunks.push(chunk);
+            });
+            response.on('end', () => resolve({ body: Buffer.concat(chunks).toString('utf8') }));
+            response.on('error', reject);
+        });
+
+        request.on('error', err => { clearTimeout(timeout); reject(err); });
+        request.on('timeout', () => request.destroy());
+    });
+}
+
+async function fetchUrlTool(tool: ToolCall): Promise<ToolResult> {
+    const url = String(tool.url ?? '').trim();
+    if (!url) return { success: false, output: 'fetch_url requires "url".' };
+
+    let current = url;
+    try {
+        for (let hop = 0; hop <= MAX_FETCH_REDIRECTS; hop++) {
+            const { body, redirectTo } = await fetchUrlOnce(current);
+            if (redirectTo) {
+                if (hop === MAX_FETCH_REDIRECTS) {
+                    return { success: false, output: `Too many redirects (>${MAX_FETCH_REDIRECTS}).` };
+                }
+                current = redirectTo;
+                continue;
+            }
+            const text = truncate(stripHtmlToText(body), MAX_FETCH_URL_CHARS);
+            return { success: true, output: text || '(page had no readable text content)' };
+        }
+        return { success: false, output: 'Too many redirects.' };
+    } catch (err: any) {
+        return { success: false, output: `Error fetching ${current}: ${err?.message ?? String(err)}` };
+    }
+}
+
+async function writeFileTool(tool: ToolCall, onApprovalNeeded: ApprovalFn, turnId: string): Promise<ToolResult> {
     const relPath = String(tool.path ?? '');
     const content = String(tool.content ?? '');
     if (!relPath) return { success: false, output: 'write_file requires "path".' };
@@ -438,6 +611,11 @@ async function writeFileTool(tool: ToolCall, onApprovalNeeded: ApprovalFn): Prom
         truncate(content, 2000)
     );
     if (!approved) return { success: false, output: 'User rejected this change.' };
+
+    checkpoint.recordPreState(turnId, relPath, {
+        existed: exists,
+        content: exists ? fs.readFileSync(full).toString('base64') : undefined
+    });
 
     fs.mkdirSync(path.dirname(full), { recursive: true });
     fs.writeFileSync(full, content, 'utf8');
@@ -471,7 +649,7 @@ function findFuzzyMatch(content: string, oldStr: string): { start: number; end: 
     return null;
 }
 
-async function editFileTool(tool: ToolCall, onApprovalNeeded: ApprovalFn): Promise<ToolResult> {
+async function editFileTool(tool: ToolCall, onApprovalNeeded: ApprovalFn, turnId: string): Promise<ToolResult> {
     const relPath = String(tool.path ?? '');
     const oldStr  = String(tool.oldStr ?? '');
     const newStr  = String(tool.newStr ?? '');
@@ -498,6 +676,8 @@ async function editFileTool(tool: ToolCall, onApprovalNeeded: ApprovalFn): Promi
     // Show VS Code diff view for approval
     const approved = await showDiffApproval(full, content, updated, relPath, onApprovalNeeded);
     if (!approved) return { success: false, output: 'User rejected this change.' };
+
+    checkpoint.recordPreState(turnId, relPath, { existed: true, content: Buffer.from(content, 'utf8').toString('base64') });
 
     fs.writeFileSync(full, updated, 'utf8');
     return { success: true, output: `Edited ${relPath}.` };
@@ -558,12 +738,14 @@ async function previewHtmlTool(tool: ToolCall): Promise<ToolResult> {
     return { success: true, output: `Opened a live preview of ${relPath}. It refreshes automatically when files are saved.` };
 }
 
-async function runCommandTool(tool: ToolCall, onApprovalNeeded: ApprovalFn): Promise<ToolResult> {
+async function runCommandTool(tool: ToolCall, onApprovalNeeded: ApprovalFn, turnId: string): Promise<ToolResult> {
     const command = String(tool.command ?? '');
     if (!command) return { success: false, output: 'run_command requires "command".' };
 
     const approved = await onApprovalNeeded(approvalId('run_command'), 'Run command', command);
     if (!approved) return { success: false, output: 'User rejected running this command.' };
+
+    checkpoint.markTurnUnrevertable(turnId);
 
     const root = getWorkspaceRoot();
     return new Promise<ToolResult>(resolve => {
@@ -579,7 +761,7 @@ async function runCommandTool(tool: ToolCall, onApprovalNeeded: ApprovalFn): Pro
     });
 }
 
-async function downloadFileTool(tool: ToolCall, onApprovalNeeded: ApprovalFn): Promise<ToolResult> {
+async function downloadFileTool(tool: ToolCall, onApprovalNeeded: ApprovalFn, turnId: string): Promise<ToolResult> {
     const url = String(tool.url ?? '');
     const relPath = String(tool.path ?? '');
     if (!url || !relPath) return { success: false, output: 'download_file requires "url" and "path".' };
@@ -606,6 +788,11 @@ async function downloadFileTool(tool: ToolCall, onApprovalNeeded: ApprovalFn): P
     const full = resolveWorkspacePath(relPath);
     const exists = fs.existsSync(full);
 
+    checkpoint.recordPreState(turnId, relPath, {
+        existed: exists,
+        content: exists ? fs.readFileSync(full).toString('base64') : undefined
+    });
+
     return new Promise<ToolResult>(resolve => {
         const protocol = parsedUrl.protocol === 'https:' ? https : http;
         const timeout = setTimeout(() => {
@@ -618,7 +805,7 @@ async function downloadFileTool(tool: ToolCall, onApprovalNeeded: ApprovalFn): P
             // Handle redirects
             if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
                 const redirectUrl = response.headers.location;
-                downloadFileTool({ ...tool, url: redirectUrl }, onApprovalNeeded).then(resolve);
+                downloadFileTool({ ...tool, url: redirectUrl }, onApprovalNeeded, turnId).then(resolve);
                 return;
             }
 
@@ -707,7 +894,7 @@ ${mermaid}
     }
 }
 
-async function copyFileTool(tool: ToolCall, onApprovalNeeded: ApprovalFn): Promise<ToolResult> {
+async function copyFileTool(tool: ToolCall, onApprovalNeeded: ApprovalFn, turnId: string): Promise<ToolResult> {
     const source = String(tool.source ?? '').trim();
     const destination = String(tool.destination ?? '').trim();
     if (!source || !destination) return { success: false, output: 'copy_file requires "source" and "destination".' };
@@ -718,7 +905,8 @@ async function copyFileTool(tool: ToolCall, onApprovalNeeded: ApprovalFn): Promi
     if (!fs.existsSync(srcFull)) return { success: false, output: `Source file not found: ${source}` };
     if (!fs.statSync(srcFull).isFile()) return { success: false, output: `Source is not a file: ${source}` };
 
-    if (fs.existsSync(dstFull)) {
+    const dstExists = fs.existsSync(dstFull);
+    if (dstExists) {
         const approved = await onApprovalNeeded(
             approvalId('copy_file'),
             `Overwrite ${destination}`,
@@ -726,6 +914,11 @@ async function copyFileTool(tool: ToolCall, onApprovalNeeded: ApprovalFn): Promi
         );
         if (!approved) return { success: false, output: 'User rejected the overwrite.' };
     }
+
+    checkpoint.recordPreState(turnId, destination, {
+        existed: dstExists,
+        content: dstExists ? fs.readFileSync(dstFull).toString('base64') : undefined
+    });
 
     try {
         fs.mkdirSync(path.dirname(dstFull), { recursive: true });
@@ -736,9 +929,11 @@ async function copyFileTool(tool: ToolCall, onApprovalNeeded: ApprovalFn): Promi
     }
 }
 
-async function gitPushTool(git: GitService, onApprovalNeeded: ApprovalFn): Promise<ToolResult> {
+async function gitPushTool(git: GitService, onApprovalNeeded: ApprovalFn, turnId: string): Promise<ToolResult> {
     const approved = await onApprovalNeeded(approvalId('git_push'), 'Push to remote', 'git push');
     if (!approved) return { success: false, output: 'User rejected the push.' };
+
+    checkpoint.markTurnUnrevertable(turnId);
 
     await git.push();
     return { success: true, output: 'Pushed to remote.' };

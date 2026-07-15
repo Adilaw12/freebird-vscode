@@ -352,6 +352,28 @@ em { font-style: italic; }
 .reject-btn:hover { opacity: 0.8; }
 .approval-result { font-size: 0.82em; opacity: 0.5; }
 
+/* ── checkpoint cards ── */
+.checkpoint-card {
+  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.08));
+  border-radius: 10px; padding: 10px 16px;
+  background: var(--vscode-editorWidget-background, rgba(255,255,255,0.02));
+  margin: 6px 24px 6px 54px;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  font-size: 0.82em;
+}
+.checkpoint-desc { opacity: 0.75; }
+.checkpoint-warn { display: block; font-size: 0.9em; opacity: 0.55; margin-top: 2px; }
+.checkpoint-restore-btn {
+  border: none; border-radius: 6px; padding: 5px 14px; flex-shrink: 0;
+  cursor: pointer; font-size: 0.9em; font-family: inherit; font-weight: 500;
+  background: var(--vscode-button-secondaryBackground, rgba(255,255,255,0.06));
+  color: var(--vscode-editor-foreground); border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.1));
+  transition: opacity 0.2s;
+}
+.checkpoint-restore-btn:hover { opacity: 0.8; }
+.checkpoint-restore-btn:disabled { cursor: default; opacity: 0.5; }
+.checkpoint-result { font-size: 0.82em; opacity: 0.5; }
+
 /* ── status hints (cloud edit / ollama fallback) ── */
 .status-hint {
   font-size: 0.78em; padding: 8px 16px; margin: 4px 24px 4px 54px;
@@ -936,6 +958,37 @@ function respondApproval(id, approved) {
   vscode.postMessage({type:'approval-response',id:id,approved:approved});
 }
 
+function addCheckpointCard(id, files, unrevertable) {
+  var card=document.createElement('div'); card.className='checkpoint-card'; card.id='checkpoint-'+id;
+  var dv=document.createElement('div');
+  var count=(files&&files.length)||0;
+  var desc=document.createElement('span'); desc.className='checkpoint-desc';
+  desc.textContent='Checkpoint saved — '+count+' file'+(count===1?'':'s')+' changed';
+  dv.appendChild(desc);
+  if (unrevertable) {
+    var warn=document.createElement('span'); warn.className='checkpoint-warn';
+    warn.textContent='Some actions in this turn (shell commands / git push) can\'t be undone by restore.';
+    dv.appendChild(warn);
+  }
+  var btn=document.createElement('button'); btn.className='checkpoint-restore-btn'; btn.textContent='Restore';
+  btn.id='checkpoint-restore-'+id;
+  btn.onclick=function(){ vscode.postMessage({type:'restore-checkpoint',id:id,files:files}); };
+  card.appendChild(dv); card.appendChild(btn);
+  msgsEl.appendChild(card); scroll();
+}
+
+function updateCheckpointCard(id, restored, deleted, errors) {
+  var btn=document.getElementById('checkpoint-restore-'+id);
+  if (!btn) return;
+  var r=document.createElement('span'); r.className='checkpoint-result';
+  var restoredCount=(restored&&restored.length)||0;
+  var deletedCount=(deleted&&deleted.length)||0;
+  r.textContent = (errors&&errors.length)
+    ? 'Restore failed: '+errors.join('; ')
+    : 'Restored '+(restoredCount+deletedCount)+' file'+((restoredCount+deletedCount)===1?'':'s');
+  btn.replaceWith(r);
+}
+
 function endMsg() { stopThinkingAnimation(); currentBubble=null; setBusy(false); }
 function setBusy(v) { busy=v; sendBtn.disabled=v; inputEl.disabled=v; if(!v) inputEl.focus(); }
 function scroll() { msgsEl.scrollTop=msgsEl.scrollHeight; }
@@ -1205,6 +1258,8 @@ window.addEventListener('message',function(e){
     case 'tool-status':      addToolStatus(m.id,m.state,m.label); break;
     case 'tool-update':      updateToolStatus(m.id,m.state,m.output); break;
     case 'approval-request': addApprovalCard(m.id,m.description,m.preview); break;
+    case 'checkpoint-ready':    addCheckpointCard(m.id,m.files,m.unrevertable); break;
+    case 'checkpoint-restored': updateCheckpointCard(m.id,m.restored,m.deleted,m.errors); break;
     case 'assistant-end':    endMsg(); break;
     case 'cloud-edit-used':  showCloudEditUsed(m.remaining); break;
     case 'ollama-fallback':  showOllamaFallback(); break;

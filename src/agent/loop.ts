@@ -19,6 +19,7 @@ const MODEL_CONTEXT_LIMITS: Record<string, number> = {
 };
 
 export type AgentEvent =
+    | { type: 'turn-start'; turnId: string }
     | { type: 'iteration-start' }
     | { type: 'text-chunk'; text: string }
     | { type: 'response-complete'; rawText: string }
@@ -37,17 +38,20 @@ export interface AgentRunOptions {
 }
 
 export async function runAgentLoop(opts: AgentRunOptions): Promise<Message[]> {
-    const { provider, git, onEvent, onApprovalNeeded } = opts;
+    const { provider, onEvent } = opts;
+
+    const turnId = `turn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    onEvent({ type: 'turn-start', turnId });
 
     if (provider.supportsNativeTools && provider.streamWithTools) {
-        return runNativeToolLoop(opts);
+        return runNativeToolLoop(opts, turnId);
     }
-    return runTextParsedLoop(opts);
+    return runTextParsedLoop(opts, turnId);
 }
 
 // ── Native tool calling loop (Anthropic/OpenAI/DeepSeek/Qwen) ────────────────
 
-async function runNativeToolLoop(opts: AgentRunOptions): Promise<Message[]> {
+async function runNativeToolLoop(opts: AgentRunOptions, turnId: string): Promise<Message[]> {
     const { userMessage, history, provider, git, context, sessionId, onEvent, onApprovalNeeded } = opts;
 
     const fileContext = buildFileContext();
@@ -109,7 +113,7 @@ async function runNativeToolLoop(opts: AgentRunOptions): Promise<Message[]> {
             const internalTool = nativeToToolCall(tc.name, tc.input);
             const id = `${tc.name}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
             onEvent({ type: 'tool-start', id, tool: internalTool });
-            const toolResult = await executeToolCall(internalTool, git, onApprovalNeeded, context, sessionId);
+            const toolResult = await executeToolCall(internalTool, git, onApprovalNeeded, context, sessionId, turnId);
             onEvent({ type: 'tool-result', id, tool: internalTool, success: toolResult.success, output: toolResult.output });
 
             toolResults.push({
@@ -134,7 +138,7 @@ async function runNativeToolLoop(opts: AgentRunOptions): Promise<Message[]> {
 
 // ── Text-parsed loop (Ollama fallback) ───────────────────────────────────────
 
-async function runTextParsedLoop(opts: AgentRunOptions): Promise<Message[]> {
+async function runTextParsedLoop(opts: AgentRunOptions, turnId: string): Promise<Message[]> {
     const { userMessage, history, provider, git, context, sessionId, onEvent, onApprovalNeeded } = opts;
 
     const fileContext = buildFileContext();
@@ -194,7 +198,7 @@ async function runTextParsedLoop(opts: AgentRunOptions): Promise<Message[]> {
         for (const tool of toolCalls) {
             const id = `${tool.action}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
             onEvent({ type: 'tool-start', id, tool });
-            const result = await executeToolCall(tool, git, onApprovalNeeded, context, sessionId);
+            const result = await executeToolCall(tool, git, onApprovalNeeded, context, sessionId, turnId);
             onEvent({ type: 'tool-result', id, tool, success: result.success, output: result.output });
             toolResultParts.push(
                 `Result of ${tool.action}:\n` +

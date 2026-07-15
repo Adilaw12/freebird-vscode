@@ -1,5 +1,33 @@
 # Changelog
 
+## \[0.8.6] — 2026-07-15
+
+### Added
+
+* **Per-turn checkpoints for the Pro agent.** Every Pro chat turn that creates, edits, copies,
+or downloads a file now gets a "Checkpoint saved" card with a Restore button, letting you
+revert every file that turn touched back to its state before the turn — the agent already
+lets the AI write/edit/run commands across a workspace with only a single approve/reject
+gate per tool call, and until now there was no way to undo a turn afterward beyond your own
+git history. Only the four tools that directly mutate file content are covered; a turn that
+also ran a shell command or `git push` is explicitly labeled "can't be undone by restore"
+rather than silently pretending to cover it. Checkpoint data lives in per-workspace extension
+storage (not your repo), capped at the last 20 turns.
+* **`fetch_url` agent tool** — the agent can now read a webpage's content directly (docs,
+articles, a URL you paste in) instead of only being able to search your own codebase.
+Returns extracted plain text (HTML/scripts/styles stripped), not raw markup.
+
+### Security
+
+* **`fetch_url` blocks requests to private/internal addresses** (localhost, LAN ranges, and
+the `169.254.169.254` cloud-metadata endpoint that's a classic SSRF target), checked at the
+same DNS resolution Node uses to actually open the connection — not a separate upfront
+lookup, which would leave a window for a DNS-rebinding bypass. Literal IP hosts (e.g. a URL
+that's already `http://169.254.169.254/...` with no hostname to resolve) are checked
+directly for the same reason: Node never calls a custom DNS resolver when there's nothing to
+resolve, so that path needed its own explicit guard — found via testing against the real
+network, not just unit tests, after the initial version relied solely on the DNS hook.
+
 ## \[0.8.5] — 2026-07-11
 
 ### Fixed

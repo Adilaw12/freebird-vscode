@@ -12,6 +12,7 @@ import { buildFileContext, resolveMentions, listWorkspaceFiles } from './context
 import { getLicenseStatus, UPGRADE_URL } from '../license/validator';
 import { getCloudEditsRemaining, consumeCloudEdit, DAILY_CLOUD_LIMIT } from '../license/usage';
 import { readProjectMemory, clearProjectMemory, MEMORY_RELATIVE_PATH } from '../agent/memory';
+import { finalizeTurn, restoreCheckpoint, checkpointsRootFor } from '../agent/checkpoint';
 import { trackEvent, getMachineId } from '../telemetry';
 
 const MAX_HISTORY_PAIRS = 20;
@@ -75,6 +76,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     private rawBuffer = '';
     private sessionMessageCount = 0;
     private toolCallsThisRound = 0;
+    private currentTurnId = '';
 
     constructor(context: vscode.ExtensionContext, git: GitService) {
         this.context = context;
@@ -135,6 +137,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     break;
                 case 'start-trial':
                     vscode.commands.executeCommand('freebird.startTrial');
+                    break;
+                case 'restore-checkpoint':
+                    await this.handleRestoreCheckpoint(msg.id, msg.files as string[] | undefined);
                     break;
             }
         });
@@ -309,6 +314,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     })
             });
             this.history = this.trimHistory(newHistory);
+
+            const summary = finalizeTurn(checkpointsRootFor(this.context), this.currentTurnId);
+            if (summary) {
+                this.post({ type: 'checkpoint-ready', id: summary.turnId, files: summary.files, unrevertable: summary.unrevertable });
+            }
         } catch (err: any) {
             trackEvent('api_error');
             this.post({ type: 'assistant-start' });
@@ -448,6 +458,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     private handleAgentEvent(event: AgentEvent) {
         switch (event.type) {
+            case 'turn-start':
+                this.currentTurnId = event.turnId;
+                break;
             case 'iteration-start':
                 this.rawBuffer = '';
                 this.post({ type: 'assistant-start' });
@@ -474,6 +487,27 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 });
                 break;
         }
+    }
+
+    // ── Checkpoints ──────────────────────────────────────────────────────────
+
+    private async handleRestoreCheckpoint(turnId: string, files: string[] | undefined) {
+        const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        const checkpointsRoot = checkpointsRootFor(this.context);
+        if (!root || !checkpointsRoot) {
+            this.post({ type: 'checkpoint-restored', id: turnId, restored: [], deleted: [], errors: ['No workspace open.'] });
+            return;
+        }
+
+        const fileList = files && files.length ? files.join(', ') : 'the files from that turn';
+        const choice = await vscode.window.showWarningMessage(
+            `Restore ${fileList} to their state before this turn? Any manual edits made to these files since then will be overwritten.`,
+            'Restore', 'Cancel'
+        );
+        if (choice !== 'Restore') return;
+
+        const result = restoreCheckpoint(root, checkpointsRoot, turnId);
+        this.post({ type: 'checkpoint-restored', id: turnId, ...result });
     }
 
     // ── Trim history ─────────────────────────────────────────────────────────
