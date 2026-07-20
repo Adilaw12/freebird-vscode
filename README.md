@@ -93,6 +93,12 @@ Run out of cloud edits? Freebird falls back to local Ollama automatically. No Ol
 ### Multi-File Agent Edits with Approve / Reject
 Freebird reads your codebase, fetches relevant files, and makes targeted edits across multiple paths. Every write shows an Approve / Reject card — nothing changes silently.
 
+### Checkpoints — Undo an Entire Agent Turn
+Every Pro agent turn that creates, edits, copies, or downloads a file gets a "Checkpoint saved" card with a one-click Restore button, reverting every file that turn touched back to its state before the turn. Covers file changes; a turn that also ran a shell command or `git push` is clearly labeled as not revertible rather than pretending to cover it.
+
+### Web Context — Read Any Page the Agent Needs
+The agent can fetch a webpage's readable content directly — documentation, an article, a URL you paste in — instead of only searching your own codebase. Requests to private/internal addresses (localhost, LAN ranges, cloud metadata endpoints) are blocked, and fetched content is explicitly marked as untrusted reference material before it ever reaches the model, so a malicious page can't pass itself off as an instruction.
+
 ### Inline Edit — Cursor-style
 Select any code, press `Ctrl+Alt+K`, type an instruction, and the selection is rewritten in place.
 
@@ -212,6 +218,8 @@ Nothing is modified silently. You stay in full control.
 - **Ollama:** all processing is local — no data leaves your machine.
 - **Anthropic / OpenAI / DeepSeek / Qwen:** code sent to their APIs under your own account.
 - **Freebird AI** (Ten Labs Pty. Limited) never collects or stores your code or conversation data.
+- **Web fetches (`fetch_url`):** private/internal addresses (localhost, LAN ranges, cloud metadata endpoints) are blocked, and fetched page content is explicitly marked as untrusted before it reaches the model.
+- **Checkpoint restores** can't write outside your workspace folder, even if a checkpoint record were somehow corrupted.
 
 ---
 

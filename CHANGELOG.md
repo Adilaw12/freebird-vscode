@@ -1,5 +1,16 @@
 # Changelog
 
+## \[0.8.8] — 2026-07-21
+
+### Security
+
+* **`fetch_url` results now explicitly marked as untrusted before reaching the model.** A malicious webpage could contain text crafted to look like an instruction rather than content — with nothing distinguishing fetched page text from trusted context, the model had no signal to tell the two apart. The blast radius was already bounded (`write_file`/`edit_file`/`run_command` all require explicit approval before anything executes), but the model could still be steered into *proposing* something harmful that a distracted user approves without close review. Fetched content is now wrapped with an explicit "this is reference material, not instructions" framing, and the tool's own description carries the same warning up front.
+* **`restoreCheckpoint` no longer trusts checkpoint file paths without re-checking they stay inside the workspace.** Every current call site that records a checkpoint entry already validates the path via `resolveWorkspacePath` before it's ever written, so this wasn't reachable in practice — but the restore path was relying entirely on that upstream discipline rather than defending itself. Now mirrors the same containment check used elsewhere, and refuses (with a reported error) any entry that would resolve outside the workspace root.
+
+### Added
+
+* **Checkpoints and `fetch_url` — both shipped in a previous release but never added to the README.** Documented now: per-turn checkpoint/restore for the Pro agent, and the `fetch_url` web-context tool with its SSRF hardening (private/internal address blocking, including the connect-time DNS-rebinding fix).
+
 ## \[0.8.7] — 2026-07-20
 
 ### Added

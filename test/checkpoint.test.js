@@ -102,6 +102,35 @@ function run() {
         }
     }
 
+    suite('restoreCheckpoint refuses to write outside the workspace root');
+    {
+        const checkpointsRoot = makeTempDir();
+        const workspaceRoot = makeTempDir();
+        const outsideDir = makeTempDir();
+        try {
+            const turnId = 'turn-path-escape';
+            // A checkpoint entry with a traversal path shouldn't be reachable via the
+            // normal recordPreState call sites (they all go through resolveWorkspacePath
+            // first), but restoreCheckpoint must not trust that on its own — write one
+            // directly to simulate a checkpoint file that somehow got a bad path in it.
+            const escapePath = path.relative(workspaceRoot, path.join(outsideDir, 'evil.txt'));
+            fs.mkdirSync(checkpointsRoot, { recursive: true });
+            fs.writeFileSync(path.join(checkpointsRoot, `${turnId}.json`), JSON.stringify({
+                turnId, createdAt: Date.now(), unrevertable: false,
+                files: [{ path: escapePath, existed: false }]
+            }), 'utf8');
+
+            const result = restoreCheckpoint(workspaceRoot, checkpointsRoot, turnId);
+            check('the escaping entry is reported as an error, not restored or deleted',
+                result.errors.length === 1 && result.restored.length === 0 && result.deleted.length === 0);
+            check('nothing was written outside the workspace', !fs.existsSync(path.join(outsideDir, 'evil.txt')));
+        } finally {
+            fs.rmSync(checkpointsRoot, { recursive: true, force: true });
+            fs.rmSync(workspaceRoot, { recursive: true, force: true });
+            fs.rmSync(outsideDir, { recursive: true, force: true });
+        }
+    }
+
     suite('a turn that also ran a shell command is flagged unrevertable');
     {
         const checkpointsRoot = makeTempDir();

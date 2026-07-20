@@ -113,8 +113,14 @@ export function restoreCheckpoint(root: string, checkpointsRoot: string, turnId:
         return result;
     }
 
+    const resolvedRoot = path.resolve(root);
+
     for (const entry of data.files) {
-        const full = path.resolve(root, entry.path);
+        const full = path.resolve(resolvedRoot, entry.path);
+        if (full !== resolvedRoot && !full.startsWith(resolvedRoot + path.sep)) {
+            result.errors.push(`${entry.path}: refusing to restore outside the workspace`);
+            continue;
+        }
         try {
             if (entry.existed) {
                 fs.mkdirSync(path.dirname(full), { recursive: true });
