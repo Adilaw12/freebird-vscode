@@ -26,7 +26,8 @@ const suites = [
     require('./gemini-fallback.test.js'),
     require('./quota-race.test.js'),
     require('./checkpoint.test.js'),
-    require('./fetch-url.test.js')
+    require('./fetch-url.test.js'),
+    require('./backend-picker.test.js')
 ];
 
 (async () => {

@@ -84,12 +84,12 @@ export function getSessionStats(): Record<string, number> | null {
     return session?.events ?? null;
 }
 
-export function disposeTelemetry(): void {
+export async function disposeTelemetry(): Promise<void> {
     if (_flushTimer) {
         clearInterval(_flushTimer);
         _flushTimer = undefined;
     }
-    flush();
+    return flush();
 }
 
 async function flush(): Promise<void> {

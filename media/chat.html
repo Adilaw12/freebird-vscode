@@ -44,6 +44,7 @@ body {
   transition: opacity 0.2s, background 0.2s;
 }
 .icon-btn:hover { opacity: 0.75; background: var(--vscode-toolbar-hoverBackground, rgba(255,255,255,0.05)); }
+.icon-btn.copied { color: #4ec9b0; opacity: 1; }
 .icon-btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
 
 /* ── upgrade banner ── */
@@ -639,6 +640,9 @@ em { font-style: italic; }
     <span id="pro-badge">PRO</span>
   </div>
   <div id="top-bar-right">
+    <button class="icon-btn" id="export-btn" title="Copy conversation to clipboard (prompts &amp; responses only, no file contents)">
+      <svg viewBox="0 0 16 16"><path d="M4 2h5l3 3v9H4V2z"/><path d="M9 2v3h3"/><path d="M6 9h4M6 11h4"/></svg>
+    </button>
     <button class="icon-btn" id="clear-btn" title="Clear conversation">
       <svg viewBox="0 0 16 16"><path d="M2 4h12M5 4V2h6v2M6 7v5M10 7v5M3 4l1 10h8l1-10"/></svg>
     </button>
@@ -758,9 +762,12 @@ var inputEl     = document.getElementById('input');
 var sendBtn     = document.getElementById('send');
 var acEl        = document.getElementById('autocomplete');
 var clearBtn    = document.getElementById('clear-btn');
+var exportBtn   = document.getElementById('export-btn');
 
 var busy          = false;
 var currentBubble = null;
+var currentAssistantText = '';
+var transcript    = []; // plain-text log for the export button — see addUserMsg/startAssistantMsg/endMsg/addToolStatus
 var workspaceFiles= [];
 var acItems       = [];
 var acIndex       = -1;
@@ -860,6 +867,24 @@ function renderMarkdown(text) {
   return html;
 }
 
+function buildTranscriptMarkdown() {
+  return transcript.map(function(entry){
+    if (entry.type === 'user') return '**You:**\n' + entry.text;
+    if (entry.type === 'assistant') return '**Freebird:**\n' + entry.text;
+    return '_ran: ' + entry.label + '_';
+  }).join('\n\n');
+}
+
+function exportTranscript() {
+  if (!transcript.length) return;
+  navigator.clipboard.writeText(buildTranscriptMarkdown()).then(function(){
+    var original = exportBtn.title;
+    exportBtn.title = 'Copied!';
+    exportBtn.classList.add('copied');
+    setTimeout(function(){ exportBtn.title = original; exportBtn.classList.remove('copied'); }, 1500);
+  });
+}
+
 function copyCode(id) {
   var el = document.getElementById(id);
   if (!el) return;
@@ -873,6 +898,7 @@ function copyCode(id) {
 function removeWelcome() { var w=document.getElementById('welcome'); if(w) w.remove(); }
 
 function addUserMsg(text) {
+  transcript.push({ type: 'user', text: text });
   removeWelcome();
   var div=document.createElement('div'); div.className='msg user';
   var hdr=document.createElement('div'); hdr.className='msg-header';
@@ -885,6 +911,10 @@ function addUserMsg(text) {
 }
 
 function startAssistantMsg() {
+  // A turn can have multiple assistant bubbles (one per agent-loop iteration) —
+  // flush whatever the previous bubble accumulated before starting a new one.
+  if (currentAssistantText.trim()) transcript.push({ type: 'assistant', text: currentAssistantText });
+  currentAssistantText = '';
   removeWelcome();
   var div=document.createElement('div'); div.className='msg assistant';
   var hdr=document.createElement('div'); hdr.className='msg-header';
@@ -901,6 +931,7 @@ function startAssistantMsg() {
 function setCurrentText(text) {
   if (!currentBubble) return;
   if (text && text.trim()) {
+    currentAssistantText = text;
     stopThinkingAnimation();
     currentBubble.classList.remove('typing');
     currentBubble.innerHTML=renderMarkdown(text);
@@ -916,6 +947,7 @@ function addDivider(label) {
 }
 
 function addToolStatus(id, state, label) {
+  transcript.push({ type: 'tool', label: label });
   var card=document.createElement('div'); card.id='tool-'+id; card.className='tool-card tool-'+state;
   var hdr=document.createElement('div'); hdr.className='tool-header';
   var ic=document.createElement('span'); ic.className='tool-icon';
@@ -989,7 +1021,11 @@ function updateCheckpointCard(id, restored, deleted, errors) {
   btn.replaceWith(r);
 }
 
-function endMsg() { stopThinkingAnimation(); currentBubble=null; setBusy(false); }
+function endMsg() {
+  if (currentAssistantText.trim()) transcript.push({ type: 'assistant', text: currentAssistantText });
+  currentAssistantText = '';
+  stopThinkingAnimation(); currentBubble=null; setBusy(false);
+}
 function setBusy(v) { busy=v; sendBtn.disabled=v; inputEl.disabled=v; if(!v) inputEl.focus(); }
 function scroll() { msgsEl.scrollTop=msgsEl.scrollHeight; }
 
@@ -1228,6 +1264,7 @@ function send() {
 
 sendBtn.addEventListener('click',send);
 clearBtn.addEventListener('click',function(){vscode.postMessage({type:'clear'});});
+exportBtn.addEventListener('click',exportTranscript);
 
 inputEl.addEventListener('keydown',function(e){
   if (acEl.style.display!=='none') {
@@ -1264,7 +1301,7 @@ window.addEventListener('message',function(e){
     case 'cloud-edit-used':  showCloudEditUsed(m.remaining); break;
     case 'ollama-fallback':  showOllamaFallback(); break;
     case 'upgrade-nudge':    showUpgradeNudge(m.variant); break;
-    case 'cleared':          msgsEl.innerHTML=''; addDivider('conversation cleared'); break;
+    case 'cleared':          msgsEl.innerHTML=''; transcript=[]; currentAssistantText=''; addDivider('conversation cleared'); break;
     case 'workspace-files':  workspaceFiles=m.files||[]; break;
     case 'license-status': {
       var banner=document.getElementById('upgrade-banner');

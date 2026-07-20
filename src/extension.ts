@@ -11,6 +11,7 @@ import { initWorkspaceTreeCache } from './agent/tools';
 import { previewHtmlFile } from './agent/preview';
 import { checkOllamaSetup } from './ai/ollamaSetup';
 import { initTelemetry, disposeTelemetry, trackEvent, getMachineId } from './telemetry';
+import { buildBackendPickerItems } from './license/backendPicker';
 import { checkAnnouncement } from './announcement';
 
 export function activate(context: vscode.ExtensionContext) {
@@ -351,25 +352,30 @@ export function activate(context: vscode.ExtensionContext) {
         }),
 
         vscode.commands.registerCommand('freebird.configure', async () => {
+            const license = await getLicenseStatus(context);
             const backend = await vscode.window.showQuickPick(
-                [
-                    { label: '$(zap) Freebird Cloud (default)',    value: 'cloud',     description: 'Gemini Flash — works instantly, 5 free edits/day' },
-                    { label: '$(server) Ollama (local — free)',    value: 'ollama',    description: 'Unlimited, 100% private, runs on your machine' },
-                    { label: '$(cloud) Anthropic Claude (Pro)',    value: 'anthropic', description: 'BYOK — direct-to-LLM speed, total privacy' },
-                    { label: '$(cloud) OpenAI (Pro)',              value: 'openai',    description: 'BYOK — direct-to-LLM speed, total privacy' },
-                    { label: '$(cloud) DeepSeek V4-pro (Pro)',     value: 'deepseek',  description: 'BYOK — advanced reasoning model, excellent value' },
-                    { label: '$(cloud) Qwen 2.5 (Pro)',            value: 'qwen',      description: 'BYOK — powerful coding model via DashScope' }
-                ],
+                buildBackendPickerItems(license.isPro),
                 { placeHolder: 'Select AI backend', title: 'Freebird AI: Configure AI Backend' }
             );
             if (!backend) return;
+
+            if (backend.locked) {
+                vscode.window.showWarningMessage(
+                    `${backend.name} requires an active Pro/Team/Enterprise license.`,
+                    'Upgrade to Pro',
+                    'Dismiss'
+                ).then(choice => {
+                    if (choice === 'Upgrade to Pro') vscode.env.openExternal(vscode.Uri.parse(UPGRADE_URL));
+                });
+                return;
+            }
 
             await vscode.workspace.getConfiguration('freebird').update('backend', backend.value, true);
 
             const needsKey = !['cloud', 'ollama'].includes(backend.value);
             if (needsKey) {
                 const key = await vscode.window.showInputBox({
-                    prompt: `Enter your ${backend.label} API key`,
+                    prompt: `Enter your ${backend.name} API key`,
                     password: true,
                     placeHolder: 'sk-...'
                 });
@@ -421,6 +427,6 @@ export function activate(context: vscode.ExtensionContext) {
     );
 }
 
-export function deactivate() {
-    disposeTelemetry();
+export async function deactivate(): Promise<void> {
+    return disposeTelemetry();
 }

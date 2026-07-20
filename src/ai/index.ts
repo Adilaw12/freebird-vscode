@@ -12,7 +12,7 @@ import { getCachedLicenseStatus, UPGRADE_URL } from '../license/validator';
 // Re-export so callers don't need to import CloudProvider separately
 export { CloudProvider };
 
-const BYOK_BACKENDS = new Set(['anthropic', 'openai', 'deepseek', 'qwen']);
+export const BYOK_BACKENDS = new Set(['anthropic', 'openai', 'deepseek', 'qwen']);
 
 /**
  * Returns the appropriate AI provider based on user config.

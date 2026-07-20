@@ -1,5 +1,39 @@
 # Changelog
 
+## \[0.8.7] — 2026-07-20
+
+### Added
+
+* **Copy conversation to clipboard** — a new icon button in the chat panel's top bar copies
+the current conversation (prompts, responses, and a short note per tool call) to the
+clipboard as Markdown, for sharing with a teammate or pasting into a bug report. No new
+redaction logic was needed: the chat webview already only ever receives the clean, already-
+redacted view (the user's raw typed text, the model's prose, and tool output already
+truncated to 200 chars server-side) — full file contents and injected context never reach
+the webview in the first place. Resets along with `/clear` so a cleared conversation can
+never leak into a later export.
+* **The "Configure AI Backend" picker no longer lets an unlicensed user configure a BYOK
+backend that would silently do nothing.** Previously you could pick Anthropic/OpenAI/
+DeepSeek/Qwen, enter an API key, and see a "configured!" confirmation even with no active
+license — `getProvider()` would then silently fall back to the free cloud tier the moment
+you actually tried to use it, with no indication anything had gone differently than
+expected. The picker now checks license status upfront: unlicensed BYOK entries show as
+`Requires Pro` and selecting one goes straight to the upgrade prompt, instead of a config
+flow that quietly wouldn't have worked.
+
+### Fixed
+
+* **Telemetry events could be silently lost on normal VS Code shutdown**, including
+security-relevant events like `byok_blocked_no_license` — found while investigating a user
+report and being unable to conclusively confirm from telemetry alone whether the BYOK gate
+had actually fired for them. Root cause: the final flush on deactivation was fire-and-forget
+two levels deep (`disposeTelemetry()` didn't return/await `flush()`'s promise, and
+`deactivate()` didn't await `disposeTelemetry()` either), even though VS Code's extension
+host does await a Thenable returned from `deactivate()` — that existing mechanism just
+wasn't wired up. Now properly awaited end to end. Doesn't help on a hard crash/force-kill
+(deactivate never runs at all in that case) — durable crash-resilient telemetry would need
+persisting the pending queue, which is a bigger change than this fix; not doing that now.
+
 ## \[0.8.6] — 2026-07-15
 
 ### Added
