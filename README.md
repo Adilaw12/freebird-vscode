@@ -10,16 +10,14 @@
 
 ![Freebird AI — codebase-aware agent with inline edit](media/banner.png)
 
-Install Freebird AI and start coding in seconds — no API keys, no throttling, no configuration. You get **20 free advanced AI edits per day** powered by Gemini Flash, plus unlimited local AI when you want full privacy.
+Install Freebird AI and start coding in seconds — no API keys, no throttling, no configuration. You get **20 free advanced AI edits per day** powered by Gemini Flash, plus free BYOK and unlimited local AI when you want full privacy.
 
 **Copilot throttled? Cursor too expensive? GitHub limits hit?**
 Freebird never blocks you — it picks up where other tools stop.
 
-**[Start free — upgrade anytime for $6 USD/month →](https://buy.stripe.com/9B628t4WheMmeSMccZfAc03)**
+**[Upgrade to Pro — $6 USD/month →](https://buy.stripe.com/9B628t4WheMmeSMccZfAc03)** · or start a **free 7-day Pro trial** (no card needed) right from the chat panel
 
 ⭐ **If Freebird saves you time, a GitHub star helps others find it** — thank you!
-
-🚀 **We're live on Product Hunt (July 15)** — [an upvote helps a lot](https://www.producthunt.com/posts/freebird-ai) if you've found this useful.
 
 ---
 
@@ -29,21 +27,21 @@ Freebird never blocks you — it picks up where other tools stop.
 |---|:---:|:---:|:---:|:---:|
 | Price | $10/mo | $20/mo | **Free** | **$6/mo** |
 | Setup required | No | Yes | **No** | No |
-| Multi-file edits | Limited | ✅ | ✅ | ✅ |
+| Multi-file agent edits (terminal, checkpoints) | Limited | ✅ | ❌ | ✅ |
 | Local AI (Ollama) | ❌ | ❌ | ✅ | ✅ |
-| BYOK | ❌ | ✅ | ❌ | ✅ |
-| Throttling | ✅ | ✅ | Never | Never |
+| BYOK (Claude, GPT-4o, DeepSeek, Qwen) | ❌ | ✅ | ✅ | ✅ |
+| Cloud edits throttled | ✅ | ✅ | 20/day soft cap | Never |
 
 ---
 
 ## See It in Action
 
-### Multi-file agent edit with Approve / Reject
+### Multi-file agent edit with Approve / Reject (Pro)
 Ask Freebird to update your products page, add images to cards, or refactor across files — it shows a full diff and waits for your approval before changing anything.
 
 ![Freebird AI — multi-file agent edit with approve/reject flow](media/Freebird%20AI-%20edit%20screen.png)
 
-### Agentic page editing across HTML and CSS
+### Agentic page editing across HTML and CSS (Pro)
 Freebird reads your existing code structure, understands the context, and makes targeted edits across files in one agent run.
 
 ![Freebird AI — agentic page editing across HTML and CSS](media/Freebird%20AI-%20edit%20screen-2.png)
@@ -59,12 +57,13 @@ Freebird reads your existing code structure, understands the context, and makes 
 | `/` slash commands | ✅ | ✅ |
 | Works instantly — no setup | ✅ | ✅ |
 | Unlimited local Ollama (100% private) | ✅ | ✅ |
-| **Advanced cloud edits (multi-file, inline, terminal, AI commit)** | 20/day | **Unlimited** |
-| **Bring your own API keys — BYOK (Anthropic / OpenAI / DeepSeek / Qwen)** | — | ✅ |
-| **Direct-to-LLM speed & total data privacy** | — | ✅ |
+| **Bring your own API keys — BYOK (Anthropic / OpenAI / DeepSeek / Qwen)**, direct-to-LLM speed & total privacy | ✅ | ✅ |
+| Inline edit (`Ctrl+Alt+K`) & AI commit, cloud-powered | 20/day | **Unlimited** |
+| **Multi-file agent edits, terminal commands, checkpoints** | — | ✅ |
 | **Project memory across sessions** | — | ✅ |
+| Full (non-lite) Gemini model on cloud edits | — | ✅ |
 
-> **Pro tip:** Connect your DeepSeek API key — scores higher than GPT-4o on coding benchmarks at ~$0.20/million tokens. Thousands of unthrottled edits per month for a couple of dollars on top of your $6 plan.
+> **Pro tip:** Connect your DeepSeek API key — it's free on every plan, scores higher than GPT-4o on coding benchmarks, and costs about $0.20/million tokens. Thousands of unthrottled edits a month for pennies, no Pro required.
 
 ---
 
@@ -72,8 +71,9 @@ Freebird reads your existing code structure, understands the context, and makes 
 
 - **GitHub Copilot** — when you hit your monthly speed limit
 - **Cursor Composer** — multi-file agent edits, without migrating from VS Code
-- **Claude Code** — BYOK workflows at $6/month vs $20/month
+- **Claude Code** — the same bring-your-own-key workflow, free, without leaving VS Code
 - **Local coding agents** — Ollama integration built in, unlimited and private
+- **Cloud-forbidden environments** — enterprise policies that ban cloud AI, NDA-bound freelance work — Pro's Agent mode runs on Ollama with zero calls ever leaving the machine
 
 ---
 
@@ -85,25 +85,30 @@ Freebird reads your existing code structure, understands the context, and makes 
 Install and start coding. Your first 20 advanced edits per day are powered by Gemini Flash — no API key, no Ollama, nothing to configure.
 
 ### 20 Free Advanced Edits Every Day
-Multi-file edits, codebase search, inline edit, AI commits, terminal actions. Resets daily, no card required.
+Unlimited chat, plus 20 cloud-powered inline edits and AI commits a day. Resets daily, no card required. Multi-file agent edits and terminal commands are Pro (see below).
 
-### Never Throttled — Always-On Fallback
-Run out of cloud edits? Freebird falls back to local Ollama automatically. No Ollama? Falls back to Gemini cloud. You are never left with a broken tool.
+### Hit Your Daily Cap? You've Got Options
+If you've configured Ollama as your backend, Freebird falls back to it automatically when the cloud quota runs out. Otherwise you'll see a clear "free edits used up" prompt with a no-card 7-day Pro trial one click away — or switch to BYOK (free, unlimited) or Ollama (free, unlimited) anytime from **Freebird: Configure AI Backend**.
 
-### Multi-File Agent Edits with Approve / Reject
+### Multi-File Agent Edits with Approve / Reject (Pro)
 Freebird reads your codebase, fetches relevant files, and makes targeted edits across multiple paths. Every write shows an Approve / Reject card — nothing changes silently.
 
-### Checkpoints — Undo an Entire Agent Turn
+### Checkpoints — Undo an Entire Agent Turn (Pro)
 Every Pro agent turn that creates, edits, copies, or downloads a file gets a "Checkpoint saved" card with a one-click Restore button, reverting every file that turn touched back to its state before the turn. Covers file changes; a turn that also ran a shell command or `git push` is clearly labeled as not revertible rather than pretending to cover it.
 
-### Web Context — Read Any Page the Agent Needs
+### Web Context — Read Any Page the Agent Needs (Pro)
 The agent can fetch a webpage's readable content directly — documentation, an article, a URL you paste in — instead of only searching your own codebase. Requests to private/internal addresses (localhost, LAN ranges, cloud metadata endpoints) are blocked, and fetched content is explicitly marked as untrusted reference material before it ever reaches the model, so a malicious page can't pass itself off as an instruction.
 
 ### Inline Edit — Cursor-style
 Select any code, press `Ctrl+Alt+K`, type an instruction, and the selection is rewritten in place.
 
+![Freebird AI — inline edit rewriting a selection in place](media/Inline%20AI%20refactor.gif)
+
 ### Bring Your Own Keys — Unthrottled, free
 Plug in your own **Anthropic Claude**, **OpenAI**, **DeepSeek**, or **Qwen** API key. Direct-to-LLM speed, total data privacy, no middleman quotas — free for everyone, since the calls never touch Freebird's servers.
+
+### Full Agent Mode With Zero Cloud Calls (Pro)
+Agent mode isn't locked to Freebird's cloud — it routes through whatever backend you've configured, same as everything else. Set the backend to **Ollama** and get the full Pro feature set (multi-file edits, terminal commands, checkpoints, project memory) with every request staying on your machine. Built for teams whose policy forbids cloud AI, or freelancers working under an NDA that does the same — the model runs locally, so there's nothing to disclose.
 
 ### Smart Chat with File Context
 Type `@filename` to inject any file into the conversation. Type `/` to see all available commands.
@@ -143,19 +148,19 @@ BYOK models are free for everyone (bring your own API key/cost). Gemini Flash an
 2. Run `ollama pull qwen2.5-coder` in a terminal
 3. Run **Freebird: Configure AI Backend** → select **Ollama**
 
-### Option 3 — Anthropic Claude (Pro, BYOK)
+### Option 3 — Anthropic Claude (BYOK, free)
 1. Get an API key at [console.anthropic.com](https://console.anthropic.com)
 2. Run **Freebird: Configure AI Backend** → select **Anthropic Claude**
 
-### Option 4 — OpenAI (Pro, BYOK)
+### Option 4 — OpenAI (BYOK, free)
 1. Get an API key at [platform.openai.com](https://platform.openai.com)
 2. Run **Freebird: Configure AI Backend** → select **OpenAI**
 
-### Option 5 — DeepSeek (Pro, BYOK)
+### Option 5 — DeepSeek (BYOK, free)
 1. Get an API key at [platform.deepseek.com](https://platform.deepseek.com)
 2. Run **Freebird: Configure AI Backend** → select **DeepSeek**
 
-### Option 6 — Qwen 2.5 (Pro, BYOK)
+### Option 6 — Qwen 2.5 (BYOK, free)
 1. Get an API key at [dashscope.console.aliyun.com](https://dashscope.console.aliyun.com)
 2. Run **Freebird: Configure AI Backend** → select **Qwen 2.5**
 
@@ -185,7 +190,7 @@ BYOK models are free for everyone (bring your own API key/cost). Gemini Flash an
 
 ---
 
-## How the Agent Works
+## How the Agent Works (Pro)
 
 1. **Reads** your workspace file tree automatically
 2. **Fetches** specific files it needs
@@ -215,7 +220,7 @@ Nothing is modified silently. You stay in full control.
 ## Privacy
 
 - **Gemini Flash (free tier):** messages processed by Google's API. No code stored by Freebird.
-- **Ollama:** all processing is local — no data leaves your machine.
+- **Ollama:** all processing is local — no data leaves your machine. This applies to Agent mode too (Pro) — set the backend to Ollama and multi-file edits, terminal commands, and checkpoints all run without a single cloud call, which is what makes Freebird usable under a corporate no-cloud-AI policy or an NDA that forbids sending code off-machine.
 - **Anthropic / OpenAI / DeepSeek / Qwen:** code sent to their APIs under your own account.
 - **Freebird AI** (Ten Labs Pty. Limited) never collects or stores your code or conversation data.
 - **Web fetches (`fetch_url`):** private/internal addresses (localhost, LAN ranges, cloud metadata endpoints) are blocked, and fetched page content is explicitly marked as untrusted before it reaches the model.
