@@ -31,3 +31,8 @@ jobs:
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: npx @vscode/vsce publish --packagePath $(find . -maxdepth 1 -name "*.vsix" -print -quit)
+
+      - name: Publish to Open VSX
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: npx ovsx publish $(find . -maxdepth 1 -name "*.vsix" -print -quit) -p "$OVSX_PAT"

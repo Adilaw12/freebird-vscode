@@ -1,5 +1,12 @@
 # Changelog
 
+## \[0.8.10] — 2026-07-25
+
+### Docs
+
+* Fixed a broken README banner image (pointed at a demo.gif that was never added) and added a real inline-edit demo gif.
+* Extension is now published to Open VSX via CI, alongside the VS Code Marketplace.
+
 ## \[0.8.9] — 2026-07-25
 
 ### Fixed: the free-edit counter (important)
