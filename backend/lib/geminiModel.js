@@ -23,6 +23,14 @@ export const GEMINI_MODEL_CANDIDATES = [
     'gemini-2.5-flash'
 ];
 
+// Pro/unmetered requests get the full (non-lite) tier first — a genuine
+// quality difference paying users can feel, rather than relying on quota
+// pressure alone. Falls through to the free-tier list as a safety net.
+export const PRO_GEMINI_MODEL_CANDIDATES = [
+    'gemini-3.6-flash',
+    ...GEMINI_MODEL_CANDIDATES
+];
+
 function urlFor(model, endpoint) {
     const altParam = endpoint === 'streamGenerateContent' ? 'alt=sse&' : '';
     return `https://generativelanguage.googleapis.com/v1beta/models/${model}:${endpoint}?${altParam}key=${GEMINI_API_KEY}`;
@@ -40,11 +48,11 @@ function urlFor(model, endpoint) {
  * @param {RequestInit} [fetchOpts] extra fetch options (e.g. signal)
  * @returns {Promise<{ response: Response, modelUsed: string }>}
  */
-export async function fetchGeminiWithFallback(endpoint, body, fetchOpts = {}) {
+export async function fetchGeminiWithFallback(endpoint, body, fetchOpts = {}, candidates = GEMINI_MODEL_CANDIDATES) {
     let lastResponse = null;
-    let lastModel = GEMINI_MODEL_CANDIDATES[0];
+    let lastModel = candidates[0];
 
-    for (const model of GEMINI_MODEL_CANDIDATES) {
+    for (const model of candidates) {
         const response = await fetch(urlFor(model, endpoint), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -53,7 +61,7 @@ export async function fetchGeminiWithFallback(endpoint, body, fetchOpts = {}) {
         });
 
         if (response.ok) {
-            if (model !== GEMINI_MODEL_CANDIDATES[0]) {
+            if (model !== candidates[0]) {
                 console.warn(`Gemini fallback engaged: primary model(s) unavailable, served via "${model}". Update GEMINI_MODEL_CANDIDATES.`);
             }
             return { response, modelUsed: model };

@@ -1,8 +1,8 @@
 {
   "name": "freebird-ai",
   "displayName": "Freebird AI",
-  "description": "AI coding assistant — 20 free AI edits/day, no setup. Copilot alternative with multi-file edits, BYOK (Claude, GPT-4o, DeepSeek), local Ollama, inline edit, AI commit. Pro $6/mo.",
-  "version": "0.8.8",
+  "description": "AI coding assistant — 20 free AI edits/day, no setup. Free BYOK (Claude, GPT-4o, DeepSeek) & local Ollama. Inline edit, AI commit. Pro $6/mo: Agent mode (multi-file edits) + unlimited.",
+  "version": "0.8.9",
   "publisher": "TenLabs",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -86,7 +86,7 @@
           {
             "id": "goPro",
             "title": "Need more? Go unlimited",
-            "description": "Pro removes the daily cap entirely and adds BYOK (Claude, GPT-4o, DeepSeek) plus project memory — $6/month.\n[Upgrade to Pro](command:freebird.upgradeToPro)",
+            "description": "Pro unlocks Agent mode — multi-file edits, terminal commands, checkpoints — plus unlimited cloud edits and project memory. $6/month, 7-day free trial, no card needed.\n[Upgrade to Pro](command:freebird.upgradeToPro)",
             "media": { "markdown": "media/walkthrough/go-pro.md" },
             "completionEvents": [ "onCommand:freebird.upgradeToPro" ]
           }
@@ -202,12 +202,12 @@
             "qwen"
           ],
           "enumDescriptions": [
-            "Freebird Cloud (Gemini Flash) — works instantly, 5 free edits/day, no setup",
+            "Freebird Cloud (Gemini Flash) — works instantly, 20 free edits/day, no setup",
             "Local AI via Ollama — unlimited, 100% private, runs on your machine",
-            "Anthropic Claude API — BYOK, direct-to-LLM speed (Pro)",
-            "OpenAI API — BYOK, direct-to-LLM speed (Pro)",
-            "DeepSeek API — BYOK, advanced reasoning model (Pro)",
-            "Qwen 2.5 API (DashScope) — BYOK, powerful coding model (Pro)"
+            "Anthropic Claude API — BYOK, direct-to-LLM speed, free",
+            "OpenAI API — BYOK, direct-to-LLM speed, free",
+            "DeepSeek API — BYOK, advanced reasoning model, free",
+            "Qwen 2.5 API (DashScope) — BYOK, powerful coding model, free"
           ],
           "default": "cloud",
           "description": "AI backend to use for Freebird"

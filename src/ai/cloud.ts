@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
 import { AIProvider, Message, CompletionOptions } from './provider';
 import { getStoredSession } from '../auth/github';
+import { QUOTA_KEY } from '../license/usage';
 
 const API_BASE  = 'https://freebird-backend.vercel.app';
-const QUOTA_KEY = 'freebird.cloudQuotaRemaining';
 
 /**
  * CloudProvider — calls the Freebird Vercel backend.

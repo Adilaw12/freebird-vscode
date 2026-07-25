@@ -1,6 +1,7 @@
-// test/backend-picker.test.js — the "Configure AI Backend" picker must not
-// let a non-Pro user configure a BYOK backend that getProvider() will then
-// silently ignore. This locks in that the picker itself reflects reality.
+// test/backend-picker.test.js — the "Configure AI Backend" picker must
+// reflect reality. As of v0.8.9, every backend (including all BYOK entries)
+// is available on the free plan, so nothing is ever locked regardless of
+// license status.
 
 require('./bootstrap');
 const path = require('path');
@@ -20,8 +21,8 @@ function run() {
         check('cloud is never locked', byValue.cloud.locked === false);
         check('ollama is never locked', byValue.ollama.locked === false);
         for (const v of BYOK_VALUES) {
-            check(`${v} is locked when unlicensed`, byValue[v].locked === true);
-            check(`${v}'s label signals it's locked`, byValue[v].label.includes('Requires Pro'));
+            check(`${v} is not locked when unlicensed`, byValue[v].locked === false);
+            check(`${v}'s label does not say Requires Pro`, !byValue[v].label.includes('Requires Pro'));
         }
     }
 
@@ -40,12 +41,12 @@ function run() {
 
     suite('every item has a clean "name" usable outside the decorated label');
     {
-        const locked = buildBackendPickerItems(false);
-        const unlocked = buildBackendPickerItems(true);
-        check('locked items\' name has no icon/lock decoration', locked.every(i => !i.name.includes('$(')));
-        check('unlocked items\' name has no icon decoration', unlocked.every(i => !i.name.includes('$(')));
+        const unlicensed = buildBackendPickerItems(false);
+        const licensed = buildBackendPickerItems(true);
+        check('unlicensed items\' name has no icon decoration', unlicensed.every(i => !i.name.includes('$(')));
+        check('licensed items\' name has no icon decoration', licensed.every(i => !i.name.includes('$(')));
         check('name is stable across licensed/unlicensed for the same backend',
-            locked.every((item, idx) => item.name === unlocked[idx].name));
+            unlicensed.every((item, idx) => item.name === licensed[idx].name));
     }
 }
 

@@ -12,7 +12,7 @@ import * as cp from 'child_process';
  *   2. If Ollama is installed but not running → auto-start it, return.
  *   3. If Ollama is not installed → show a notification with two options:
  *        a. "Install Ollama" → open ollama.com/download
- *        b. "Use Cloud Edits" → switch backend to 'cloud' (5 free/day)
+ *        b. "Use Cloud Edits" → switch backend to 'cloud' (20 free/day)
  *      This replaces the previous silent curl-pipe-to-sh installer which
  *      was blocked by Gatekeeper on macOS and UAC on Windows.
  */
@@ -58,7 +58,7 @@ export async function checkOllamaSetup(context: vscode.ExtensionContext): Promis
         'Freebird is set to use Ollama (local AI), but Ollama isn\'t installed yet.',
         { modal: false },
         'Install Ollama',
-        'Use Cloud Edits (5/day free)',
+        'Use Cloud Edits (20/day free)',
         'Don\'t show again'
     );
 
@@ -67,10 +67,10 @@ export async function checkOllamaSetup(context: vscode.ExtensionContext): Promis
         vscode.window.showInformationMessage(
             'After installing Ollama, run "ollama pull qwen2.5-coder" in a terminal, then reload VS Code.'
         );
-    } else if (action === 'Use Cloud Edits (5/day free)') {
+    } else if (action === 'Use Cloud Edits (20/day free)') {
         await vscode.workspace.getConfiguration('freebird').update('backend', 'cloud', true);
         vscode.window.showInformationMessage(
-            'Switched to Freebird Cloud (Gemini Flash, 5 free edits/day). Upgrade to Pro for unlimited.'
+            'Switched to Freebird Cloud (Gemini Flash, 20 free edits/day). Upgrade to Pro for unlimited.'
         );
     } else if (action === 'Don\'t show again') {
         await context.globalState.update('freebird.ollamaPromptDismissed', true);

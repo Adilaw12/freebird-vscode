@@ -102,8 +102,8 @@ The agent can fetch a webpage's readable content directly — documentation, an 
 ### Inline Edit — Cursor-style
 Select any code, press `Ctrl+Alt+K`, type an instruction, and the selection is rewritten in place.
 
-### Bring Your Own Keys — Unthrottled (Pro)
-Plug in your own **Anthropic Claude**, **OpenAI**, **DeepSeek**, or **Qwen** API key. Direct-to-LLM speed, total data privacy, no middleman quotas.
+### Bring Your Own Keys — Unthrottled, free
+Plug in your own **Anthropic Claude**, **OpenAI**, **DeepSeek**, or **Qwen** API key. Direct-to-LLM speed, total data privacy, no middleman quotas — free for everyone, since the calls never touch Freebird's servers.
 
 ### Smart Chat with File Context
 Type `@filename` to inject any file into the conversation. Type `/` to see all available commands.
@@ -127,7 +127,7 @@ Freebird saves notes about your project to `.freebird/memory.md` and loads them 
 | **GPT-4o** | Best all-rounder | ~$2.50/M tokens |
 | **Claude Sonnet** | Complex refactoring & architecture | ~$3/M tokens |
 
-All BYOK models require Pro. Gemini Flash and Ollama are always free.
+BYOK models are free for everyone (bring your own API key/cost). Gemini Flash and Ollama are also always free. Pro adds Agent mode (multi-file edits, terminal, checkpoints) and unlimited cloud edits on the full Gemini model.
 
 ---
 

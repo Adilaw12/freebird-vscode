@@ -10,7 +10,7 @@ import { Message } from '../ai/provider';
 import { runAgentLoop, AgentEvent, stripToolBlocks } from '../agent/loop';
 import { buildFileContext, resolveMentions, listWorkspaceFiles } from './contextBuilder';
 import { getLicenseStatus, UPGRADE_URL } from '../license/validator';
-import { getCloudEditsRemaining, consumeCloudEdit, DAILY_CLOUD_LIMIT } from '../license/usage';
+import { getCloudEditsRemaining, DAILY_CLOUD_LIMIT } from '../license/usage';
 import { readProjectMemory, clearProjectMemory, MEMORY_RELATIVE_PATH } from '../agent/memory';
 import { finalizeTurn, restoreCheckpoint, checkpointsRootFor } from '../agent/checkpoint';
 import { trackEvent, getMachineId } from '../telemetry';
@@ -264,29 +264,35 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             trackEvent('pro_message');
             await this.runProChat(cleanText, mentionContext);
 
-        } else if (getCloudEditsRemaining(this.context) > 0) {
-            // Free tier: use cloud edits (Gemini Flash via Vercel backend)
-            trackEvent('cloud_edit_used');
-            this.toolCallsThisRound = 0;
-            await this.runFreeChat(cleanText, mentionContext, 'cloud');
-            const remaining = await consumeCloudEdit(this.context);
-            this.post({ type: 'cloud-edit-used', remaining });
-
-            if (remaining === 2) {
-                this.post({ type: 'upgrade-nudge', variant: 'running-low' });
-            }
-            if (this.toolCallsThisRound >= 3) {
-                this.post({ type: 'upgrade-nudge', variant: 'power-user' });
-            }
-
         } else {
-            // Cloud edits exhausted — try Ollama, then fall back to cloud with upgrade prompt
-            trackEvent('ollama_fallback');
-            this.post({ type: 'ollama-fallback' });
-            await this.runFreeChat(cleanText, mentionContext, 'ollama-then-cloud');
+            // Free tier — route by the backend the user actually configured.
+            // Quota is enforced by the SERVER only (backend/api/chat.js,
+            // 20/day). The old client-side 5-edit counter is gone: it
+            // contradicted the advertised limit and pushed non-Ollama users
+            // into a confusing Ollama-fallback path before the real quota
+            // wall could ever show. Now the wall is the server's 429.
+            const backend = vscode.workspace
+                .getConfiguration('freebird')
+                .get<string>('backend', 'cloud');
+            const mode: 'cloud' | 'ollama-then-cloud' =
+                backend === 'ollama' ? 'ollama-then-cloud' : 'cloud';
 
-            if (this.sessionMessageCount % 10 === 0) {
-                this.post({ type: 'upgrade-nudge', variant: 'periodic' });
+            this.toolCallsThisRound = 0;
+            const served = await this.runFreeChat(cleanText, mentionContext, mode);
+
+            if (served && mode === 'cloud') {
+                // Count only successfully served edits, using the
+                // server-reported remaining (X-Quota-Remaining header).
+                trackEvent('cloud_edit_used');
+                const remaining = getCloudEditsRemaining(this.context);
+                this.post({ type: 'cloud-edit-used', remaining });
+
+                if (remaining === 3) {
+                    this.post({ type: 'upgrade-nudge', variant: 'running-low' });
+                }
+                if (this.toolCallsThisRound >= 3) {
+                    this.post({ type: 'upgrade-nudge', variant: 'power-user' });
+                }
             }
         }
     }
@@ -338,11 +344,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     //                               since we only reach this after the 5 paid edits are gone,
     //                               but Gemini Flash is cheap enough to absorb the overflow)
 
+    /** Returns true if a response was successfully served (used for edit accounting). */
     private async runFreeChat(
         text: string,
         mentionContext: string,
         mode: 'cloud' | 'ollama-then-cloud'
-    ) {
+    ): Promise<boolean> {
         const fileContext  = buildFileContext();
         const contextParts = [mentionContext, fileContext].filter(Boolean).join('\n');
         const userContent  = contextParts ? `${contextParts}\n\n${text}` : text;
@@ -359,7 +366,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 { role: 'assistant', content: cached }
             ]);
             this.post({ type: 'assistant-end' });
-            return;
+            return true;
         }
 
         const messages: Message[] = [
@@ -370,26 +377,29 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         this.post({ type: 'assistant-start' });
         let response = '';
+        let served = true;
 
         try {
             if (mode === 'ollama-then-cloud') {
-                // Try Ollama first
+                // Only reached when the user explicitly configured the
+                // Ollama backend. Try their local Ollama first; if it is
+                // unreachable, fall back to the normal quota'd cloud path
+                // and tell them why — this event now genuinely means "an
+                // Ollama user's Ollama was down", not "a cloud user ran
+                // out of a hidden client-side counter".
                 const ollamaAvailable = await this.tryOllama(messages, chunk => {
                     response += chunk;
                     this.post({ type: 'set-text', text: response });
                 });
 
                 if (!ollamaAvailable) {
-                    // Ollama not available — fall back to Gemini via /api/fallback
-                    // (no quota, rate-limited by IP instead)
                     trackEvent('ollama_not_reachable');
-                    const cloud = new CloudProvider(this.context, getMachineId(), 'fallback');
+                    this.post({ type: 'ollama-fallback' });
+                    const cloud = new CloudProvider(this.context, getMachineId());
                     await cloud.stream(messages, chunk => {
                         response += chunk;
                         this.post({ type: 'set-text', text: response });
                     });
-                    // Show a one-time gentle upgrade prompt since they're in overflow
-                    this.post({ type: 'upgrade-nudge', variant: 'quota-overflow' });
                 }
             } else {
                 // mode = 'cloud' — use CloudProvider with normal quota
@@ -412,19 +422,21 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             if (err?.code === 'AUTH_REQUIRED') {
                 trackEvent('auth_required_shown');
                 this.post({ type: 'auth-required' });
-                return;
+                return false;
             } else if (err?.code === 'QUOTA_EXCEEDED') {
                 this.post({ type: 'quota-exceeded' });
                 trackEvent('upgrade_prompt_shown');
-                return;
+                return false;
             } else if (err?.code === 'IP_RATE_LIMITED') {
                 trackEvent('rate_limited');
+                served = false;
                 response =
                     `**Too many requests** — you've hit the fallback rate limit (20/hr).\n\n` +
                     `[Upgrade to Pro](${UPGRADE_URL}) for unlimited access, or install ` +
                     `[Ollama](https://ollama.com) for unlimited free local AI.`;
             } else {
                 trackEvent('api_error');
+                served = false;
                 response =
                     `**Error:** ${err.message}\n\n` +
                     `Try running \`Freebird: Configure AI Backend\` to check your settings, ` +
@@ -440,6 +452,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         ]);
 
         this.post({ type: 'assistant-end' });
+        return served && response.length > 0;
     }
 
     // Returns true if Ollama responded, false if unreachable

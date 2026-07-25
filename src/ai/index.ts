@@ -7,7 +7,6 @@ import { DeepSeekProvider } from './deepseek';
 import { QwenProvider } from './qwen';
 import { CloudProvider } from './cloud';
 import { trackEvent } from '../telemetry';
-import { getCachedLicenseStatus, UPGRADE_URL } from '../license/validator';
 
 // Re-export so callers don't need to import CloudProvider separately
 export { CloudProvider };
@@ -17,21 +16,21 @@ export const BYOK_BACKENDS = new Set(['anthropic', 'openai', 'deepseek', 'qwen']
 /**
  * Returns the appropriate AI provider based on user config.
  *
- * Routing logic:
+ * Routing logic (v0.8.9):
  *
  * BYOK backends (anthropic / openai / deepseek / qwen):
- *   → Requires an active Pro/Team/Enterprise license (checked against the
- *     cache warmed at activation — see getCachedLicenseStatus). Without one,
- *     silently routes to CloudProvider instead of honoring the BYOK setting.
- *     This closes a real gap: previously any free user could switch
- *     Backend to e.g. "openai", supply their own key, and get fully
- *     unmetered use with zero license required — no spoofing needed, just
- *     a settings dropdown.
+ *   → FREE for everyone. The user supplies their own API key, calls go
+ *     direct from their machine to the provider, and Freebird's servers
+ *     never touch the request — so there is nothing for us to meter and
+ *     no reason to gate it. (Gating BYOK behind Pro was charging for the
+ *     one thing that costs us nothing, while the market — Continue, Cline,
+ *     Roo — gives it away. Pro is now about what DOES cost us something:
+ *     unlimited cloud edits and the full agent mode.)
  *
  * ollama (explicit):
  *   → Return a FallbackProvider: tries Ollama first, falls back to Cloud
  *     if Ollama is unreachable. Shows a one-time notification on fallback.
- *     Ollama is always free — no license required.
+ *     Ollama is always free.
  *
  * default (new installs / no config):
  *   → Return CloudProvider directly. No Ollama dependency on first run.
@@ -42,23 +41,12 @@ export function getProvider(context: vscode.ExtensionContext, sessionId: string)
     const backend = config.get<string>('backend', 'cloud');
 
     if (BYOK_BACKENDS.has(backend)) {
-        if (getCachedLicenseStatus().isPro) {
-            switch (backend) {
-                case 'anthropic': return new AnthropicProvider();
-                case 'openai':    return new OpenAIProvider();
-                case 'deepseek':  return new DeepSeekProvider();
-                case 'qwen':      return new QwenProvider();
-            }
+        switch (backend) {
+            case 'anthropic': return new AnthropicProvider();
+            case 'openai':    return new OpenAIProvider();
+            case 'deepseek':  return new DeepSeekProvider();
+            case 'qwen':      return new QwenProvider();
         }
-        // Not licensed — fall back to the free cloud tier instead of honoring
-        // the BYOK setting, and let them know once per session why. The
-        // telemetry event is separately deduped to once per day (tab
-        // completion can re-trigger this gate on every keystroke pause,
-        // which was inflating byok_blocked_no_license into a raw fire-count
-        // rather than a meaningful "how many people hit this today" number).
-        trackByokBlockedOncePerDay(context);
-        notifyByokRequiresPro(context);
-        return new CloudProvider(context, sessionId);
     }
 
     switch (backend) {
@@ -71,36 +59,9 @@ export function getProvider(context: vscode.ExtensionContext, sessionId: string)
             );
 
         default:
-            // 'cloud' or unrecognised — use cloud tier (Gemini Flash, 5/day free)
+            // 'cloud' or unrecognised — use cloud tier (Gemini Flash, 20 free edits/day)
             return new CloudProvider(context, sessionId);
     }
-}
-
-const BYOK_BLOCKED_TRACKED_DATE_KEY = 'freebird.byokBlockedTrackedDate';
-
-function trackByokBlockedOncePerDay(context: vscode.ExtensionContext): void {
-    const today = new Date().toISOString().slice(0, 10);
-    const lastTracked = context.globalState.get<string>(BYOK_BLOCKED_TRACKED_DATE_KEY);
-    if (lastTracked === today) return; // already recorded once today
-
-    context.globalState.update(BYOK_BLOCKED_TRACKED_DATE_KEY, today);
-    trackEvent('byok_blocked_no_license');
-}
-
-let byokWarningShown = false;
-function notifyByokRequiresPro(context: vscode.ExtensionContext): void {
-    if (byokWarningShown) return;
-    byokWarningShown = true;
-
-    vscode.window.showWarningMessage(
-        'Your Backend setting is a bring-your-own-key model, but that requires an active Pro/Team/Enterprise license — using the free cloud tier instead for now.',
-        'Upgrade to Pro',
-        'Dismiss'
-    ).then(choice => {
-        if (choice === 'Upgrade to Pro') {
-            vscode.env.openExternal(vscode.Uri.parse(UPGRADE_URL));
-        }
-    });
 }
 
 /**
@@ -154,7 +115,7 @@ class FallbackProvider implements AIProvider {
         await this.context.globalState.update('freebird.fallbackNotified', true);
 
         const action = await vscode.window.showWarningMessage(
-            'Ollama is not reachable — using your free Freebird cloud edits instead (5/day).',
+            'Ollama is not reachable — using your free Freebird cloud edits instead (20/day).',
             'Set up Ollama',
             'Dismiss'
         );

@@ -2,8 +2,6 @@
 // picker, kept separate from the vscode.QuickPick wiring in extension.ts so
 // it's testable without simulating an actual picker interaction.
 
-import { BYOK_BACKENDS } from '../ai/index';
-
 export interface BackendPickerItem {
     label: string;
     /** Clean display name with no icon/lock decoration, for use in follow-up messages. */
@@ -14,7 +12,7 @@ export interface BackendPickerItem {
 }
 
 const BASE_ITEMS: { name: string; icon: string; value: string; description: string }[] = [
-    { name: 'Freebird Cloud (default)', icon: 'zap',    value: 'cloud',     description: 'Gemini Flash — works instantly, 5 free edits/day' },
+    { name: 'Freebird Cloud (default)', icon: 'zap',    value: 'cloud',     description: 'Gemini Flash — works instantly, 20 free edits/day' },
     { name: 'Ollama (local — free)',    icon: 'server', value: 'ollama',    description: 'Unlimited, 100% private, runs on your machine' },
     { name: 'Anthropic Claude',         icon: 'cloud',  value: 'anthropic', description: 'BYOK — direct-to-LLM speed, total privacy' },
     { name: 'OpenAI',                   icon: 'cloud',  value: 'openai',    description: 'BYOK — direct-to-LLM speed, total privacy' },
@@ -23,18 +21,18 @@ const BASE_ITEMS: { name: string; icon: string; value: string; description: stri
 ];
 
 /**
- * Builds the "Configure AI Backend" picker items. BYOK entries (anthropic/
- * openai/deepseek/qwen) are marked locked when the user has no active Pro/
- * Team/Enterprise license — the caller uses `locked` to short-circuit to an
- * upgrade prompt instead of the API-key entry flow, so the picker itself is
- * honest about what's actually usable rather than letting someone configure
- * a BYOK backend that getProvider() will silently ignore anyway.
+ * Builds the "Configure AI Backend" picker items. As of v0.8.9 every
+ * backend — including all BYOK entries — is available on the free plan,
+ * so nothing is ever locked. The isPro parameter is kept so callers don't
+ * need to change, and `locked` is always false. Pro's value now lives in
+ * unlimited cloud edits + agent mode, not in gating backends.
  */
-export function buildBackendPickerItems(isPro: boolean): BackendPickerItem[] {
-    return BASE_ITEMS.map(item => {
-        const locked = !isPro && BYOK_BACKENDS.has(item.value);
-        return locked
-            ? { label: `$(lock) ${item.name} — Requires Pro`, name: item.name, value: item.value, description: 'Upgrade to Pro to unlock', locked }
-            : { label: `$(${item.icon}) ${item.name}`, name: item.name, value: item.value, description: item.description, locked };
-    });
+export function buildBackendPickerItems(_isPro: boolean): BackendPickerItem[] {
+    return BASE_ITEMS.map(item => ({
+        label: `$(${item.icon}) ${item.name}`,
+        name: item.name,
+        value: item.value,
+        description: item.description,
+        locked: false
+    }));
 }

@@ -651,7 +651,7 @@ em { font-style: italic; }
 
 <!-- Upgrade banner -->
 <div id="upgrade-banner">
-  <span>20 free cloud edits/day &bull; unlimited local Ollama &bull; Pro = unlimited everything</span>
+  <span>20 free cloud edits/day &bull; free BYOK &amp; local Ollama &bull; Pro = Agent mode + unlimited</span>
   <div class="banner-links">
     <button class="link-btn" onclick="vscode.postMessage({type:'upgrade'})">Upgrade to Pro</button>
     <button class="link-btn" onclick="vscode.postMessage({type:'activate-license'})">Enter license key</button>
@@ -1111,13 +1111,14 @@ function showQuotaWall() {
       + '</div>'
       + '<div class="quota-wall-features">'
         + '<div class="quota-wall-feature"><span class="quota-wall-check">👋</span> You\'re clearly getting real value from Freebird.</div>'
-        + '<div class="quota-wall-feature"><span class="quota-wall-check">✓</span> Pro removes the daily cap — unlimited edits.</div>'
-        + '<div class="quota-wall-feature"><span class="quota-wall-check">✓</span> BYOK (Claude, GPT-4o, DeepSeek) + project memory.</div>'
+        + '<div class="quota-wall-feature"><span class="quota-wall-check">✓</span> Pro unlocks Agent mode — multi-file edits, terminal, checkpoints.</div>'
+        + '<div class="quota-wall-feature"><span class="quota-wall-check">✓</span> Unlimited cloud edits on the full Gemini Flash model + project memory.</div>'
       + '</div>'
       + '<div class="quota-wall-actions">'
-        + '<button class="quota-wall-btn-primary" onclick="vscode.postMessage({type:\'upgrade\'})">Upgrade to Pro — $6/month →</button>'
+        + '<button class="quota-wall-btn-primary" onclick="vscode.postMessage({type:\'start-trial\'})">Try Pro free for 7 days — no card →</button>'
+        + '<button class="quota-wall-btn-secondary" onclick="vscode.postMessage({type:\'upgrade\'})">Upgrade now — $6/month</button>'
       + '</div>'
-      + '<div class="quota-wall-reset">Free edits reset in ' + resetTime + ' (midnight UTC) &middot; <a href="#" onclick="vscode.postMessage({type:\'start-trial\'}); return false;" style="color:inherit">or start a 7-day free trial</a></div>';
+      + '<div class="quota-wall-reset">Free edits reset in ' + resetTime + ' (midnight UTC)</div>';
   } else {
     wall.innerHTML =
       '<div class="quota-wall-header">'
@@ -1130,16 +1131,15 @@ function showQuotaWall() {
         + '<div class="quota-wall-stat"><span class="quota-wall-stat-value">' + (sessionMins < 1 ? '<1m' : sessionMins + 'm') + '</span><span class="quota-wall-stat-label">this session</span></div>'
       + '</div>'
       + '<div class="quota-wall-features">'
-        + '<div class="quota-wall-feature"><span class="quota-wall-check">✓</span> Unlimited cloud edits — no daily cap</div>'
-        + '<div class="quota-wall-feature"><span class="quota-wall-check">✓</span> BYOK — Claude, GPT-4o, DeepSeek, Qwen</div>'
+        + '<div class="quota-wall-feature"><span class="quota-wall-check">✓</span> Agent mode — multi-file edits, terminal commands, checkpoints</div>'
+        + '<div class="quota-wall-feature"><span class="quota-wall-check">✓</span> Unlimited cloud edits — no daily cap, full Gemini Flash model</div>'
         + '<div class="quota-wall-feature"><span class="quota-wall-check">✓</span> Project memory across sessions</div>'
-        + '<div class="quota-wall-feature"><span class="quota-wall-check">✓</span> Direct-to-LLM speed, total privacy</div>'
       + '</div>'
       + '<div class="quota-wall-actions">'
-        + '<button class="quota-wall-btn-primary" onclick="vscode.postMessage({type:\'upgrade\'})">Upgrade to Pro — $6/month →</button>'
-        + '<button class="quota-wall-btn-secondary" onclick="vscode.postMessage({type:\'install-ollama\'})">Install Ollama (free)</button>'
+        + '<button class="quota-wall-btn-primary" onclick="vscode.postMessage({type:\'start-trial\'})">Try Pro free for 7 days — no card →</button>'
+        + '<button class="quota-wall-btn-secondary" onclick="vscode.postMessage({type:\'upgrade\'})">Upgrade now — $6/month</button>'
       + '</div>'
-      + '<div class="quota-wall-reset">Free edits reset in ' + resetTime + ' (midnight UTC) &middot; <a href="#" onclick="vscode.postMessage({type:\'start-trial\'}); return false;" style="color:inherit">or start a 7-day free trial</a></div>';
+      + '<div class="quota-wall-reset">Free edits reset in ' + resetTime + ' (midnight UTC) &middot; Free forever: <a href="#" onclick="vscode.postMessage({type:\'install-ollama\'}); return false;" style="color:inherit">local Ollama</a> or bring your own API key</div>';
   }
 
   msgsEl.appendChild(wall); scroll();
@@ -1148,7 +1148,7 @@ function showQuotaWall() {
 var NUDGE_MESSAGES = {
   'running-low': {
     icon: '⚡',
-    text: 'Only <strong>2 free edits</strong> left today. Upgrade to Pro for unlimited cloud AI.',
+    text: 'Only <strong>3 free edits</strong> left today. Pro is unlimited — try it free for 7 days.',
     cta: 'Upgrade to Pro'
   },
   'power-user': {
@@ -1184,8 +1184,8 @@ function showUpgradeNudge(variant) {
 
 function showOllamaFallback() {
   var h=document.createElement('div'); h.className='status-hint ollama-mode';
-  h.innerHTML='Running locally via Ollama — 100% private, unlimited. &nbsp;' +
-    '<button onclick="vscode.postMessage({type:\'upgrade\'})">Want cloud power? Go Pro</button>';
+  h.innerHTML='Ollama wasn\'t reachable — answered via Freebird Cloud instead (uses your daily free edits). &nbsp;' +
+    '<button onclick="vscode.postMessage({type:\'install-ollama\'})">Fix Ollama</button>';
   msgsEl.appendChild(h); scroll();
 }
 

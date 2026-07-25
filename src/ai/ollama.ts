@@ -11,7 +11,9 @@ export class OllamaProvider implements AIProvider, FIMProvider {
     }
 
     async stream(messages: Message[], onChunk: (text: string) => void, opts?: CompletionOptions): Promise<void> {
-        const response = await fetch(`${this.url}/api/chat`, {
+        let response: Response;
+        try {
+            response = await fetch(`${this.url}/api/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -26,9 +28,16 @@ export class OllamaProvider implements AIProvider, FIMProvider {
                 })
             })
         });
+        } catch (err) {
+            // fetch throws a bare TypeError on connection refusal — turn it
+            // into something actionable instead of "fetch failed".
+            const e = new Error(`Ollama isn't reachable at ${this.url}. Start it with \`ollama serve\`, or switch backend via "Freebird: Configure AI Backend".`) as any;
+            e.code = 'OLLAMA_UNREACHABLE';
+            throw e;
+        }
 
         if (!response.ok) {
-            throw new Error(`Ollama error: ${response.statusText}. Is Ollama running? Start it with: ollama serve`);
+            throw new Error(`Ollama returned ${response.status}${response.statusText ? ' ' + response.statusText : ''}. Is the model pulled? Try: ollama pull ${this.model}`);
         }
 
         const reader = response.body!.getReader();

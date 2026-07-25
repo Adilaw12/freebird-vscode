@@ -212,7 +212,7 @@ export function activate(context: vscode.ExtensionContext) {
                     if (result.ok) {
                         trackEvent('trial_started');
                         vscode.window.showInformationMessage(
-                            '🎉 7-day Freebird Pro trial activated — unlimited edits, BYOK, and project memory. Enjoy!'
+                            '🎉 7-day Freebird Pro trial activated — Agent mode, unlimited cloud edits, and project memory. Enjoy!'
                         );
                         refreshStatusBar();
                     } else if (result.code === 'TRIAL_USED') {

@@ -1,5 +1,25 @@
 # Changelog
 
+## \[0.8.9] — 2026-07-25
+
+### Fixed: the free-edit counter (important)
+
+* **A leftover client-side counter capped clean usage at 5 edits/day**, even though the free tier is, and always advertised, 20/day. After 5 edits it silently rerouted requests through an Ollama-fallback path — surfacing "Ollama is not reachable" warnings to users who never installed Ollama. The quota display ("4 free edits left" after one edit) came from the same stale counter. All of this is gone: the server is now the single source of truth (`X-Quota-Remaining` header), the UI shows the real server-reported remaining count, and Ollama is only ever tried when you actually chose the Ollama backend.
+
+### Changed: BYOK is now free for everyone
+
+* **Bring-your-own-key backends (Anthropic Claude, OpenAI, DeepSeek, Qwen) no longer require Pro.** Your key, your machine, your calls — we never touch them, so we no longer charge for them. Local Ollama remains free and unlimited. Pro's value now lives entirely in what runs on our infrastructure: unlimited cloud edits on the full Gemini model, and Agent mode.
+
+### Changed: what Pro means
+
+* **Pro = Agent mode** (multi-file edits, terminal commands, checkpoints, project memory) **+ unlimited cloud edits** on the full Gemini Flash model (free tier uses the lite variant). A 7-day free trial — no card required — is now front and center in the quota wall and walkthrough.
+
+### Improved
+
+* Quota wall leads with the no-card trial instead of a checkout link.
+* Clearer error message when a configured Ollama server is unreachable (distinguishes connection failure from a bad/missing model).
+* Telemetry events for Ollama fallback no longer conflate "Ollama user's server is down" with "free counter exhausted" — funnels are readable again.
+
 ## \[0.8.8] — 2026-07-21
 
 ### Security

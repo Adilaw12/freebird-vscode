@@ -15,7 +15,7 @@ import { Redis } from '@upstash/redis';
 import { createHash } from 'crypto';
 import { verifySession } from '../lib/authToken.js';
 import { isLicenseActive } from '../lib/license.js';
-import { fetchGeminiWithFallback } from '../lib/geminiModel.js';
+import { fetchGeminiWithFallback, PRO_GEMINI_MODEL_CANDIDATES } from '../lib/geminiModel.js';
 import { quotaKeysFor, reserveQuota, refundQuota } from '../lib/quota.js';
 
 const redis = Redis.fromEnv();
@@ -164,7 +164,8 @@ export default async function handler(req, res) {
         const { response: upstream, modelUsed } = await fetchGeminiWithFallback(
             'streamGenerateContent',
             geminiBody,
-            { signal: AbortSignal.timeout(30_000) }
+            { signal: AbortSignal.timeout(30_000) },
+            unmetered ? PRO_GEMINI_MODEL_CANDIDATES : undefined
         );
 
         if (!upstream.ok) {
