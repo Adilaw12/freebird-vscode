@@ -8,7 +8,7 @@
 
 > AI coding assistant · Copilot alternative · Cursor alternative · multi-file AI edits · AI refactoring · codebase search · Gemini Flash · Ollama · BYOK · local AI · privacy-first
 
-![Freebird AI — codebase-aware agent with inline edit](media/banner.png)
+![Freebird AI — inline edit rewriting a selection in place](media/Inline%20AI%20refactor.gif)
 
 Install Freebird AI and start coding in seconds — no API keys, no throttling, no configuration. You get **20 free advanced AI edits per day** powered by Gemini Flash, plus free BYOK and unlimited local AI when you want full privacy.
 
@@ -101,8 +101,6 @@ The agent can fetch a webpage's readable content directly — documentation, an 
 
 ### Inline Edit — Cursor-style
 Select any code, press `Ctrl+Alt+K`, type an instruction, and the selection is rewritten in place.
-
-![Freebird AI — inline edit rewriting a selection in place](media/Inline%20AI%20refactor.gif)
 
 ### Bring Your Own Keys — Unthrottled, free
 Plug in your own **Anthropic Claude**, **OpenAI**, **DeepSeek**, or **Qwen** API key. Direct-to-LLM speed, total data privacy, no middleman quotas — free for everyone, since the calls never touch Freebird's servers.

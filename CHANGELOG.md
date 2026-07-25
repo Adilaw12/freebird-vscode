@@ -1,5 +1,13 @@
 # Changelog
 
+## \[0.8.11] — 2026-07-25
+
+### Fixed: `ollama_fallback` telemetry spam (and wasted cloud calls) from tab completion
+
+* **Inline tab completion calls `getProvider()` on every debounced keystroke (~350ms).** For users on the `ollama` backend with Ollama not actually running, every one of those calls attempted a connection, failed fast, fired an untracked `trackEvent('ollama_fallback')`, and silently made a real cloud completion call as the fallback — turning one genuine outage into hundreds of telemetry events (and hundreds of wasted cloud calls) in a single editing session. Surfaced by today's telemetry: 311 `ollama_fallback` events from only 5 unique machines.
+* `FallbackProvider` now caches "Ollama unreachable" for 60 seconds after the first failure. Within that window, requests skip straight to cloud without re-attempting the connection or re-firing telemetry; it retries automatically once the window elapses. `notifyFallback()`'s existing once-per-session UI notification is unaffected.
+* README: moved the inline-edit demo gif to the top of the page as the hero image (replacing the static banner), and removed the now-duplicate copy further down.
+
 ## \[0.8.10] — 2026-07-25
 
 ### Docs

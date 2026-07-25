@@ -72,6 +72,20 @@ export function getProvider(context: vscode.ExtensionContext, sessionId: string)
  * Does NOT fall back on quota errors (QUOTA_EXCEEDED) — those bubble up
  * so the caller can show the upgrade prompt.
  */
+/**
+ * Module-level Ollama-unreachable cooldown.
+ *
+ * Tab completion calls getProvider() + FallbackProvider on every debounced
+ * keystroke (~350ms). Without this, each keystroke while Ollama is down
+ * re-attempts the connection, fires trackEvent('ollama_fallback'), and
+ * makes a real cloud completion call — turning one genuine outage into
+ * hundreds of telemetry events and wasted cloud calls per session. During
+ * the cooldown, Ollama is skipped entirely and requests go straight to
+ * cloud without re-firing telemetry; it retries once the window elapses.
+ */
+let ollamaUnreachableUntil = 0;
+const OLLAMA_RETRY_MS = 60_000;
+
 class FallbackProvider implements AIProvider {
     constructor(
         private readonly primary: AIProvider,
@@ -84,13 +98,18 @@ class FallbackProvider implements AIProvider {
         onChunk: (text: string) => void,
         opts?: CompletionOptions
     ): Promise<void> {
+        if (Date.now() < ollamaUnreachableUntil) {
+            return this.secondary.stream(messages, onChunk, opts);
+        }
         try {
             await this.primary.stream(messages, onChunk, opts);
+            ollamaUnreachableUntil = 0;
         } catch (err: any) {
             // Don't fall back on quota errors — surface them directly
             if (err?.code === 'QUOTA_EXCEEDED') throw err;
 
             // Ollama unreachable — fall back to cloud
+            ollamaUnreachableUntil = Date.now() + OLLAMA_RETRY_MS;
             trackEvent('ollama_fallback');
             await this.notifyFallback();
             await this.secondary.stream(messages, onChunk, opts);
@@ -98,13 +117,19 @@ class FallbackProvider implements AIProvider {
     }
 
     async complete(messages: Message[], opts?: CompletionOptions): Promise<string> {
+        if (Date.now() < ollamaUnreachableUntil) {
+            return this.secondary.complete(messages, opts);
+        }
         try {
-            return await this.primary.complete(messages, opts);
+            const result = await this.primary.complete(messages, opts);
+            ollamaUnreachableUntil = 0;
+            return result;
         } catch (err: any) {
             if (err?.code === 'QUOTA_EXCEEDED') throw err;
+            ollamaUnreachableUntil = Date.now() + OLLAMA_RETRY_MS;
             trackEvent('ollama_fallback');
             await this.notifyFallback();
-            return await this.secondary.complete(messages, opts);
+            return this.secondary.complete(messages, opts);
         }
     }
 
