@@ -293,7 +293,8 @@ function render(data) {
   // Feature popularity
   var featureEvents = ['message_sent','pro_message','cloud_edit_used','ollama_fallback',
     'inline_edit','ai_commit','chat_opened','upgrade_clicked','backend_configured',
-    'license_activated','byok_blocked_no_license','trial_started'];
+    'license_activated','byok_blocked_no_license','trial_started','trial_signin_declined',
+    'trial_signin_failed','trial_start_failed','trial_already_used'];
   var featureData = featureEvents.map(function(k) { return { name: k, count: totals[k] || 0 }; })
     .sort(function(a,b) { return b.count - a.count; });
   var maxFeature = featureData.length ? featureData[0].count : 1;

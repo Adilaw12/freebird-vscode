@@ -1,9 +1,5 @@
 import * as vscode from 'vscode';
 
-// TODO(Adisa): register a GitHub OAuth App with Device Flow enabled at
-// https://github.com/settings/developers → New OAuth App → check
-// "Enable Device Flow" → paste the Client ID here. No client secret is
-// needed for the device flow steps run directly against GitHub below.
 export const GITHUB_CLIENT_ID = 'Ov23liPNkxvKsMpDl9zL';
 
 const API_BASE = 'https://freebird-backend.vercel.app';

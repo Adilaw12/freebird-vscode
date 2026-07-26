@@ -1,5 +1,13 @@
 # Changelog
 
+## \[0.8.12] — 2026-07-26
+
+### Added: telemetry for silent trial-start failures
+
+* **`freebird.startTrial` had three exit paths that recorded nothing** — declining the sign-in prompt, GitHub sign-in failing/timing out, and the backend rejecting the trial for any reason other than "already used." A user could click the free-trial CTA and, from telemetry's perspective, vanish without a trace: no way to tell a declined prompt from a broken backend call. Surfaced by today's dashboard showing `announcement_cta_clicked: 1` with zero corresponding `trial_started`/`trial_already_used`/`github_signed_in` anywhere in the same day's data.
+* Added `trial_signin_declined`, `trial_signin_failed`, and `trial_start_failed` events at those three exit points. Also added the existing-but-previously-untracked-on-the-dashboard `trial_already_used` to the dashboard's Feature Popularity list, alongside the three new events.
+* Minor: removed a stale TODO comment in `src/auth/github.ts` referencing OAuth App setup that was already completed (`GITHUB_CLIENT_ID` has been a real value, not a placeholder).
+
 ## \[0.8.11] — 2026-07-25
 
 ### Fixed: `ollama_fallback` telemetry spam (and wasted cloud calls) from tab completion
