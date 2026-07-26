@@ -13,6 +13,10 @@ const redis = Redis.fromEnv();
 //   telemetry:platforms:{YYYY-MM-DD}      hash  — platform → count
 //   telemetry:versions:{YYYY-MM-DD}       hash  — extension version → count
 //   telemetry:countries:{YYYY-MM-DD}      hash  — country code → count of sessions from it
+//   telemetry:ollamaFallbackVersions:{YYYY-MM-DD} hash — extension version → count of
+//                                          ollama_fallback events from that version, so a
+//                                          future spike can be attributed without manually
+//                                          cross-referencing telemetry:daily and telemetry:versions
 //   telemetry:errors:{YYYY-MM-DD}         list  — error event names (capped)
 //   telemetry:session:{sessionId}         string — "1", TTL 1 hour (dedup)
 //   telemetry:machines:{YYYY-MM-DD}       set   — unique machineIds seen that day
@@ -49,6 +53,7 @@ export default async function handler(req, res) {
     const platformsKey = `telemetry:platforms:${today}`;
     const versionsKey = `telemetry:versions:${today}`;
     const countriesKey = `telemetry:countries:${today}`;
+    const ollamaFallbackVersionsKey = `telemetry:ollamaFallbackVersions:${today}`;
     const errorsKey = `telemetry:errors:${today}`;
 
     // Country from Vercel's own edge network — set automatically per request,
@@ -68,6 +73,11 @@ export default async function handler(req, res) {
             if (!name) continue;
 
             pipeline.hincrby(dailyKey, name, count);
+
+            if (name === 'ollama_fallback') {
+                const version = String(meta?.version ?? 'unknown').slice(0, 16);
+                pipeline.hincrby(ollamaFallbackVersionsKey, version, count);
+            }
 
             if (ERROR_EVENTS.has(name)) {
                 pipeline.lpush(errorsKey, `${name}:${count}:${Date.now()}`);
@@ -109,6 +119,7 @@ export default async function handler(req, res) {
         pipeline.expire(platformsKey, TTL);
         pipeline.expire(versionsKey, TTL);
         pipeline.expire(countriesKey, TTL);
+        pipeline.expire(ollamaFallbackVersionsKey, TTL);
         pipeline.expire(errorsKey, TTL);
 
         // Cap error list
