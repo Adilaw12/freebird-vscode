@@ -2,7 +2,7 @@
 
 **No setup. No throttling. 20 free AI edits/day.**
 
-[![VS Marketplace](https://vsmarketplacebadges.dev/version/TenLabs.freebird-ai.svg?subject=VS%20Marketplace&color=0066B8&style=flat-square)](https://marketplace.visualstudio.com/items?itemName=TenLabs.freebird-ai)
+[![VS Marketplace](https://img.shields.io/badge/VS%20Marketplace-v0.9.1-0066B8?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=TenLabs.freebird-ai)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](https://github.com/Adilaw12/freebird-vscode/blob/main/LICENSE)
 [![GitHub](https://img.shields.io/badge/GitHub-Adilaw12%2Ffreebird--vscode-181717?style=flat-square&logo=github)](https://github.com/Adilaw12/freebird-vscode)
 
@@ -29,7 +29,7 @@ Freebird never blocks you — it picks up where other tools stop.
 | Setup required | No | Yes | **No** | No |
 | Multi-file agent edits (terminal, checkpoints) | Limited | ✅ | ❌ | ✅ |
 | Local AI (Ollama) | ❌ | ❌ | ✅ | ✅ |
-| BYOK (Claude, GPT-4o, DeepSeek, Qwen) | ❌ | ✅ | ✅ | ✅ |
+| BYOK (Claude, GPT-4o, DeepSeek, Qwen, Kimi K3, custom) | ❌ | ✅ | ✅ | ✅ |
 | Cloud edits throttled | ✅ | ✅ | 20/day soft cap | Never |
 
 ---
@@ -57,7 +57,7 @@ Freebird reads your existing code structure, understands the context, and makes 
 | `/` slash commands | ✅ | ✅ |
 | Works instantly — no setup | ✅ | ✅ |
 | Unlimited local Ollama (100% private) | ✅ | ✅ |
-| **Bring your own API keys — BYOK (Anthropic / OpenAI / DeepSeek / Qwen)**, direct-to-LLM speed & total privacy | ✅ | ✅ |
+| **Bring your own API keys — BYOK (Anthropic / OpenAI / DeepSeek / Qwen / Kimi K3 / Custom Provider)**, direct-to-LLM speed & total privacy | ✅ | ✅ |
 | Inline edit (`Ctrl+Alt+K`) & AI commit, cloud-powered | 20/day | **Unlimited** |
 | **Multi-file agent edits, terminal commands, checkpoints** | — | ✅ |
 | **Project memory across sessions** | — | ✅ |
@@ -103,7 +103,7 @@ The agent can fetch a webpage's readable content directly — documentation, an 
 Select any code, press `Ctrl+Alt+K`, type an instruction, and the selection is rewritten in place.
 
 ### Bring Your Own Keys — Unthrottled, free
-Plug in your own **Anthropic Claude**, **OpenAI**, **DeepSeek**, or **Qwen** API key. Direct-to-LLM speed, total data privacy, no middleman quotas — free for everyone, since the calls never touch Freebird's servers.
+Plug in your own **Anthropic Claude**, **OpenAI**, **DeepSeek**, **Qwen**, or **Kimi K3** API key — or point Freebird at any OpenAI-compatible **Custom Provider** (OpenRouter, Together, self-hosted, etc.). Direct-to-LLM speed, total data privacy, no middleman quotas — free for everyone, since the calls never touch Freebird's servers.
 
 ### Full Agent Mode With Zero Cloud Calls (Pro)
 Agent mode isn't locked to Freebird's cloud — it routes through whatever backend you've configured, same as everything else. Set the backend to **Ollama** and get the full Pro feature set (multi-file edits, terminal commands, checkpoints, project memory) with every request staying on your machine. Built for teams whose policy forbids cloud AI, or freelancers working under an NDA that does the same — the model runs locally, so there's nothing to disclose.
@@ -235,7 +235,7 @@ Nothing is modified silently. You stay in full control.
 
 - **Gemini Flash (free tier):** messages processed by Google's API. No code stored by Freebird.
 - **Ollama:** all processing is local — no data leaves your machine. This applies to Agent mode too (Pro) — set the backend to Ollama and multi-file edits, terminal commands, and checkpoints all run without a single cloud call, which is what makes Freebird usable under a corporate no-cloud-AI policy or an NDA that forbids sending code off-machine.
-- **Anthropic / OpenAI / DeepSeek / Qwen:** code sent to their APIs under your own account.
+- **Anthropic / OpenAI / DeepSeek / Qwen / Kimi K3 / Custom Provider:** code sent to that provider's API under your own account.
 - **Freebird AI** (Ten Labs Pty. Limited) never collects or stores your code or conversation data.
 - **Web fetches (`fetch_url`):** private/internal addresses (localhost, LAN ranges, cloud metadata endpoints) are blocked, and fetched page content is explicitly marked as untrusted before it reaches the model.
 - **Checkpoint restores** can't write outside your workspace folder, even if a checkpoint record were somehow corrupted.
