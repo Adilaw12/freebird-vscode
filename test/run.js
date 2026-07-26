@@ -27,7 +27,8 @@ const suites = [
     require('./quota-race.test.js'),
     require('./checkpoint.test.js'),
     require('./fetch-url.test.js'),
-    require('./backend-picker.test.js')
+    require('./backend-picker.test.js'),
+    require('./prompt-templates.test.js')
 ];
 
 (async () => {

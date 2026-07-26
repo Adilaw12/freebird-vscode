@@ -10,7 +10,7 @@ const { suite, check } = require('./helpers');
 const OUT = path.join(__dirname, '..', 'out');
 const { buildBackendPickerItems } = require(path.join(OUT, 'license/backendPicker.js'));
 
-const BYOK_VALUES = ['anthropic', 'openai', 'deepseek', 'qwen'];
+const BYOK_VALUES = ['anthropic', 'openai', 'deepseek', 'qwen', 'kimi', 'custom'];
 
 function run() {
     suite('buildBackendPickerItems — no active license');

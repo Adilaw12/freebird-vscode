@@ -117,6 +117,9 @@ Generate commit messages, push to remote, check git status — all from the chat
 ### Project Memory (Pro)
 Freebird saves notes about your project to `.freebird/memory.md` and loads them automatically. Use `/memory` to see what's saved and `/forget` to clear it.
 
+### Built-in Prompt Templates
+Run **Freebird: Use Prompt Template** to start from a ready-made prompt for a common task — populates the chat input for you to edit before sending, rather than firing immediately. Ships with three: **Codebase Cartographer** (maps a project's architecture — pairs especially well with a large-context model like Kimi K3), **Security Auditor** (concrete, cited vulnerability findings — no theoretical padding), and **Multi-File Test Engineer** (finds untested code paths and writes tests matching your existing conventions).
+
 ---
 
 ## Pick the Right Model
@@ -127,8 +130,10 @@ Freebird saves notes about your project to `.freebird/memory.md` and loads them 
 | **Ollama (local)** | Unlimited local AI — free, 100% private | Free |
 | **DeepSeek V4-pro** | Advanced reasoning, coding, debugging | ~$0.14/M tokens |
 | **Qwen 2.5 Coder** | High-accuracy coding | ~$0.16/M tokens |
+| **Kimi K3** | Frontier-scale reasoning, huge codebases (1M token context) | See [platform.moonshot.ai](https://platform.moonshot.ai) |
 | **GPT-4o** | Best all-rounder | ~$2.50/M tokens |
 | **Claude Sonnet** | Complex refactoring & architecture | ~$3/M tokens |
+| **Custom Provider** | Any OpenAI-compatible API — OpenRouter, Together, self-hosted, etc. | Depends on provider |
 
 BYOK models are free for everyone (bring your own API key/cost). Gemini Flash and Ollama are also always free. Pro adds Agent mode (multi-file edits, terminal, checkpoints) and unlimited cloud edits on the full Gemini model.
 
@@ -161,6 +166,17 @@ BYOK models are free for everyone (bring your own API key/cost). Gemini Flash an
 ### Option 6 — Qwen 2.5 (BYOK, free)
 1. Get an API key at [dashscope.console.aliyun.com](https://dashscope.console.aliyun.com)
 2. Run **Freebird: Configure AI Backend** → select **Qwen 2.5**
+
+### Option 7 — Kimi K3 (BYOK, free)
+1. Get an API key at [platform.moonshot.ai](https://platform.moonshot.ai)
+2. Run **Freebird: Configure AI Backend** → select **Kimi K3**
+3. Defaults to `kimi-k3` (2.8T frontier, 1M token context) — set `freebird.model` to `kimi-k2` for the previous generation instead
+
+### Option 8 — Custom Provider (BYOK, free)
+Point Freebird at any OpenAI-compatible API — OpenRouter, Together, Groq, Fireworks, a self-hosted vLLM/LM Studio server, or anything else that speaks the `/chat/completions` format.
+1. Run **Freebird: Configure AI Backend** → select **Custom Provider**
+2. Enter the provider's base URL (e.g. `https://openrouter.ai/api/v1`) and the exact model id it expects (e.g. `openai/gpt-4o`)
+3. Enter your API key when prompted
 
 ---
 

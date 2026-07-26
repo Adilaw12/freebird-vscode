@@ -18,6 +18,8 @@ const { getLicenseStatus } = require(path.join(OUT, 'license/validator.js'));
 const { getProvider } = require(path.join(OUT, 'ai/index.js'));
 const { CloudProvider } = require(path.join(OUT, 'ai/cloud.js'));
 const { OpenAIProvider } = require(path.join(OUT, 'ai/openai.js'));
+const { KimiProvider } = require(path.join(OUT, 'ai/kimi.js'));
+const { CustomProvider } = require(path.join(OUT, 'ai/customProvider.js'));
 
 async function run() {
     suite('backend=openai, no license configured at all');
@@ -60,6 +62,42 @@ async function run() {
 
         const provider = getProvider(ctx, 'sess-c');
         check('getProvider returns OpenAIProvider for an active Pro license', provider instanceof OpenAIProvider);
+    }
+
+    suite('backend=kimi, no license — new backend is wired into the routing switch');
+    vscodeMock.__setMockConfig({ 'freebird.backend': 'kimi', 'freebird.licenseKey': '', 'freebird.apiKey': 'sk-test' });
+    vscodeMock.__resetCalls();
+    {
+        const ctx = makeFakeContext();
+        const provider = getProvider(ctx, 'sess-f');
+        check('getProvider returns KimiProvider for backend=kimi', provider instanceof KimiProvider);
+        check('getProvider does not silently fall back to CloudProvider for kimi', !(provider instanceof CloudProvider));
+    }
+
+    suite('backend=custom, no license — new backend is wired into the routing switch');
+    vscodeMock.__setMockConfig({ 'freebird.backend': 'custom', 'freebird.licenseKey': '', 'freebird.apiKey': 'sk-test' });
+    vscodeMock.__resetCalls();
+    {
+        const ctx = makeFakeContext();
+        const provider = getProvider(ctx, 'sess-g');
+        check('getProvider returns CustomProvider for backend=custom', provider instanceof CustomProvider);
+        check('getProvider does not silently fall back to CloudProvider for custom', !(provider instanceof CloudProvider));
+    }
+
+    suite('CustomProvider refuses to guess a base URL or model — both are required, no defaults');
+    vscodeMock.__setMockConfig({ 'freebird.backend': 'custom', 'freebird.apiKey': 'sk-test', 'freebird.customBaseUrl': '', 'freebird.model': '' });
+    {
+        const provider = new CustomProvider();
+        let threw = null;
+        try { await provider.stream([{ role: 'user', content: 'hi' }], () => {}); } catch (err) { threw = err; }
+        check('stream() throws a clear error when customBaseUrl is unset', !!threw && /base URL/i.test(threw.message));
+    }
+    vscodeMock.__setMockConfig({ 'freebird.backend': 'custom', 'freebird.apiKey': 'sk-test', 'freebird.customBaseUrl': 'https://openrouter.ai/api/v1', 'freebird.model': '' });
+    {
+        const provider = new CustomProvider();
+        let threw = null;
+        try { await provider.stream([{ role: 'user', content: 'hi' }], () => {}); } catch (err) { threw = err; }
+        check('stream() throws a clear error when model is unset (baseUrl alone is not enough)', !!threw && /model name/i.test(threw.message));
     }
 
     suite('backend=cloud, no license — unaffected by the BYOK change');

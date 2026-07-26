@@ -462,6 +462,10 @@ em { font-style: italic; }
   font-size: 0.88em; font-weight: 600;
   color: var(--vscode-editor-foreground);
 }
+.quota-wall-subtitle {
+  font-size: 0.8em; color: var(--vscode-descriptionForeground);
+  margin: -4px 0 12px 24px; line-height: 1.4;
+}
 .quota-wall-stats {
   display: flex; gap: 0; margin-bottom: 12px;
   border-radius: 7px; overflow: hidden;
@@ -780,6 +784,16 @@ function sendPrompt(text) {
   sendBtn.click();
 }
 
+// Populates the input with a prompt template's text WITHOUT sending it, so the
+// user can edit/append specifics first (e.g. "focus on the payment flow").
+function populateInput(text) {
+  if (busy) return;
+  inputEl.value = text;
+  inputEl.style.height = '';
+  inputEl.style.height = Math.min(inputEl.scrollHeight, 160) + 'px';
+  inputEl.focus();
+}
+
 // ── Usage stats ───────────────────────────────────────────────────────────────
 function updateUsageStats(editsUsed, remaining) {
   var statsEl = document.getElementById('usage-stats');
@@ -1089,58 +1103,36 @@ function showAuthWall() {
 function showQuotaWall() {
   var sessionMins = Math.round((Date.now() - _sessionStart) / 60000);
   var resetTime = getResetCountdown();
-  var isPowerUser = _sessionEdits >= 15;
 
   // Funnel: top of the conversion funnel — the user hit the wall and saw the
   // upgrade prompt. Paired with 'upgrade_clicked' and 'pro_subscribed'.
-  vscode.postMessage({ type: 'quota-wall-shown', variant: isPowerUser ? 'power' : 'standard' });
+  vscode.postMessage({ type: 'quota-wall-shown' });
 
   var wall = document.createElement('div');
   wall.className = 'quota-wall';
 
-  if (isPowerUser) {
-    wall.innerHTML =
-      '<div class="quota-wall-header">'
-        + '<svg width="16" height="16" viewBox="0 0 16 16" style="stroke:#d97757;fill:none;stroke-width:1.8;stroke-linecap:round;flex-shrink:0"><polygon points="8,2 15,13 1,13"/><line x1="8" y1="6" x2="8" y2="9"/><circle cx="8" cy="11" r="0.5" fill="#d97757"/></svg>'
-        + '<span class="quota-wall-title">You\'re a serious Freebird user ⚡</span>'
-      + '</div>'
-      + '<div class="quota-wall-stats">'
-        + '<div class="quota-wall-stat"><span class="quota-wall-stat-value">' + _sessionEdits + '</span><span class="quota-wall-stat-label">edits today</span></div>'
-        + '<div class="quota-wall-stat"><span class="quota-wall-stat-value">' + _sessionMessages + '</span><span class="quota-wall-stat-label">messages</span></div>'
-        + '<div class="quota-wall-stat"><span class="quota-wall-stat-value">' + (sessionMins < 1 ? '<1m' : sessionMins + 'm') + '</span><span class="quota-wall-stat-label">active</span></div>'
-      + '</div>'
-      + '<div class="quota-wall-features">'
-        + '<div class="quota-wall-feature"><span class="quota-wall-check">👋</span> You\'re clearly getting real value from Freebird.</div>'
-        + '<div class="quota-wall-feature"><span class="quota-wall-check">✓</span> Pro unlocks Agent mode — multi-file edits, terminal, checkpoints.</div>'
-        + '<div class="quota-wall-feature"><span class="quota-wall-check">✓</span> Unlimited cloud edits on the full Gemini Flash model + project memory.</div>'
-      + '</div>'
-      + '<div class="quota-wall-actions">'
-        + '<button class="quota-wall-btn-primary" onclick="vscode.postMessage({type:\'start-trial\'})">Try Pro free for 7 days — no card →</button>'
-        + '<button class="quota-wall-btn-secondary" onclick="vscode.postMessage({type:\'upgrade\'})">Upgrade now — $6/month</button>'
-      + '</div>'
-      + '<div class="quota-wall-reset">Free edits reset in ' + resetTime + ' (midnight UTC)</div>';
-  } else {
-    wall.innerHTML =
-      '<div class="quota-wall-header">'
-        + '<svg width="16" height="16" viewBox="0 0 16 16" style="stroke:#d97757;fill:none;stroke-width:1.8;stroke-linecap:round;flex-shrink:0"><polygon points="8,2 15,13 1,13"/><line x1="8" y1="6" x2="8" y2="9"/><circle cx="8" cy="11" r="0.5" fill="#d97757"/></svg>'
-        + '<span class="quota-wall-title">Free edits used up for today</span>'
-      + '</div>'
-      + '<div class="quota-wall-stats">'
-        + '<div class="quota-wall-stat"><span class="quota-wall-stat-value">' + _sessionEdits + '</span><span class="quota-wall-stat-label">edits used</span></div>'
-        + '<div class="quota-wall-stat"><span class="quota-wall-stat-value">' + _sessionMessages + '</span><span class="quota-wall-stat-label">messages</span></div>'
-        + '<div class="quota-wall-stat"><span class="quota-wall-stat-value">' + (sessionMins < 1 ? '<1m' : sessionMins + 'm') + '</span><span class="quota-wall-stat-label">this session</span></div>'
-      + '</div>'
-      + '<div class="quota-wall-features">'
-        + '<div class="quota-wall-feature"><span class="quota-wall-check">✓</span> Agent mode — multi-file edits, terminal commands, checkpoints</div>'
-        + '<div class="quota-wall-feature"><span class="quota-wall-check">✓</span> Unlimited cloud edits — no daily cap, full Gemini Flash model</div>'
-        + '<div class="quota-wall-feature"><span class="quota-wall-check">✓</span> Project memory across sessions</div>'
-      + '</div>'
-      + '<div class="quota-wall-actions">'
-        + '<button class="quota-wall-btn-primary" onclick="vscode.postMessage({type:\'start-trial\'})">Try Pro free for 7 days — no card →</button>'
-        + '<button class="quota-wall-btn-secondary" onclick="vscode.postMessage({type:\'upgrade\'})">Upgrade now — $6/month</button>'
-      + '</div>'
-      + '<div class="quota-wall-reset">Free edits reset in ' + resetTime + ' (midnight UTC) &middot; Free forever: <a href="#" onclick="vscode.postMessage({type:\'install-ollama\'}); return false;" style="color:inherit">local Ollama</a> or bring your own API key</div>';
-  }
+  wall.innerHTML =
+    '<div class="quota-wall-header">'
+      + '<svg width="16" height="16" viewBox="0 0 16 16" style="stroke:#d97757;fill:none;stroke-width:1.8;stroke-linecap:round;flex-shrink:0"><polygon points="8,2 15,13 1,13"/><line x1="8" y1="6" x2="8" y2="9"/><circle cx="8" cy="11" r="0.5" fill="#d97757"/></svg>'
+      + '<span class="quota-wall-title">You\'ve flown ' + DAILY_LIMIT + ' miles today! ✈️</span>'
+    + '</div>'
+    + '<div class="quota-wall-subtitle">Upgrade to Pro for $6/month for unlimited cloud edits, or switch to your local Ollama endpoint to keep coding completely free.</div>'
+    + '<div class="quota-wall-stats">'
+      + '<div class="quota-wall-stat"><span class="quota-wall-stat-value">' + _sessionEdits + '</span><span class="quota-wall-stat-label">edits used</span></div>'
+      + '<div class="quota-wall-stat"><span class="quota-wall-stat-value">' + _sessionMessages + '</span><span class="quota-wall-stat-label">messages</span></div>'
+      + '<div class="quota-wall-stat"><span class="quota-wall-stat-value">' + (sessionMins < 1 ? '<1m' : sessionMins + 'm') + '</span><span class="quota-wall-stat-label">this session</span></div>'
+    + '</div>'
+    + '<div class="quota-wall-features">'
+      + '<div class="quota-wall-feature"><span class="quota-wall-check">✓</span> Agent mode — multi-file edits, terminal commands, checkpoints</div>'
+      + '<div class="quota-wall-feature"><span class="quota-wall-check">✓</span> Unlimited cloud edits — no daily cap, full Gemini Flash model</div>'
+      + '<div class="quota-wall-feature"><span class="quota-wall-check">✓</span> Project memory across sessions</div>'
+    + '</div>'
+    + '<div class="quota-wall-actions">'
+      + '<button class="quota-wall-btn-primary" onclick="vscode.postMessage({type:\'start-trial\'})">Try Pro free for 7 days — no card →</button>'
+      + '<button class="quota-wall-btn-secondary" onclick="vscode.postMessage({type:\'upgrade\'})">Upgrade now — $6/month</button>'
+      + '<button class="quota-wall-btn-secondary" onclick="vscode.postMessage({type:\'install-ollama\'})">Switch to local Ollama →</button>'
+    + '</div>'
+    + '<div class="quota-wall-reset">Free edits reset in ' + resetTime + ' (midnight UTC)</div>';
 
   msgsEl.appendChild(wall); scroll();
 }
@@ -1296,6 +1288,7 @@ window.addEventListener('message',function(e){
     case 'tool-update':      updateToolStatus(m.id,m.state,m.output); break;
     case 'approval-request': addApprovalCard(m.id,m.description,m.preview); break;
     case 'checkpoint-ready':    addCheckpointCard(m.id,m.files,m.unrevertable); break;
+    case 'populate-input':      populateInput(m.text); break;
     case 'checkpoint-restored': updateCheckpointCard(m.id,m.restored,m.deleted,m.errors); break;
     case 'assistant-end':    endMsg(); break;
     case 'cloud-edit-used':  showCloudEditUsed(m.remaining); break;

@@ -12,6 +12,7 @@ import { previewHtmlFile } from './agent/preview';
 import { checkOllamaSetup } from './ai/ollamaSetup';
 import { initTelemetry, disposeTelemetry, trackEvent, getMachineId } from './telemetry';
 import { buildBackendPickerItems } from './license/backendPicker';
+import { PROMPT_TEMPLATES } from './agent/promptTemplates';
 import { checkAnnouncement } from './announcement';
 
 export function activate(context: vscode.ExtensionContext) {
@@ -380,6 +381,21 @@ export function activate(context: vscode.ExtensionContext) {
 
             await vscode.workspace.getConfiguration('freebird').update('backend', backend.value, true);
 
+            if (backend.value === 'custom') {
+                const baseUrl = await vscode.window.showInputBox({
+                    prompt: 'Enter the base URL of your OpenAI-compatible API',
+                    placeHolder: 'https://openrouter.ai/api/v1',
+                    validateInput: v => v && /^https?:\/\//.test(v.trim()) ? null : 'Must be a full http(s) URL'
+                });
+                if (baseUrl) await vscode.workspace.getConfiguration('freebird').update('customBaseUrl', baseUrl.trim(), true);
+
+                const model = await vscode.window.showInputBox({
+                    prompt: 'Enter the model name to send to this provider',
+                    placeHolder: 'openai/gpt-4o'
+                });
+                if (model) await vscode.workspace.getConfiguration('freebird').update('model', model.trim(), true);
+            }
+
             const needsKey = !['cloud', 'ollama'].includes(backend.value);
             if (needsKey) {
                 const key = await vscode.window.showInputBox({
@@ -394,6 +410,19 @@ export function activate(context: vscode.ExtensionContext) {
             vscode.window.showInformationMessage(`Freebird AI configured to use ${backend.label}`);
             clearLicenseCache(context);
             refreshStatusBar();
+        }),
+
+        vscode.commands.registerCommand('freebird.usePromptTemplate', async () => {
+            const chosen = await vscode.window.showQuickPick(
+                PROMPT_TEMPLATES.map(t => ({ label: t.label, description: t.description, template: t })),
+                { placeHolder: 'Select a prompt template', title: 'Freebird: Use Prompt Template' }
+            );
+            if (!chosen) return;
+
+            trackEvent('prompt_template_used');
+            if (ChatViewProvider.current) {
+                ChatViewProvider.current.useTemplate(chosen.template.prompt);
+            }
         }),
 
         vscode.commands.registerCommand('freebird.buildCodebaseIndex', async () => {

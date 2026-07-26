@@ -2,7 +2,7 @@
   "name": "freebird-ai",
   "displayName": "Freebird AI",
   "description": "AI coding assistant — 20 free AI edits/day, no setup. Free BYOK (Claude, GPT-4o, DeepSeek) & local Ollama. Inline edit, AI commit. Pro $6/mo: Agent mode (multi-file edits) + unlimited.",
-  "version": "0.8.12",
+  "version": "0.9.0",
   "publisher": "TenLabs",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -125,6 +125,10 @@
         "title": "Freebird: Configure AI Backend"
       },
       {
+        "command": "freebird.usePromptTemplate",
+        "title": "Freebird: Use Prompt Template"
+      },
+      {
         "command": "freebird.inlineEdit",
         "title": "Freebird: Edit with AI"
       },
@@ -199,7 +203,9 @@
             "anthropic",
             "openai",
             "deepseek",
-            "qwen"
+            "qwen",
+            "kimi",
+            "custom"
           ],
           "enumDescriptions": [
             "Freebird Cloud (Gemini Flash) — works instantly, 20 free edits/day, no setup",
@@ -207,7 +213,9 @@
             "Anthropic Claude API — BYOK, direct-to-LLM speed, free",
             "OpenAI API — BYOK, direct-to-LLM speed, free",
             "DeepSeek API — BYOK, advanced reasoning model, free",
-            "Qwen 2.5 API (DashScope) — BYOK, powerful coding model, free"
+            "Qwen 2.5 API (DashScope) — BYOK, powerful coding model, free",
+            "Kimi K3 API (Moonshot AI) — BYOK, 2.8T frontier model, 1M token context, free",
+            "Custom OpenAI-compatible API (OpenRouter, Together, self-hosted, etc.) — BYOK, free"
           ],
           "default": "cloud",
           "description": "AI backend to use for Freebird"
@@ -217,10 +225,15 @@
           "default": "",
           "markdownDescription": "API key for cloud AI backends (Anthropic or OpenAI). Leave blank if using Ollama."
         },
+        "freebird.customBaseUrl": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Base URL for a custom OpenAI-compatible API provider (e.g. OpenRouter: `https://openrouter.ai/api/v1`, Together: `https://api.together.xyz/v1`, or a self-hosted vLLM/LM Studio server). Only used when Backend is set to Custom Provider."
+        },
         "freebird.model": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Model override. Leave blank for the recommended default per backend:\n- Ollama: `qwen2.5-coder`\n- Anthropic: `claude-haiku-4-5`\n- OpenAI: `gpt-4o-mini`\n- DeepSeek: `deepseek-reasoner`\n- Qwen: `qwen2.5-coder-32b-instruct`\n\nTip: for heavier multi-file agent tasks (Pro), try `claude-sonnet-4-6` — it follows multi-step instructions more reliably than Haiku, at a higher API cost."
+          "markdownDescription": "Model override. Leave blank for the recommended default per backend:\n- Ollama: `qwen2.5-coder`\n- Anthropic: `claude-haiku-4-5`\n- OpenAI: `gpt-4o-mini`\n- DeepSeek: `deepseek-reasoner`\n- Qwen: `qwen2.5-coder-32b-instruct`\n- Kimi: `kimi-k3` (latest, 2.8T, 1M context) — set to `kimi-k2` for the previous generation instead\n- Custom Provider: **required**, no default — the exact model id your provider expects (e.g. `openai/gpt-4o` for OpenRouter)\n\nTip: for heavier multi-file agent tasks (Pro), try `claude-sonnet-4-6` — it follows multi-step instructions more reliably than Haiku, at a higher API cost."
         },
         "freebird.ollamaUrl": {
           "type": "string",

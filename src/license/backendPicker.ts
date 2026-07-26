@@ -17,7 +17,9 @@ const BASE_ITEMS: { name: string; icon: string; value: string; description: stri
     { name: 'Anthropic Claude',         icon: 'cloud',  value: 'anthropic', description: 'BYOK — direct-to-LLM speed, total privacy' },
     { name: 'OpenAI',                   icon: 'cloud',  value: 'openai',    description: 'BYOK — direct-to-LLM speed, total privacy' },
     { name: 'DeepSeek V4-pro',          icon: 'cloud',  value: 'deepseek',  description: 'BYOK — advanced reasoning model, excellent value' },
-    { name: 'Qwen 2.5',                 icon: 'cloud',  value: 'qwen',      description: 'BYOK — powerful coding model via DashScope' }
+    { name: 'Qwen 2.5',                 icon: 'cloud',  value: 'qwen',      description: 'BYOK — powerful coding model via DashScope' },
+    { name: 'Kimi K3',                  icon: 'cloud',  value: 'kimi',      description: 'BYOK — 2.8T frontier model, 1M token context' },
+    { name: 'Custom Provider',          icon: 'plug',   value: 'custom',    description: 'BYOK — any OpenAI-compatible API (OpenRouter, Together, self-hosted, etc.)' }
 ];
 
 /**

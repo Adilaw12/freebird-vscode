@@ -5,20 +5,22 @@ import { AnthropicProvider } from './anthropic';
 import { OpenAIProvider } from './openai';
 import { DeepSeekProvider } from './deepseek';
 import { QwenProvider } from './qwen';
+import { KimiProvider } from './kimi';
+import { CustomProvider } from './customProvider';
 import { CloudProvider } from './cloud';
 import { trackEvent } from '../telemetry';
 
 // Re-export so callers don't need to import CloudProvider separately
 export { CloudProvider };
 
-export const BYOK_BACKENDS = new Set(['anthropic', 'openai', 'deepseek', 'qwen']);
+export const BYOK_BACKENDS = new Set(['anthropic', 'openai', 'deepseek', 'qwen', 'kimi', 'custom']);
 
 /**
  * Returns the appropriate AI provider based on user config.
  *
  * Routing logic (v0.8.9):
  *
- * BYOK backends (anthropic / openai / deepseek / qwen):
+ * BYOK backends (anthropic / openai / deepseek / qwen / kimi / custom):
  *   → FREE for everyone. The user supplies their own API key, calls go
  *     direct from their machine to the provider, and Freebird's servers
  *     never touch the request — so there is nothing for us to meter and
@@ -46,6 +48,8 @@ export function getProvider(context: vscode.ExtensionContext, sessionId: string)
             case 'openai':    return new OpenAIProvider();
             case 'deepseek':  return new DeepSeekProvider();
             case 'qwen':      return new QwenProvider();
+            case 'kimi':      return new KimiProvider();
+            case 'custom':    return new CustomProvider();
         }
     }
 

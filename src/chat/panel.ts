@@ -118,7 +118,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 case 'quota-wall-shown':
                     // Funnel stage 1: user hit the quota wall and saw the prompt
                     trackEvent('quota_wall_shown');
-                    if (msg.variant === 'power') trackEvent('quota_wall_shown_power');
                     break;
                 case 'upgrade':
                     // Funnel stage 2: user clicked through to Stripe checkout
@@ -163,6 +162,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         if (this.view) {
             this.view.show(true);
         }
+    }
+
+    /** Populates the chat input with a prompt template's text for the user to edit before sending — does not send it. */
+    useTemplate(text: string) {
+        this.focus();
+        this.post({ type: 'populate-input', text });
     }
 
     private async sendWorkspaceFiles() {

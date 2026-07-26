@@ -1,5 +1,38 @@
 # Changelog
 
+## \[0.9.0] — 2026-07-27
+
+### Added
+
+* **Kimi K3 as a BYOK backend** — Moonshot AI's 2.8T-parameter frontier model with a 1M token
+context window, via their OpenAI-compatible international endpoint. Defaults to `kimi-k3`
+(latest); set `freebird.model` to `kimi-k2` for the previous generation instead. Free, like
+every other BYOK backend since v0.8.9.
+* **Custom Provider backend** — point Freebird at any OpenAI-compatible API (OpenRouter,
+Together, Groq, self-hosted vLLM/LM Studio, etc.) via two new settings, `freebird.customBaseUrl`
+and the existing `freebird.model`. Unlike every other BYOK provider there's no sensible
+universal default here, so both are required and throw a clear, specific error if left unset
+rather than silently failing. The Configure AI Backend flow prompts for both when this
+backend is selected.
+* **Built-in prompt templates** — `Freebird: Use Prompt Template` populates the chat input
+(doesn't send automatically) with one of three starting-point prompts: **Codebase Cartographer**
+(architecture map + a Mermaid.js dependency diagram, pairs well with a large-context model like
+Kimi K3), **Security Auditor** (cited, concrete findings only — no theoretical padding, and
+explicitly told not to alter functional logic while fixing an issue), and **Multi-File Test
+Engineer** (finds untested code paths, matches the project's existing test conventions).
+
+### Changed: quota wall
+
+* **Simplified to one message instead of two.** Removed the separate "power user" quota-wall
+variant (15+ edits in a session) — now that the free trial is front-and-center in every
+version of this wall, the segmentation wasn't steering people toward meaningfully different
+actions anymore, just different framing, and it had already started drifting out of sync
+with the standard variant after a copy update only one of the two received.
+* **New copy**: "You've flown 20 miles today! ✈️ Upgrade to Pro for $6/month for unlimited
+cloud edits, or switch to your local Ollama endpoint to keep coding completely free." — states
+both real options in one place, instead of Ollama being a small link buried in the footer.
+Added a direct "Switch to local Ollama" button alongside the existing trial/upgrade buttons.
+
 ## \[0.8.12] — 2026-07-26
 
 ### Added: telemetry for silent trial-start failures
