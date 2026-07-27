@@ -1,5 +1,27 @@
 # Changelog
 
+## \[0.9.2] — 2026-07-27
+
+### Fixed
+
+* **The upgrade banner wasn't showing for most free users.** `#upgrade-banner` defaults to
+`display:none` in CSS, and the only thing that ever un-hides it (a `license-status`
+postMessage) was sent exclusively from `refreshStatusBar()` at extension activation — before
+the webview actually exists for most users, since VS Code lazily creates it only when the
+sidebar is first shown, and `post()` silently drops messages sent to a nonexistent view. So
+the banner stayed hidden for anyone whose first panel-open happened after activation (i.e.
+nearly everyone) until some unrelated action happened to call `refreshStatusBar()` again. Now
+sends license status the moment the webview actually resolves, not just at activation.
+
+### Added
+
+* **"Freebird: Try Multiple File Editing"** command — delegates straight to the existing
+`freebird.startTrial` flow, tracked separately (`try_multifile_command_used`) so adoption of
+this specific entry point is visible apart from other trial starts.
+* **One-time onboarding nudge toward Agent mode.** Free-tier users now see, once, right after
+their first inline edit: "Want to edit multiple files at once? Try Pro — Agent mode edits
+across your whole codebase. Free for 7 days, no card." with a direct trial-start action.
+
 ## \[0.9.1] — 2026-07-27
 
 ### Fixed
