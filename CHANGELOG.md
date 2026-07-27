@@ -1,5 +1,13 @@
 # Changelog
 
+## \[0.9.3] — 2026-07-27
+
+### Docs
+
+* Fixed the static VS Marketplace badge, stuck on v0.9.1 through two subsequent releases — it's manually bumped on each release, and the last two bumps missed it.
+* Kimi K3 and Custom Provider now referenced in the README's top keyword line (before the hero gif), not just deep in the feature/setup sections.
+* Added `kimi`, `openrouter`, `custom llm`, and `prompt templates` to `package.json` keywords (VS Marketplace/Open VSX search tags) and matching GitHub repo topics — none of the v0.9.0 additions (Kimi K3, Custom Provider, prompt templates) were previously discoverable via tag/topic search.
+
 ## \[0.9.2] — 2026-07-27
 
 ### Fixed
