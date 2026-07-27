@@ -129,6 +129,10 @@
         "title": "Freebird: Use Prompt Template"
       },
       {
+        "command": "freebird.tryMultiFileEditing",
+        "title": "Freebird: Try Multiple File Editing"
+      },
+      {
         "command": "freebird.inlineEdit",
         "title": "Freebird: Edit with AI"
       },

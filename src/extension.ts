@@ -99,6 +99,25 @@ export function activate(context: vscode.ExtensionContext) {
         return false;
     }
 
+    // ── Onboarding: one-time nudge toward multi-file editing (Pro) ──────────
+    const MULTI_FILE_TEASER_SHOWN_KEY = 'freebird.multiFileTeaserShown';
+    async function maybeShowMultiFileTeaser(): Promise<void> {
+        if (context.globalState.get<boolean>(MULTI_FILE_TEASER_SHOWN_KEY)) return;
+
+        const status = await getLicenseStatus(context);
+        if (status.isPro) return;
+
+        await context.globalState.update(MULTI_FILE_TEASER_SHOWN_KEY, true);
+        const action = await vscode.window.showInformationMessage(
+            'Want to edit multiple files at once? Try Pro — Agent mode edits across your whole codebase. Free for 7 days, no card.',
+            'Try Pro', 'Dismiss'
+        );
+        if (action === 'Try Pro') {
+            trackEvent('multifile_teaser_clicked');
+            vscode.commands.executeCommand('freebird.startTrial');
+        }
+    }
+
     // ── Commands ────────────────────────────────────────────────────────────
     context.subscriptions.push(
 
@@ -127,6 +146,7 @@ export function activate(context: vscode.ExtensionContext) {
             if (!await requireProOrCloudEdit('Inline Edit')) return;
             trackEvent('inline_edit');
             vscode.commands.executeCommand('freebird._inlineEditInternal');
+            maybeShowMultiFileTeaser();
         }),
 
         vscode.commands.registerCommand('freebird.activateLicense', async () => {
@@ -239,6 +259,11 @@ export function activate(context: vscode.ExtensionContext) {
                     }
                 }
             );
+        }),
+
+        vscode.commands.registerCommand('freebird.tryMultiFileEditing', async () => {
+            trackEvent('try_multifile_command_used');
+            vscode.commands.executeCommand('freebird.startTrial');
         }),
 
         vscode.commands.registerCommand('freebird.manageTeamSeats', async () => {

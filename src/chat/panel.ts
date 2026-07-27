@@ -96,6 +96,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         );
 
         this.sendWorkspaceFiles();
+        // The webview only exists once VS Code lazily resolves it (first time the
+        // sidebar is shown) — any earlier post() from activate()'s refreshStatusBar()
+        // silently dropped since `this.view` didn't exist yet. Send it now so the
+        // upgrade banner/Pro badge reflect reality the moment the panel first opens,
+        // instead of staying at their default hidden state until some other action
+        // happens to call showLicenseStatus() again.
+        this.showLicenseStatus();
 
         webviewView.webview.onDidReceiveMessage(async (msg: any) => {
             switch (msg.type) {
