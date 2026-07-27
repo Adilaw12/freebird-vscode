@@ -1,5 +1,12 @@
 # Changelog
 
+## \[0.9.1] — 2026-07-27
+
+### Fixed
+
+* **Ollama-unreachable cooldown extended 60s → 10 minutes.** The v0.8.11 fix capped `ollama_fallback` retries/telemetry to once per cooldown window instead of once per keystroke, but 60s still let a long active-typing session with Ollama down generate dozens of events (one per elapsed minute). "Ollama isn't running" almost never resolves itself mid-session, and fallback is already silent after the one-time notification, so a longer window costs nothing in UX while meaningfully cutting residual event volume and wasted cloud calls.
+* README: static VS Marketplace badge (was a dynamic `vsmarketplacebadges.dev` badge that could show a stale cached version on some registries) and Kimi K3 / Custom Provider added to the headline comparison tables, Bring Your Own Keys section, and Privacy section — previously only mentioned in the model-picker table and setup steps.
+
 ## \[0.9.0] — 2026-07-27
 
 ### Added

@@ -86,9 +86,15 @@ export function getProvider(context: vscode.ExtensionContext, sessionId: string)
  * hundreds of telemetry events and wasted cloud calls per session. During
  * the cooldown, Ollama is skipped entirely and requests go straight to
  * cloud without re-firing telemetry; it retries once the window elapses.
+ *
+ * 10 minutes rather than the original 60s: "Ollama isn't running" almost
+ * never resolves itself mid-session, so a short window still lets a long
+ * active-typing session generate dozens of events (one per elapsed window).
+ * A longer window doesn't cost UX — fallback is already silent after the
+ * one-time notification — it just means fewer, more meaningful events.
  */
 let ollamaUnreachableUntil = 0;
-const OLLAMA_RETRY_MS = 60_000;
+const OLLAMA_RETRY_MS = 10 * 60_000;
 
 class FallbackProvider implements AIProvider {
     constructor(
