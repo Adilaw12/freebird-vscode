@@ -1,5 +1,12 @@
 # Changelog
 
+## \[0.9.4] — 2026-07-28
+
+### Improved
+
+* **Error telemetry now carries a bounded detail classifier.** `api_error` tags the error's `code` (e.g. `AUTH_REQUIRED`, `OLLAMA_UNREACHABLE`, `UPSTREAM_ERROR`), and `tool_error` tags which tool action failed (e.g. `write_file`, `run_command`) — never raw error messages, tool output, or file paths. Investigating today's error cluster required manually decoding Redis timestamps and cross-referencing Vercel logs by hand; a repeat is now directly attributable from the dashboard.
+* Backend: fixed `/api/chat` and `/api/fallback` occasionally failing with a 504 after ~10 seconds — `vercel.json` capped function duration at 10s while the code itself waits up to 30s on Gemini, so any response that took longer than 10s was force-killed by the platform regardless of the code's own timeout. Raised the cap to cover the existing 30s upstream timeout with margin.
+
 ## \[0.9.3] — 2026-07-27
 
 ### Docs

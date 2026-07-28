@@ -8,7 +8,9 @@ let _enabled = false;
 let _context: vscode.ExtensionContext | undefined;
 let _machineId = '';
 let _sessionId = '';
-let _pendingEvents: Record<string, number> = {};
+// name -> detail -> count. detail is '' for events tracked without one, so a
+// single event name can carry both plain and detailed occurrences.
+let _pendingEvents: Record<string, Record<string, number>> = {};
 let _flushTimer: ReturnType<typeof setInterval> | undefined;
 
 interface SessionData {
@@ -55,7 +57,12 @@ export function initTelemetry(context: vscode.ExtensionContext): void {
     });
 }
 
-export function trackEvent(name: string): void {
+/**
+ * @param detail Optional bounded classifier for this occurrence (e.g. an
+ * error code, a tool action name) — never raw error messages, tool output,
+ * file paths, or anything else that could carry code content or PII.
+ */
+export function trackEvent(name: string, detail?: string): void {
     if (!_enabled || !_context) return;
 
     // Local persistence (for getSessionStats)
@@ -66,7 +73,9 @@ export function trackEvent(name: string): void {
     }
 
     // Queue for remote flush
-    _pendingEvents[name] = (_pendingEvents[name] ?? 0) + 1;
+    const key = detail || '';
+    if (!_pendingEvents[name]) _pendingEvents[name] = {};
+    _pendingEvents[name][key] = (_pendingEvents[name][key] ?? 0) + 1;
 }
 
 export function getSessionId(): string {
@@ -98,12 +107,17 @@ async function flush(): Promise<void> {
     const events = _pendingEvents;
     _pendingEvents = {};
 
-    const entries = Object.entries(events);
+    const entries: { name: string; detail: string; count: number }[] = [];
+    for (const [name, byDetail] of Object.entries(events)) {
+        for (const [detail, count] of Object.entries(byDetail)) {
+            entries.push({ name, detail, count });
+        }
+    }
     if (entries.length === 0) return;
 
     const config = vscode.workspace.getConfiguration('freebird');
     const payload = {
-        events: entries.map(([name, count]) => ({ name, count, ts: Date.now() })),
+        events: entries.map(({ name, detail, count }) => ({ name, detail: detail || undefined, count, ts: Date.now() })),
         meta: {
             sessionId: _sessionId,
             machineId: _machineId,
@@ -122,8 +136,9 @@ async function flush(): Promise<void> {
         });
     } catch {
         // Re-queue failed events for next flush
-        for (const [name, count] of entries) {
-            _pendingEvents[name] = (_pendingEvents[name] ?? 0) + count;
+        for (const { name, detail, count } of entries) {
+            if (!_pendingEvents[name]) _pendingEvents[name] = {};
+            _pendingEvents[name][detail] = (_pendingEvents[name][detail] ?? 0) + count;
         }
     }
 }

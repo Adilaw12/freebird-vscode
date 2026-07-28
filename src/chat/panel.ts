@@ -338,7 +338,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 this.post({ type: 'checkpoint-ready', id: summary.turnId, files: summary.files, unrevertable: summary.unrevertable });
             }
         } catch (err: any) {
-            trackEvent('api_error');
+            trackEvent('api_error', err?.code || 'unknown');
             this.post({ type: 'assistant-start' });
             this.post({
                 type: 'set-text',
@@ -447,7 +447,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     `[Upgrade to Pro](${UPGRADE_URL}) for unlimited access, or install ` +
                     `[Ollama](https://ollama.com) for unlimited free local AI.`;
             } else {
-                trackEvent('api_error');
+                trackEvent('api_error', err?.code || 'unknown');
                 served = false;
                 response =
                     `**Error:** ${err.message}\n\n` +
@@ -503,7 +503,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 this.post({ type: 'tool-status', id: event.id, state: 'running', label: toolLabel(event.tool) });
                 break;
             case 'tool-result':
-                if (!event.success) trackEvent('tool_error');
+                if (!event.success) trackEvent('tool_error', event.tool.action);
                 this.post({
                     type: 'tool-update',
                     id: event.id,
