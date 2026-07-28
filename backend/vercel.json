@@ -1,6 +1,6 @@
 {
   "functions": {
-    "api/*.js": { "maxDuration": 10 }
+    "api/*.js": { "maxDuration": 45 }
   },
   "rewrites": [
     { "source": "/success", "destination": "/api/success" },

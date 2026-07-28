@@ -34,13 +34,14 @@ async function sendJson(req, res) {
         const date = d.toISOString().slice(0, 10);
         machineSetKeys.push(`telemetry:machines:${date}`);
 
-        const [events, backends, platforms, versions, countries, ollamaFallbackVersions, errors, cloudCalls, uniqueIps] = await Promise.all([
+        const [events, backends, platforms, versions, countries, ollamaFallbackVersions, eventDetails, errors, cloudCalls, uniqueIps] = await Promise.all([
             redis.hgetall(`telemetry:daily:${date}`),
             redis.hgetall(`telemetry:backends:${date}`),
             redis.hgetall(`telemetry:platforms:${date}`),
             redis.hgetall(`telemetry:versions:${date}`),
             redis.hgetall(`telemetry:countries:${date}`),
             redis.hgetall(`telemetry:ollamaFallbackVersions:${date}`),
+            redis.hgetall(`telemetry:eventDetails:${date}`),
             redis.lrange(`telemetry:errors:${date}`, 0, 49),
             redis.get(`quota:global:${date}`),
             redis.scard(`monitor:ips:${date}`)
@@ -54,6 +55,7 @@ async function sendJson(req, res) {
             versions: versions || {},
             countries: countries || {},
             ollamaFallbackVersions: ollamaFallbackVersions || {},
+            eventDetails: eventDetails || {},
             recentErrors: errors || [],
             cloudCalls: parseInt(cloudCalls ?? '0', 10),
             uniqueIps: uniqueIps || 0

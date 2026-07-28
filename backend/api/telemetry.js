@@ -5,7 +5,10 @@ const redis = Redis.fromEnv();
 // Accept batched telemetry events from the VS Code extension.
 // Each event is a lightweight counter increment — no PII, no code content.
 //
-// Payload: { events: [{ name, count, ts }], meta: { version, platform, backend, sessionId, machineId } }
+// Payload: { events: [{ name, detail?, count, ts }], meta: { version, platform, backend, sessionId, machineId } }
+// `detail` is an optional bounded classifier the client attaches to some
+// events (an error code, a tool action name) — never raw error messages,
+// tool output, or file paths.
 //
 // Storage layout in Redis:
 //   telemetry:daily:{YYYY-MM-DD}          hash  — event name → total count for the day
@@ -17,7 +20,12 @@ const redis = Redis.fromEnv();
 //                                          ollama_fallback events from that version, so a
 //                                          future spike can be attributed without manually
 //                                          cross-referencing telemetry:daily and telemetry:versions
-//   telemetry:errors:{YYYY-MM-DD}         list  — error event names (capped)
+//   telemetry:eventDetails:{YYYY-MM-DD}   hash  — "eventName:detail" → count, for any event
+//                                          sent with a detail (e.g. "api_error:AUTH_REQUIRED",
+//                                          "tool_error:write_file") — lets a spike be attributed
+//                                          to a specific cause instead of just a raw timestamp
+//                                          in telemetry:errors
+//   telemetry:errors:{YYYY-MM-DD}         list  — error event names + detail (capped)
 //   telemetry:session:{sessionId}         string — "1", TTL 1 hour (dedup)
 //   telemetry:machines:{YYYY-MM-DD}       set   — unique machineIds seen that day
 
@@ -54,6 +62,7 @@ export default async function handler(req, res) {
     const versionsKey = `telemetry:versions:${today}`;
     const countriesKey = `telemetry:countries:${today}`;
     const ollamaFallbackVersionsKey = `telemetry:ollamaFallbackVersions:${today}`;
+    const eventDetailsKey = `telemetry:eventDetails:${today}`;
     const errorsKey = `telemetry:errors:${today}`;
 
     // Country from Vercel's own edge network — set automatically per request,
@@ -72,6 +81,8 @@ export default async function handler(req, res) {
             const count = Math.min(Math.max(parseInt(evt.count, 10) || 1, 1), 1000);
             if (!name) continue;
 
+            const detail = evt.detail ? String(evt.detail).slice(0, 48) : '';
+
             pipeline.hincrby(dailyKey, name, count);
 
             if (name === 'ollama_fallback') {
@@ -79,8 +90,12 @@ export default async function handler(req, res) {
                 pipeline.hincrby(ollamaFallbackVersionsKey, version, count);
             }
 
+            if (detail) {
+                pipeline.hincrby(eventDetailsKey, `${name}:${detail}`, count);
+            }
+
             if (ERROR_EVENTS.has(name)) {
-                pipeline.lpush(errorsKey, `${name}:${count}:${Date.now()}`);
+                pipeline.lpush(errorsKey, `${name}${detail ? ':' + detail : ''}:${count}:${Date.now()}`);
             }
         }
 
@@ -120,6 +135,7 @@ export default async function handler(req, res) {
         pipeline.expire(versionsKey, TTL);
         pipeline.expire(countriesKey, TTL);
         pipeline.expire(ollamaFallbackVersionsKey, TTL);
+        pipeline.expire(eventDetailsKey, TTL);
         pipeline.expire(errorsKey, TTL);
 
         // Cap error list
