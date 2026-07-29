@@ -33,8 +33,10 @@ export default async function handler(req, res) {
 
     const normalised = key.trim().toUpperCase();
 
-    // Basic format check — must match FB-XXXX-XXXX-XXXX-XXXX pattern
-    if (!/^FB-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(normalised)) {
+    // Basic format check — must match FB-XXXX-XXXX-XXXX-XXXX (paid),
+    // FBT-XXXX-XXXX-XXXX-XXXX (trial), or the legacy pre-rename OP-
+    // (OpenPilot AI) prefix still in use on a couple of older keys.
+    if (!/^(FBT?|OP)-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(normalised)) {
         return res.status(200).json({ valid: false });
     }
 
