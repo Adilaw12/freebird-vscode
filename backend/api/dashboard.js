@@ -1,19 +1,27 @@
 import { Redis } from '@upstash/redis';
+import { timingSafeEqual } from 'crypto';
 
 const redis = Redis.fromEnv();
 
-// Simple password protection — set DASHBOARD_PASSWORD env var in Vercel
+// Simple password protection — set DASHBOARD_PASSWORD env var in Vercel.
+// Fails CLOSED: a missing/unset password denies access rather than opening
+// the dashboard (business telemetry — DAU, revenue indicators, error logs —
+// with no auth at all if the env var were ever left unset in Vercel).
 const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD || '';
 
+function isAuthorized(req) {
+    if (!DASHBOARD_PASSWORD) return false;
+    const auth = req.headers['authorization'] || '';
+    const expected = 'Basic ' + Buffer.from('admin:' + DASHBOARD_PASSWORD).toString('base64');
+    const providedBuf = Buffer.from(auth);
+    const expectedBuf = Buffer.from(expected);
+    return providedBuf.length === expectedBuf.length && timingSafeEqual(providedBuf, expectedBuf);
+}
+
 export default async function handler(req, res) {
-    // Basic auth check
-    if (DASHBOARD_PASSWORD) {
-        const auth = req.headers['authorization'] || '';
-        const expected = 'Basic ' + Buffer.from('admin:' + DASHBOARD_PASSWORD).toString('base64');
-        if (auth !== expected) {
-            res.setHeader('WWW-Authenticate', 'Basic realm="Freebird Dashboard"');
-            return res.status(401).send('Unauthorized');
-        }
+    if (!isAuthorized(req)) {
+        res.setHeader('WWW-Authenticate', 'Basic realm="Freebird Dashboard"');
+        return res.status(401).send('Unauthorized');
     }
 
     if (req.query.json !== undefined) {
@@ -298,7 +306,8 @@ function render(data) {
   var featureEvents = ['message_sent','pro_message','cloud_edit_used','ollama_fallback',
     'inline_edit','ai_commit','chat_opened','upgrade_clicked','backend_configured',
     'license_activated','byok_blocked_no_license','trial_started','trial_signin_declined',
-    'trial_signin_failed','trial_start_failed','trial_already_used'];
+    'trial_signin_failed','trial_start_failed','trial_already_used','trial_reminder_shown',
+    'trial_reminder_upgrade_clicked','trial_expired_message_shown','trial_expired_upgrade_clicked'];
   var featureData = featureEvents.map(function(k) { return { name: k, count: totals[k] || 0 }; })
     .sort(function(a,b) { return b.count - a.count; });
   var maxFeature = featureData.length ? featureData[0].count : 1;
