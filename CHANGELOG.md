@@ -1,5 +1,12 @@
 # Changelog
 
+## \[0.9.5] — 2026-07-30
+
+### Security
+
+* **Fixed a command injection vulnerability in the `search_code` agent tool.** The tool built a `ripgrep` invocation as a concatenated shell string and ran it via `child_process.exec`, with incomplete escaping on the search query and no escaping on the file-pattern argument. `search_code` runs without a user-approval prompt (unlike `write_file`/`edit_file`/`run_command`), so this was reachable without any confirmation step. Fixed by switching to `execFile` with an explicit argument array, which never invokes a shell — arguments are passed as literal values regardless of their content, closing the injection vector entirely rather than trying to escape it correctly. Found via our own Security Auditor prompt template, run against this repo. Upgrade is strongly recommended.
+* Hardened `/api/dashboard`'s auth check (backend, no extension update needed) to fail closed rather than open if `DASHBOARD_PASSWORD` were ever left unset, and to use a timing-safe credential comparison.
+
 ## \[0.9.4] — 2026-07-28
 
 ### Improved

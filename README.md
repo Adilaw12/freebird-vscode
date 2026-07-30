@@ -2,7 +2,7 @@
 
 **No setup. No throttling. 20 free AI edits/day.**
 
-[![VS Marketplace](https://img.shields.io/badge/VS%20Marketplace-v0.9.4-0066B8?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=TenLabs.freebird-ai)
+[![VS Marketplace](https://img.shields.io/badge/VS%20Marketplace-v0.9.5-0066B8?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=TenLabs.freebird-ai)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](https://github.com/Adilaw12/freebird-vscode/blob/main/LICENSE)
 [![GitHub](https://img.shields.io/badge/GitHub-Adilaw12%2Ffreebird--vscode-181717?style=flat-square&logo=github)](https://github.com/Adilaw12/freebird-vscode)
 
@@ -27,10 +27,25 @@ Freebird never blocks you — it picks up where other tools stop.
 |---|:---:|:---:|:---:|:---:|
 | Price | $10/mo | $20/mo | **Free** | **$6/mo** |
 | Setup required | No | Yes | **No** | No |
-| Multi-file agent edits (terminal, checkpoints) | Limited | ✅ | ❌ | ✅ |
+| Multi-file agent edits + terminal | Limited | ✅ | ❌ | ✅ |
+| Semantic codebase search (finds code by meaning) | Limited | ✅ | ❌ | ✅ |
+| Checkpoint + one-click undo, every agent turn | ❌ | Limited | ❌ | ✅ |
 | Local AI (Ollama) | ❌ | ❌ | ✅ | ✅ |
 | BYOK (Claude, GPT-4o, DeepSeek, Qwen, Kimi K3, custom) | ❌ | ✅ | ✅ | ✅ |
 | Cloud edits throttled | ✅ | ✅ | 20/day soft cap | Never |
+
+---
+
+## Safe by Design, Not Just "Trust the AI"
+
+Letting an agent touch your codebase should come with proof, not a promise. Every Pro agent turn follows the same rule: nothing changes without your approval, and everything can be undone.
+
+- **Approve every edit before it happens** — full diff shown, nothing writes silently.
+- **Checkpoint on every turn** — one click restores every file the agent touched back to its exact state before that turn, even several turns later.
+- **Project-aware, not file-blind** — semantic codebase search finds relevant code by *meaning* ("find the payment retry logic"), not just filename or exact-text matching like a plain grep. It reads your actual workspace tree and fetches the files it needs before proposing a change, and can check `git status` mid-turn when relevant.
+- **Terminal commands shown before they run** — you see the command, not just the result.
+
+Multi-file edits are only as trustworthy as the undo button behind them — Freebird's is one click, every time.
 
 ---
 
@@ -111,14 +126,37 @@ Agent mode isn't locked to Freebird's cloud — it routes through whatever backe
 ### Smart Chat with File Context
 Type `@filename` to inject any file into the conversation. Type `/` to see all available commands.
 
+### Semantic Codebase Search (Pro)
+Two ways the agent finds code: `search_code` for exact/keyword matches (like grep — good when you know the literal text), and semantic search for finding code by *meaning* — ask for "the payment retry logic" and it surfaces relevant code even if nothing is named "payment." Run **Freebird: Build Codebase Index** once per project to enable it; the agent picks whichever search fits your question automatically.
+
 ### Git Integration
-Generate commit messages, push to remote, check git status — all from the chat panel.
+Generate commit messages, push to remote, and check git status from the chat panel — and the agent can call `git status` itself mid-turn when it's relevant to the change it's making, not just on request.
 
 ### Project Memory (Pro)
 Freebird saves notes about your project to `.freebird/memory.md` and loads them automatically. Use `/memory` to see what's saved and `/forget` to clear it.
 
-### Built-in Prompt Templates
-Run **Freebird: Use Prompt Template** to start from a ready-made prompt for a common task — populates the chat input for you to edit before sending, rather than firing immediately. Ships with three: **Codebase Cartographer** (maps a project's architecture — pairs especially well with a large-context model like Kimi K3), **Security Auditor** (concrete, cited vulnerability findings — no theoretical padding), and **Multi-File Test Engineer** (finds untested code paths and writes tests matching your existing conventions).
+### Run Specialized Agents on Your Codebase
+Map architecture, audit security, generate tests — all multi-file, all reversible. Or go freeform with BYOK + our managed backends.
+
+Run **Freebird: Use Prompt Template** to start from one of three ready-made prompts — populates the chat input for you to edit before sending, rather than firing immediately. These are deliberately thorough (each is instructed to read broadly across your codebase — up to 15 tool calls in a turn) rather than fast, so expect a couple of minutes on a real project, not a quick chat-style reply.
+
+<!-- TODO(screenshots): each template below needs a real before/after capture —
+     a small sample project run through the actual template, showing the
+     agent's proposed diff / findings / generated tests. Not something to
+     fabricate — needs a real run against a real (ideally public-friendly)
+     codebase, reviewed for quality before it goes in a public README. -->
+
+**Codebase Cartographer** — architecture overview, key abstractions and how data flows end to end, conventions worth knowing, real technical debt (not stylistic nitpicks), and a Mermaid.js dependency diagram. Pairs especially well with a large-context model like Kimi K3 on an unfamiliar codebase.
+
+<!-- ![Codebase Cartographer — before/after](media/prompt-template-cartographer.png) -->
+
+**Security Auditor** — cites the exact file and line for every finding, the concrete failure scenario (specific input/conditions that trigger it, not "this could be a vulnerability"), severity based on real exploitability, and a fix that doesn't change intended behavior. Fewer, real findings — no theoretical padding.
+
+<!-- ![Security Auditor — before/after](media/prompt-template-security-auditor.png) -->
+
+**Multi-File Test Engineer** — reads your existing test suite first to match its actual conventions, then prioritizes business logic with real consequences, easy-to-miss edge cases, and regression coverage for anything that's been a source of bugs before. Runs the tests it writes and fixes failures before finishing.
+
+<!-- ![Multi-File Test Engineer — before/after](media/prompt-template-test-engineer.png) -->
 
 ---
 
@@ -208,11 +246,12 @@ Point Freebird at any OpenAI-compatible API — OpenRouter, Together, Groq, Fire
 
 1. **Reads** your workspace file tree automatically
 2. **Fetches** specific files it needs
-3. **Searches** the codebase for symbols, patterns, or text
+3. **Searches** the codebase — exact/keyword matches via `search_code`, or by *meaning* via semantic search, whichever fits the question
 4. **Edits** files with targeted diffs — Approve / Reject before anything changes
 5. **Creates** new files — preview shown before creation
 6. **Runs** terminal commands — shown before execution
 7. **Commits and pushes** — requires your explicit approval
+8. **Checkpoints** every turn that touched files — one click undoes the whole thing, anytime
 
 Nothing is modified silently. You stay in full control.
 

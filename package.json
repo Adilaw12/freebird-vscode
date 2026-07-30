@@ -2,7 +2,7 @@
   "name": "freebird-ai",
   "displayName": "Freebird AI",
   "description": "AI coding assistant — 20 free AI edits/day, no setup. Free BYOK (Claude, GPT-4o, DeepSeek) & local Ollama. Inline edit, AI commit. Pro $6/mo: Agent mode (multi-file edits) + unlimited.",
-  "version": "0.9.4",
+  "version": "0.9.5",
   "publisher": "TenLabs",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -90,7 +90,7 @@
           {
             "id": "goPro",
             "title": "Need more? Go unlimited",
-            "description": "Pro unlocks Agent mode — multi-file edits, terminal commands, checkpoints — plus unlimited cloud edits and project memory. $6/month, 7-day free trial, no card needed.\n[Upgrade to Pro](command:freebird.upgradeToPro)",
+            "description": "Pro unlocks Agent mode — multi-file edits and terminal commands, with a checkpoint saved on every turn so you can undo the whole thing in one click if anything goes wrong. Plus unlimited cloud edits and project memory. $6/month, 7-day free trial, no card needed.\n[Upgrade to Pro](command:freebird.upgradeToPro)",
             "media": { "markdown": "media/walkthrough/go-pro.md" },
             "completionEvents": [ "onCommand:freebird.upgradeToPro" ]
           }

@@ -5,7 +5,7 @@ import * as https from 'https';
 import * as http from 'http';
 import * as dns from 'dns';
 import * as net from 'net';
-import { exec, ExecException } from 'child_process';
+import { exec, execFile, ExecException } from 'child_process';
 import { GitService } from '../git/service';
 import { previewHtmlFile } from './preview';
 import { ToolSchema } from '../ai/provider';
@@ -426,9 +426,16 @@ async function searchCodebaseSemanticTool(
 async function ripgrepSearch(query: string, filePattern: string): Promise<string | null> {
     const root = getWorkspaceRoot();
     return new Promise<string | null>((resolve) => {
-        const globArg = filePattern !== '**/*' ? `--glob "${filePattern}"` : '';
-        const cmd = `rg --line-number --max-count 200 --no-heading --color never ${globArg} -- "${query.replace(/"/g, '\\"')}"`;
-        exec(cmd, { cwd: root, timeout: 10_000, maxBuffer: 512 * 1024 },
+        // execFile with an argument array — never goes through a shell, so
+        // query/filePattern can't break out via $(), backticks, ;, &&, etc.
+        // no matter what characters they contain (previously built a shell
+        // string with only double-quotes escaped, which a crafted filePattern
+        // could break out of entirely).
+        const args = ['--line-number', '--max-count', '200', '--no-heading', '--color', 'never'];
+        if (filePattern !== '**/*') args.push('--glob', filePattern);
+        args.push('--', query);
+
+        execFile('rg', args, { cwd: root, timeout: 10_000, maxBuffer: 512 * 1024 },
             (err, stdout) => {
                 if (err && !stdout) { resolve(null); return; }
                 const output = stdout.trim();
