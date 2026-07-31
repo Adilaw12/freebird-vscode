@@ -2,13 +2,15 @@
 
 **No setup. No throttling. 20 free AI edits/day.**
 
-[![VS Marketplace](https://img.shields.io/badge/VS%20Marketplace-v0.9.6-0066B8?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=TenLabs.freebird-ai)
+[![VS Marketplace](https://img.shields.io/badge/VS%20Marketplace-v0.9.7-0066B8?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=TenLabs.freebird-ai)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](https://github.com/Adilaw12/freebird-vscode/blob/main/LICENSE)
 [![GitHub](https://img.shields.io/badge/GitHub-Adilaw12%2Ffreebird--vscode-181717?style=flat-square&logo=github)](https://github.com/Adilaw12/freebird-vscode)
 
 > AI coding assistant · Copilot alternative · Cursor alternative · multi-file AI edits · AI refactoring · codebase search · Gemini Flash · Kimi K3 · custom LLM providers (OpenRouter, Together, self-hosted) · prompt templates · Ollama · BYOK · local AI · privacy-first
 
 ![Freebird AI — inline edit rewriting a selection in place](media/Inline%20AI%20refactor.gif)
+
+**Run full codebase security audits, architecture mapping, and technical debt analysis with Agent mode** — try free for 7 days, no card needed. Pro is $6/month for unlimited multi-file editing and team collaboration — less than half the price of competitors, more capability out of the box.
 
 Install Freebird AI and start coding in seconds — no API keys, no throttling, no configuration. You get **20 free advanced AI edits per day** powered by Gemini Flash, plus free BYOK and unlimited local AI when you want full privacy.
 
@@ -60,6 +62,11 @@ Ask Freebird to update your products page, add images to cards, or refactor acro
 Freebird reads your existing code structure, understands the context, and makes targeted edits across files in one agent run.
 
 ![Freebird AI — agentic page editing across HTML and CSS](media/Freebird%20AI-%20edit%20screen-2.png)
+
+### Codebase Cartographer, run on Freebird's own source (Pro)
+We ran our own **Codebase Cartographer** prompt template against this repo — real output, not staged. It mapped the architecture, traced data flow end to end, and flagged a real, accurate gap in our own auth rollout, all cited to exact files. Below is the Mermaid.js dependency diagram it produced, rendered live in the chat panel.
+
+![Freebird AI — Codebase Cartographer's rendered architecture diagram](media/Mermaid%20diagram_.jpeg)
 
 ---
 

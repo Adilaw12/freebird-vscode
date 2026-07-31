@@ -1,5 +1,12 @@
 # Changelog
 
+## \[0.9.7] — 2026-07-31
+
+### Docs
+
+* New headline pitch: "Run full codebase security audits, architecture mapping, and technical debt analysis with Agent mode — try free for 7 days, no card needed."
+* Added a real, rendered screenshot of the Codebase Cartographer's Mermaid.js dependency diagram (from a live run against this repo) to the "See It in Action" section.
+
 ## \[0.9.6] — 2026-07-31
 
 ### Added
