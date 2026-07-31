@@ -11,3 +11,5 @@ generate-icon.js
 backend/**
 .claude/**
 test/**
+.freebird/**
+diagrams/**
