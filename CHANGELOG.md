@@ -1,5 +1,30 @@
 # Changelog
 
+## \[0.9.6] — 2026-07-31
+
+### Added
+
+* **Mermaid diagram rendering in the chat panel.** ```mermaid fenced code blocks now render as real diagrams (via a vendored `mermaid.js`), not raw text — only once a block is fully streamed in, to avoid trying to render incomplete/invalid syntax mid-response.
+* **Trial reminders.** One-time toast nudges at 3/2/1 days left on a Pro trial, plus a graceful one-time toast once it's expired. The trial's last day and post-expiry state also get a persistent chat-panel banner (not just a dismissible toast, since that's the highest-stakes moment to miss) with a direct upgrade action.
+* **First-time Agent-mode explainer**: before your first-ever Agent mode turn, a one-time message explains the difference between `search_code` (exact/keyword, like grep) and semantic search (finds code by meaning), with a concrete example of when to use each.
+* **Contextual multi-file Pro CTA**: free-tier users referencing 2+ files in one message (via `@mention`) now see a specific "that's Agent mode" card instead of a generic upgrade prompt — tied to the thing they just tried, not shown out of context.
+
+### Fixed
+
+* **`resolveMentions` left a double space** when removing an `@mention` from the middle of a sentence (`.trim()` only strips leading/trailing whitespace, not internal gaps). Found via our own Multi-File Test Engineer prompt template, run against this repo.
+* **Tab completion and inline edit used the wrong identity for quota tracking** — `getSessionId()` (resets every VS Code restart) instead of the stable `getMachineId()` the main chat panel already used, meaning quota tracking for those two features could reset on every relaunch.
+* Checkpoint cards get a stronger visual treatment (accent color, icon) and a first-time explainer, since testing showed the safety-net feature was easy to miss entirely — it wasn't mentioned anywhere in onboarding.
+
+### Changed
+
+* Prompt templates now say up front that they're thorough by design (can take a couple of minutes) rather than looking hung.
+* Strengthened the Codebase Cartographer template's Mermaid instruction after testing showed a weaker model would draw ASCII art instead of real Mermaid syntax if the instruction wasn't explicit and example-backed.
+* README: new "Safe by Design, Not Just 'Trust the AI'" section leading with checkpoints and semantic search as the actual differentiator, instead of burying them in feature bullets.
+
+### Test coverage
+
+* Added `test/auth-token.test.js` (19 checks — token signing/verification, tampering, expiry, fail-closed behavior), `test/memory.test.js` (13 checks — project memory read/write/truncation/clear), and `test/context-builder.test.js` (9 suites — active-file context, `@mention` resolution, the double-space fix above). 207/207 checks pass.
+
 ## \[0.9.5] — 2026-07-30
 
 ### Security

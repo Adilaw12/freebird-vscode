@@ -14,6 +14,7 @@ import { getCloudEditsRemaining, DAILY_CLOUD_LIMIT } from '../license/usage';
 import { readProjectMemory, clearProjectMemory, MEMORY_RELATIVE_PATH } from '../agent/memory';
 import { finalizeTurn, restoreCheckpoint, checkpointsRootFor } from '../agent/checkpoint';
 import { trackEvent, getMachineId } from '../telemetry';
+import { getTrialBannerState } from '../license/trialReminder';
 
 const MAX_HISTORY_PAIRS = 20;
 
@@ -77,6 +78,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     private sessionMessageCount = 0;
     private toolCallsThisRound = 0;
     private currentTurnId = '';
+    private multiFileCtaShownThisSession = false;
 
     constructor(context: vscode.ExtensionContext, git: GitService) {
         this.context = context;
@@ -90,10 +92,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         _token: vscode.CancellationToken
     ): void {
         this.view = webviewView;
-        webviewView.webview.options = { enableScripts: true };
-        webviewView.webview.html = fs.readFileSync(
+        const mediaRoot = vscode.Uri.joinPath(this.context.extensionUri, 'media');
+        webviewView.webview.options = { enableScripts: true, localResourceRoots: [mediaRoot] };
+
+        const mermaidUri = webviewView.webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot, 'mermaid.min.js'));
+        const html = fs.readFileSync(
             path.join(this.context.extensionPath, 'media', 'chat.html'), 'utf8'
         );
+        webviewView.webview.html = html
+            .replace(/\{\{CSP_SOURCE\}\}/g, webviewView.webview.cspSource)
+            .replace(/\{\{MERMAID_URI\}\}/g, mermaidUri.toString());
 
         this.sendWorkspaceFiles();
         // The webview only exists once VS Code lazily resolves it (first time the
@@ -158,7 +166,34 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     async showLicenseStatus() {
         const status = await getLicenseStatus(this.context);
-        this.post({ type: 'license-status', isPro: status.isPro, plan: status.plan, email: status.email });
+        const licenseKey = vscode.workspace.getConfiguration('freebird').get<string>('licenseKey', '').trim().toUpperCase();
+        const trialBanner = getTrialBannerState(this.context, status, licenseKey);
+        this.post({
+            type: 'license-status',
+            isPro: status.isPro,
+            plan: status.plan,
+            email: status.email,
+            trialBannerMessage: trialBanner?.message ?? null
+        });
+    }
+
+    /** One-time explainer, shown before the very first Agent-mode turn a user ever runs. */
+    private async maybeShowAgentModeExplainer(): Promise<void> {
+        const KEY = 'freebird.agentModeExplainerShown';
+        if (this.context.globalState.get<boolean>(KEY)) return;
+        await this.context.globalState.update(KEY, true);
+
+        this.post({ type: 'assistant-start' });
+        this.post({
+            type: 'set-text',
+            text:
+                "**Two ways Freebird searches your code — worth knowing before your first request:**\n\n" +
+                "- **`search_code`** — exact/keyword matches, like grep. Good when you know the literal text: *\"find files with 'payment' in the name.\"*\n" +
+                "- **Semantic search** — finds code by *meaning*, not literal text. Good for: *\"find functions related to payment processing\"* — it'll surface relevant logic even if nothing is named \"payment.\"\n\n" +
+                "The agent picks whichever fits your question automatically. Semantic search needs an index first — run **Freebird: Build Codebase Index** once per project for it to work."
+        });
+        this.post({ type: 'assistant-end' });
+        trackEvent('agent_mode_explainer_shown');
     }
 
     triggerCommand(command: string) {
@@ -266,7 +301,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             return;
         }
 
-        const { cleanText, mentionContext } = await resolveMentions(trimmed);
+        const { cleanText, mentionContext, resolvedCount } = await resolveMentions(trimmed);
         this.post({ type: 'user', text: trimmed });
 
         const license = await getLicenseStatus(this.context);
@@ -277,6 +312,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             await this.runProChat(cleanText, mentionContext);
 
         } else {
+            // Contextual Pro CTA: tied to the specific thing they just tried
+            // (referencing 2+ files at once — real multi-file editing intent)
+            // rather than a generic "Upgrade to Pro" shown out of context.
+            // Once per session so it doesn't repeat on every message.
+            if (resolvedCount >= 2 && !this.multiFileCtaShownThisSession) {
+                this.multiFileCtaShownThisSession = true;
+                trackEvent('multifile_cta_shown');
+                this.post({ type: 'multifile-cta', fileCount: resolvedCount });
+            }
             // Free tier — route by the backend the user actually configured.
             // Quota is enforced by the SERVER only (backend/api/chat.js,
             // 20/day). The old client-side 5-edit counter is gone: it
@@ -316,6 +360,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const contextPrefix = [mentionContext, fileCtx].filter(Boolean).join('\n');
         const fullText = contextPrefix ? `${contextPrefix}\n\n${text}` : text;
 
+        await this.maybeShowAgentModeExplainer();
+
         try {
             const newHistory = await runAgentLoop({
                 userMessage: fullText,
@@ -335,7 +381,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
             const summary = finalizeTurn(checkpointsRootFor(this.context), this.currentTurnId);
             if (summary) {
-                this.post({ type: 'checkpoint-ready', id: summary.turnId, files: summary.files, unrevertable: summary.unrevertable });
+                const isFirstEver = !this.context.globalState.get<boolean>('freebird.firstCheckpointSeen');
+                if (isFirstEver) await this.context.globalState.update('freebird.firstCheckpointSeen', true);
+                this.post({
+                    type: 'checkpoint-ready',
+                    id: summary.turnId,
+                    files: summary.files,
+                    unrevertable: summary.unrevertable,
+                    isFirstEver
+                });
             }
         } catch (err: any) {
             trackEvent('api_error', err?.code || 'unknown');

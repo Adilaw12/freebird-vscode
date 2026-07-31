@@ -45,15 +45,16 @@ export function buildFileContext(): string {
 export interface MentionResult {
     cleanText: string;
     mentionContext: string;
+    resolvedCount: number;
 }
 
 export async function resolveMentions(text: string): Promise<MentionResult> {
     const mentionRe = /@([\w./\\-]+)/g;
     const matches   = [...text.matchAll(mentionRe)];
-    if (matches.length === 0) return { cleanText: text, mentionContext: '' };
+    if (matches.length === 0) return { cleanText: text, mentionContext: '', resolvedCount: 0 };
 
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    if (!workspaceRoot) return { cleanText: text, mentionContext: '' };
+    if (!workspaceRoot) return { cleanText: text, mentionContext: '', resolvedCount: 0 };
 
     let mentionContext  = '';
     let totalChars      = 0;
@@ -90,9 +91,10 @@ export async function resolveMentions(text: string): Promise<MentionResult> {
 
     // Remove resolved @mentions from the user-facing text to keep it clean
     let cleanText = text;
-    for (const r of resolved) cleanText = cleanText.replace(r, '').trim();
+    for (const r of resolved) cleanText = cleanText.replace(r, ' ');
+    cleanText = cleanText.replace(/\s{2,}/g, ' ').trim();
 
-    return { cleanText, mentionContext };
+    return { cleanText, mentionContext, resolvedCount: resolved.length };
 }
 
 // ── Workspace file list (for autocomplete suggestions) ────────────────────────

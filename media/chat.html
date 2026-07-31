@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline' {{CSP_SOURCE}};">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Freebird AI</title>
 <style>
@@ -68,6 +68,18 @@ body {
   color: var(--vscode-editor-foreground); font-size: 1em; padding: 0 4px; line-height: 1;
 }
 .banner-close:hover { opacity: 0.7; }
+
+/* ── trial-ending banner — deliberately not auto-hidden by isPro like
+   #upgrade-banner, since the trial's last day/expiry is still isPro:true
+   or was just isPro:true a moment ago, and this moment matters more than
+   a dismissible toast a user can miss mid-session ── */
+#trial-banner {
+  display: none; align-items: center; justify-content: space-between;
+  padding: 8px 16px; font-size: 0.79em; flex-shrink: 0;
+  background: rgba(217, 119, 87, 0.14);
+  border-bottom: 1px solid rgba(217,119,87,0.28);
+  color: var(--vscode-editor-foreground);
+}
 
 /* ── messages ── */
 #messages {
@@ -278,6 +290,13 @@ pre {
   border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.05));
   line-height: 1.5;
 }
+.mermaid {
+  background: var(--vscode-textCodeBlock-background, rgba(0,0,0,0.25));
+  border-radius: 8px; padding: 14px 16px; margin: 10px 0; overflow-x: auto;
+  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.05));
+  display: flex; justify-content: center;
+}
+.mermaid svg { max-width: 100%; }
 .copy-code-btn {
   position: absolute; top: 8px; right: 8px;
   background: var(--vscode-button-secondaryBackground, rgba(255,255,255,0.06));
@@ -356,13 +375,17 @@ em { font-style: italic; }
 /* ── checkpoint cards ── */
 .checkpoint-card {
   border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.08));
+  border-left: 3px solid #4ec9b0;
   border-radius: 10px; padding: 10px 16px;
   background: var(--vscode-editorWidget-background, rgba(255,255,255,0.02));
   margin: 6px 24px 6px 54px;
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  display: flex; flex-direction: column; gap: 6px;
   font-size: 0.82em;
 }
-.checkpoint-desc { opacity: 0.75; }
+.checkpoint-card-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.checkpoint-desc { opacity: 0.92; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+.checkpoint-desc svg { flex-shrink: 0; stroke: #4ec9b0; }
+.checkpoint-explainer { opacity: 0.6; font-size: 0.95em; line-height: 1.4; }
 .checkpoint-warn { display: block; font-size: 0.9em; opacity: 0.55; margin-top: 2px; }
 .checkpoint-restore-btn {
   border: none; border-radius: 6px; padding: 5px 14px; flex-shrink: 0;
@@ -374,6 +397,23 @@ em { font-style: italic; }
 .checkpoint-restore-btn:hover { opacity: 0.8; }
 .checkpoint-restore-btn:disabled { cursor: default; opacity: 0.5; }
 .checkpoint-result { font-size: 0.82em; opacity: 0.5; }
+
+/* ── contextual multi-file Pro CTA — tied to what the user just tried ── */
+.multifile-cta-card {
+  border: 1px solid rgba(217,119,87,0.3); border-left: 3px solid #d97757;
+  border-radius: 10px; padding: 10px 16px;
+  background: rgba(217, 119, 87, 0.08);
+  margin: 6px 24px 6px 54px;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  font-size: 0.82em;
+}
+.multifile-cta-text { opacity: 0.9; line-height: 1.4; }
+.multifile-cta-btn {
+  border: none; border-radius: 6px; padding: 5px 14px; flex-shrink: 0;
+  cursor: pointer; font-size: 0.9em; font-family: inherit; font-weight: 600;
+  background: #d97757; color: #fff; transition: opacity 0.2s; white-space: nowrap;
+}
+.multifile-cta-btn:hover { opacity: 0.85; }
 
 /* ── status hints (cloud edit / ollama fallback) ── */
 .status-hint {
@@ -663,6 +703,14 @@ em { font-style: italic; }
   </div>
 </div>
 
+<!-- Trial-ending banner — persistent (no close button) for the trial's last day / just-expired -->
+<div id="trial-banner">
+  <span id="trial-banner-text"></span>
+  <div class="banner-links">
+    <button class="link-btn" onclick="vscode.postMessage({type:'upgrade'})">Upgrade to Pro</button>
+  </div>
+</div>
+
 <!-- Messages -->
 <div id="messages">
   <div class="welcome" id="welcome">
@@ -759,7 +807,11 @@ em { font-style: italic; }
   </div>
 </div>
 
+<script src="{{MERMAID_URI}}"></script>
 <script>
+if (window.mermaid) {
+  mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'dark' });
+}
 var vscode      = acquireVsCodeApi();
 var msgsEl      = document.getElementById('messages');
 var inputEl     = document.getElementById('input');
@@ -873,9 +925,19 @@ function renderMarkdown(text) {
       html += t;
     } else {
       var nl = parts[i].indexOf('\n');
+      var lang = nl>=0 ? parts[i].slice(0,nl).trim().toLowerCase() : '';
       var code = nl>=0 ? parts[i].slice(nl+1) : parts[i];
-      var id = 'c'+Math.random().toString(36).slice(2,8);
-      html += '<pre id="'+id+'"><button class="copy-code-btn" onclick="copyCode(\''+id+'\')">Copy</button><code>'+escHtml(code)+'</code></pre>';
+      // A fence is only "closed" if something follows it in the split — the
+      // last segment with no following part means the ``` hasn't arrived yet
+      // (still streaming), so don't attempt to render a diagram from
+      // incomplete/invalid mermaid source mid-stream.
+      var isClosed = i < parts.length-1;
+      if (lang === 'mermaid' && isClosed) {
+        html += '<div class="mermaid">'+escHtml(code.trim())+'</div>';
+      } else {
+        var id = 'c'+Math.random().toString(36).slice(2,8);
+        html += '<pre id="'+id+'"><button class="copy-code-btn" onclick="copyCode(\''+id+'\')">Copy</button><code>'+escHtml(code)+'</code></pre>';
+      }
     }
   }
   return html;
@@ -949,6 +1011,7 @@ function setCurrentText(text) {
     stopThinkingAnimation();
     currentBubble.classList.remove('typing');
     currentBubble.innerHTML=renderMarkdown(text);
+    if (window.mermaid) { try { mermaid.run(); } catch(e) { /* incomplete/invalid diagram source — leave as-is */ } }
   } else {
     currentBubble.classList.add('typing');
     startThinkingAnimation(currentBubble);
@@ -1004,12 +1067,16 @@ function respondApproval(id, approved) {
   vscode.postMessage({type:'approval-response',id:id,approved:approved});
 }
 
-function addCheckpointCard(id, files, unrevertable) {
+function addCheckpointCard(id, files, unrevertable, isFirstEver) {
   var card=document.createElement('div'); card.className='checkpoint-card'; card.id='checkpoint-'+id;
+  var row=document.createElement('div'); row.className='checkpoint-card-row';
   var dv=document.createElement('div');
   var count=(files&&files.length)||0;
   var desc=document.createElement('span'); desc.className='checkpoint-desc';
-  desc.textContent='Checkpoint saved — '+count+' file'+(count===1?'':'s')+' changed';
+  desc.innerHTML='<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1l6 2.5v4c0 4-2.5 6.5-6 7.5-3.5-1-6-3.5-6-7.5v-4z"/><path d="M5.5 8l1.8 1.8L10.5 6"/></svg>';
+  var descText=document.createElement('span');
+  descText.textContent='Checkpoint saved — '+count+' file'+(count===1?'':'s')+' changed';
+  desc.appendChild(descText);
   dv.appendChild(desc);
   if (unrevertable) {
     var warn=document.createElement('span'); warn.className='checkpoint-warn';
@@ -1019,7 +1086,23 @@ function addCheckpointCard(id, files, unrevertable) {
   var btn=document.createElement('button'); btn.className='checkpoint-restore-btn'; btn.textContent='Restore';
   btn.id='checkpoint-restore-'+id;
   btn.onclick=function(){ vscode.postMessage({type:'restore-checkpoint',id:id,files:files}); };
-  card.appendChild(dv); card.appendChild(btn);
+  row.appendChild(dv); row.appendChild(btn);
+  card.appendChild(row);
+  if (isFirstEver) {
+    var explainer=document.createElement('div'); explainer.className='checkpoint-explainer';
+    explainer.textContent='This is your safety net — every agent turn that changes files gets one. If something goes wrong, click Restore to undo the whole turn instantly.';
+    card.appendChild(explainer);
+  }
+  msgsEl.appendChild(card); scroll();
+}
+
+function addMultiFileCtaCard(fileCount) {
+  var card=document.createElement('div'); card.className='multifile-cta-card';
+  var text=document.createElement('span'); text.className='multifile-cta-text';
+  text.textContent='Editing across '+fileCount+' files at once? That\'s Agent mode — Pro only, with checkpoints to keep it safe. Free for 7 days, no card.';
+  var btn=document.createElement('button'); btn.className='multifile-cta-btn'; btn.textContent='Try Pro free for 7 days';
+  btn.onclick=function(){ vscode.postMessage({type:'start-trial'}); };
+  card.appendChild(text); card.appendChild(btn);
   msgsEl.appendChild(card); scroll();
 }
 
@@ -1287,7 +1370,8 @@ window.addEventListener('message',function(e){
     case 'tool-status':      addToolStatus(m.id,m.state,m.label); break;
     case 'tool-update':      updateToolStatus(m.id,m.state,m.output); break;
     case 'approval-request': addApprovalCard(m.id,m.description,m.preview); break;
-    case 'checkpoint-ready':    addCheckpointCard(m.id,m.files,m.unrevertable); break;
+    case 'checkpoint-ready':    addCheckpointCard(m.id,m.files,m.unrevertable,m.isFirstEver); break;
+    case 'multifile-cta':       addMultiFileCtaCard(m.fileCount); break;
     case 'populate-input':      populateInput(m.text); break;
     case 'checkpoint-restored': updateCheckpointCard(m.id,m.restored,m.deleted,m.errors); break;
     case 'assistant-end':    endMsg(); break;
@@ -1305,6 +1389,16 @@ window.addEventListener('message',function(e){
       } else {
         if (banner) banner.style.display='flex';
         if (badge)  badge.style.display='none';
+      }
+      var trialBanner=document.getElementById('trial-banner');
+      var trialBannerText=document.getElementById('trial-banner-text');
+      if (trialBanner) {
+        if (m.trialBannerMessage) {
+          if (trialBannerText) trialBannerText.textContent = m.trialBannerMessage;
+          trialBanner.style.display='flex';
+        } else {
+          trialBanner.style.display='none';
+        }
       }
       break;
     }

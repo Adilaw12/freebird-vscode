@@ -14,6 +14,7 @@ import { initTelemetry, disposeTelemetry, trackEvent, getMachineId } from './tel
 import { buildBackendPickerItems } from './license/backendPicker';
 import { PROMPT_TEMPLATES } from './agent/promptTemplates';
 import { checkAnnouncement } from './announcement';
+import { checkTrialReminder } from './license/trialReminder';
 
 export function activate(context: vscode.ExtensionContext) {
     const git = new GitService();
@@ -27,6 +28,7 @@ export function activate(context: vscode.ExtensionContext) {
     initTelemetry(context);
     checkOllamaSetup(context).catch(() => {});
     checkAnnouncement(context).catch(() => {});
+    checkTrialReminder(context).catch(() => {});
 
     // ── Sidebar chat ───────────────────────────────────────────────────────
     const chatProvider = new ChatViewProvider(context, git);

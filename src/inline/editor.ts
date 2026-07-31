@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { getProvider } from '../ai';
 import { getLicenseStatus, UPGRADE_URL } from '../license/validator';
-import { getSessionId } from '../telemetry';
+import { getMachineId } from '../telemetry';
 import { stripFences } from '../util/text';
 
 let _extensionContext: vscode.ExtensionContext;
@@ -43,7 +43,7 @@ async function inlineEdit() {
     });
     if (!instruction) return;
 
-    const provider = getProvider(_extensionContext, getSessionId());
+    const provider = getProvider(_extensionContext, getMachineId());
 
     await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: 'Freebird: Rewriting…', cancellable: true },

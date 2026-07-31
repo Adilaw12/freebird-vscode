@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { getProvider } from '../ai';
 import { FIMProvider } from '../ai/provider';
-import { getSessionId } from '../telemetry';
+import { getMachineId } from '../telemetry';
 import { stripFences } from '../util/text';
 
 const MAX_PREFIX_LINES = 100;
@@ -39,7 +39,7 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
 
         let raw: string;
         try {
-            const provider = getProvider(this.context, getSessionId());
+            const provider = getProvider(this.context, getMachineId());
 
             // Use FIM endpoint when available (Ollama) — much faster for completions
             if (isFIMProvider(provider)) {

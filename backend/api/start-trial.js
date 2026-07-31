@@ -39,7 +39,7 @@ export default async function handler(req, res) {
         return res.status(409).json({ error: 'Free trial already used on this GitHub account.', code: 'TRIAL_USED' });
     }
 
-    const key = generateKey();
+    const key = generateKey('FBT');
     const now = Date.now();
     const trialEndsAt = now + TRIAL_DAYS * 24 * 60 * 60 * 1000;
     const nowIso = new Date(now).toISOString();

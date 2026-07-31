@@ -4,3 +4,8 @@ out/
 .env
 backend/.env
 backend/node_modules/
+
+# Runtime state written by the extension itself into the workspace it's
+# running against (project memory notes, write-approval staging files) —
+# user/session-specific, never something to commit.
+.freebird/

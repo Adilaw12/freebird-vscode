@@ -28,7 +28,10 @@ const suites = [
     require('./checkpoint.test.js'),
     require('./fetch-url.test.js'),
     require('./backend-picker.test.js'),
-    require('./prompt-templates.test.js')
+    require('./prompt-templates.test.js'),
+    require('./context-builder.test.js'),
+    require('./auth-token.test.js'),
+    require('./memory.test.js')
 ];
 
 (async () => {

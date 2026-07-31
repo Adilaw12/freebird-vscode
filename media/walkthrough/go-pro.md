@@ -1,9 +1,10 @@
 # Pro — $6/month
 
+- Full multi-file agent mode — reads your codebase (semantic search + git-aware), edits across files, runs terminal commands
+- **Every agent turn gets a checkpoint** — one click to undo the whole turn if something goes wrong
 - Unlimited cloud edits, no daily cap
 - Bring your own key: Claude, GPT-4o, DeepSeek, or Qwen
 - Project memory across sessions
-- Full multi-file agent mode
 
 # Team — $25/month, up to 5 seats
 

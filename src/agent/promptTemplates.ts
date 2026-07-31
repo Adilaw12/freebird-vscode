@@ -14,7 +14,7 @@ export const PROMPT_TEMPLATES: PromptTemplate[] = [
     {
         id: 'codebase-cartographer',
         label: 'Codebase Cartographer',
-        description: 'Map the architecture of this project — best with a large-context model like Kimi K3',
+        description: 'Map the architecture of this project — best with a large-context model like Kimi K3 (thorough — can take a couple of minutes)',
         prompt:
             "Act as a codebase cartographer. Build a map of this project's architecture.\n\n" +
             "You have a large context window — take advantage of it. Read broadly rather than " +
@@ -27,13 +27,18 @@ export const PROMPT_TEMPLATES: PromptTemplate[] = [
             "3. Conventions that are used consistently enough to matter (naming, error handling, testing style).\n" +
             "4. Anything that looks like real technical debt or an inconsistency worth flagging — not " +
             "stylistic nitpicks, things that would actually confuse someone new to this codebase.\n" +
-            "5. A Mermaid.js dependency diagram (in a ```mermaid code block) showing how the main modules depend on each other.\n\n" +
+            "5. A dependency diagram showing how the main modules depend on each other. This MUST be valid " +
+            "Mermaid.js syntax (e.g. `graph TD` or `flowchart TD`) inside a fenced code block whose language " +
+            "tag is exactly `mermaid` — for example:\n" +
+            "```mermaid\ngraph TD\n  A[Module A] --> B[Module B]\n```\n" +
+            "Do NOT draw the diagram as ASCII/box-drawing art, and do NOT use a plain/untagged code fence for " +
+            "it — it must be real Mermaid syntax in a ```mermaid block so it renders as an actual diagram.\n\n" +
             "Cite specific files and paths throughout, not just module names in the abstract."
     },
     {
         id: 'security-auditor',
         label: 'Security Auditor',
-        description: 'Systematic security review with concrete exploit scenarios, not theoretical findings',
+        description: 'Systematic security review with concrete exploit scenarios, not theoretical findings (thorough — can take a couple of minutes)',
         prompt:
             "Act as a security auditor. Review this codebase (or the specific files/area I point you at) " +
             "for real security vulnerabilities: injection (SQL/command/prompt), auth and session handling, " +
@@ -52,7 +57,7 @@ export const PROMPT_TEMPLATES: PromptTemplate[] = [
     {
         id: 'multi-file-test-engineer',
         label: 'Multi-File Test Engineer',
-        description: 'Find untested code paths across the project and write tests matching existing conventions',
+        description: 'Find untested code paths across the project and write tests matching existing conventions (thorough — can take a couple of minutes)',
         prompt:
             "Act as a test engineer. Find the most important untested or under-tested code paths across " +
             "this project and write tests for them.\n\n" +
