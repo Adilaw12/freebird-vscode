@@ -388,8 +388,14 @@ function render(data) {
   if (allErrors.length) {
     html += '<div class="section"><h2>Recent Errors (last 3 days)</h2><ul class="error-list">';
     allErrors.slice(0, 30).forEach(function(e) {
+      // Entry is colon-joined: name, optionally a detail suffix, count, timestamp (see
+      // telemetry.js). The name itself can contain a colon (e.g. tool_error plus a detail
+      // like read_file), so count/timestamp must be read from the end, not assumed to be
+      // the first two fields.
       var parts = e.split(':');
-      html += '<li><span class="error-name">' + parts[0] + '</span><span class="error-time">x' + (parts[1]||1) + '</span></li>';
+      var name = parts.slice(0, -2).join(':') || parts[0];
+      var count = parts.length > 2 ? parts[parts.length - 2] : (parts[1] || 1);
+      html += '<li><span class="error-name">' + name + '</span><span class="error-time">x' + count + '</span></li>';
     });
     html += '</ul></div>';
   }
