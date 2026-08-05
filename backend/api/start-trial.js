@@ -50,7 +50,12 @@ export default async function handler(req, res) {
         key,
         plan: 'trial',
         status: 'active',
-        trialEndsAt,
+        // Stored as an ISO string (like createdAt/updatedAt) so it's readable
+        // directly in the Redis console instead of showing as a raw epoch-ms
+        // number. isLicenseActive() parses this with new Date(), which handles
+        // both this and the old raw-number format from trials created before
+        // this change.
+        trialEndsAt: new Date(trialEndsAt).toISOString(),
         createdAt: nowIso,
         updatedAt: nowIso
     };
