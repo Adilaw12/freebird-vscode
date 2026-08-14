@@ -1,5 +1,8 @@
-// api/chat.js  —  Freebird free-tier cloud AI endpoint
-// Proxies to Gemini 2.0 Flash. Called by CloudProvider in the VS Code extension.
+// api/chat.js  —  Freebird cloud AI endpoint
+// Free tier proxies to Gemini (see geminiModel.js); Pro/Enterprise/trial
+// (unmetered) traffic proxies to Claude Haiku 4.5 (see anthropicModel.js),
+// falling back to Gemini if Anthropic is unreachable. Called by CloudProvider
+// in the VS Code extension.
 //
 // Request:  POST /api/chat
 //   { messages: [{role, content}], sessionId: string, maxTokens?: number }
@@ -16,6 +19,7 @@ import { createHash } from 'crypto';
 import { verifySession } from '../lib/authToken.js';
 import { isLicenseActive } from '../lib/license.js';
 import { fetchGeminiWithFallback, PRO_GEMINI_MODEL_CANDIDATES } from '../lib/geminiModel.js';
+import { fetchAnthropicWithFallback, anthropicConfigured } from '../lib/anthropicModel.js';
 import { quotaKeysFor, reserveQuota, refundQuota } from '../lib/quota.js';
 
 const redis = Redis.fromEnv();
@@ -130,20 +134,31 @@ export default async function handler(req, res) {
         }
     }
 
-    // ── Build Gemini request ─────────────────────────────────────────────────
-    // NOTE: quota is only incremented AFTER a successful Gemini response
-    // so users are never charged for failed requests
-    // Gemini uses 'user'/'model' roles; split out system prompt if present
+    // ── Build provider request(s) ────────────────────────────────────────────
+    // NOTE: quota is only incremented AFTER a successful response so users
+    // are never charged for failed requests.
+    //
+    // Pro/Enterprise/trial (unmetered) traffic is routed to Claude Haiku 4.5 —
+    // cheaper and higher quality for coding than Gemini 3.6 Flash. Free tier
+    // stays on Gemini. Both request bodies are built unconditionally (cheap)
+    // so Gemini is ready as an immediate fallback if Anthropic is unreachable
+    // or misconfigured — a paying user should never see a hard failure just
+    // because one upstream provider is down.
     const systemParts = [];
     const geminiContents = [];
+    const anthropicMessages = [];
 
     for (const msg of messages) {
         if (msg.role === 'system') {
-            systemParts.push({ text: msg.content });
+            systemParts.push(msg.content);
         } else {
             geminiContents.push({
                 role: msg.role === 'assistant' ? 'model' : 'user',
                 parts: [{ text: msg.content }]
+            });
+            anthropicMessages.push({
+                role: msg.role === 'assistant' ? 'assistant' : 'user',
+                content: msg.content
             });
         }
     }
@@ -155,22 +170,52 @@ export default async function handler(req, res) {
             temperature: 0.2,
         },
         ...(systemParts.length > 0 && {
-            systemInstruction: { parts: systemParts }
+            systemInstruction: { parts: systemParts.map(text => ({ text })) }
         })
     };
 
-    // ── Stream Gemini response back to extension ─────────────────────────────
+    const anthropicBody = {
+        max_tokens: maxTokens,
+        temperature: 0.2,
+        stream: true,
+        messages: anthropicMessages,
+        ...(systemParts.length > 0 && { system: systemParts.join('\n\n') })
+    };
+
+    // ── Stream provider response back to extension ──────────────────────────
     try {
-        const { response: upstream, modelUsed } = await fetchGeminiWithFallback(
-            'streamGenerateContent',
-            geminiBody,
-            { signal: AbortSignal.timeout(30_000) },
-            unmetered ? PRO_GEMINI_MODEL_CANDIDATES : undefined
-        );
+        let upstream, modelUsed, provider;
+
+        if (unmetered && anthropicConfigured()) {
+            try {
+                const result = await fetchAnthropicWithFallback(anthropicBody, { signal: AbortSignal.timeout(30_000) });
+                if (result.response.ok) {
+                    upstream = result.response;
+                    modelUsed = result.modelUsed;
+                    provider = 'anthropic';
+                } else {
+                    console.error('Anthropic error, falling back to Gemini:', result.response.status, await result.response.text().catch(() => ''));
+                }
+            } catch (err) {
+                console.error('Anthropic request failed, falling back to Gemini:', err);
+            }
+        }
+
+        if (!upstream) {
+            const result = await fetchGeminiWithFallback(
+                'streamGenerateContent',
+                geminiBody,
+                { signal: AbortSignal.timeout(30_000) },
+                unmetered ? PRO_GEMINI_MODEL_CANDIDATES : undefined
+            );
+            upstream = result.response;
+            modelUsed = result.modelUsed;
+            provider = 'gemini';
+        }
 
         if (!upstream.ok) {
             const errText = await upstream.text().catch(() => upstream.statusText);
-            console.error('Gemini error:', upstream.status, errText);
+            console.error(`${provider} error:`, upstream.status, errText);
             if (!unmetered) await refundQuota(redis, quotaKeys); // never charge for a failed upstream request
             return res.status(502).json({
                 error: 'AI provider error',
@@ -220,7 +265,11 @@ export default async function handler(req, res) {
                 if (jsonStr === '[DONE]') continue;
                 try {
                     const parsed = JSON.parse(jsonStr);
-                    const text   = parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
+                    // Gemini: candidates[0].content.parts[0].text
+                    // Anthropic: content_block_delta events carry delta.text
+                    const text = provider === 'anthropic'
+                        ? (parsed?.type === 'content_block_delta' ? parsed?.delta?.text : undefined)
+                        : parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
                     if (text) res.write(text);
                 } catch { /* skip malformed SSE lines */ }
             }

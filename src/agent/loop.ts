@@ -5,6 +5,7 @@ import { parseToolCalls, executeToolCall, getWorkspaceTree, stripToolBlocks, nat
 import { GitService } from '../git/service';
 import { buildFileContext } from '../chat/contextBuilder';
 import { readProjectMemory, MEMORY_RELATIVE_PATH } from './memory';
+import { readProjectRules, RULES_RELATIVE_PATH } from './rules';
 
 const MAX_ITERATIONS = 15;
 
@@ -65,6 +66,11 @@ async function runNativeToolLoop(opts: AgentRunOptions, turnId: string): Promise
 
     if (workspaceTree) {
         systemContent += `\n\nWorkspace files:\n${truncateToTokenBudget(workspaceTree, 4000)}`;
+    }
+
+    const projectRules = readProjectRules();
+    if (projectRules) {
+        systemContent += `\n\nProject rules (${RULES_RELATIVE_PATH}) — the user's own conventions for this project. Follow these even when they conflict with your own defaults:\n${projectRules}`;
     }
 
     const projectMemory = readProjectMemory();
@@ -152,6 +158,11 @@ async function runTextParsedLoop(opts: AgentRunOptions, turnId: string): Promise
 
     if (workspaceTree) {
         systemContent += `\n\nWorkspace files:\n${truncateToTokenBudget(workspaceTree, 4000)}`;
+    }
+
+    const projectRules = readProjectRules();
+    if (projectRules) {
+        systemContent += `\n\nProject rules (${RULES_RELATIVE_PATH}) — the user's own conventions for this project. Follow these even when they conflict with your own defaults:\n${projectRules}`;
     }
 
     const projectMemory = readProjectMemory();

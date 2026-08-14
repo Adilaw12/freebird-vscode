@@ -1,5 +1,31 @@
 # Changelog
 
+## \[0.10.0] — 2026-08-15
+
+### Added
+
+* **Share a Selection with a colleague (Pro).** What "team collaboration" in the README's pricing line actually turned out to mean once we dug into it: not shared repo access, a scoped way to hand someone a link to just the code you selected. New `Freebird: Share Selection` command (editor context menu or command palette) posts the selection to a new `backend/api/share.js`, which stores it in Redis for 14 days behind an unguessable id and serves a plain, read-only HTML page — no Freebird install or repo access needed to view it. Gated behind an active Pro/Enterprise/Team/trial license (same `isLicenseActive()` check as chat.js), rate-limited per license (30 shares/day) and capped at ~60KB per share to keep it from becoming a free, unbounded paste service. All rendered fields are HTML-escaped (`backend/lib/htmlEscape.js`) before hitting the page — this stores arbitrary user-submitted text and serves it back as HTML, so a missed escape there would be stored XSS, not a display bug.
+* **Project rules — `.freebird/rules.md`.** A user-authored conventions file, distinct from the agent's own `.freebird/memory.md`: Freebird only ever reads it, never writes or deletes it, and it's loaded into both plain chat and Agent mode (memory.md is Agent-mode-only, since Agent mode itself is Pro). Takes precedence over memory.md when the two conflict. New `/rules` command shows what's loaded.
+* **Related Locations — lightweight next-edit awareness (Pro).** Not Cursor's trained next-edit-prediction model (out of scope without a custom-trained model of our own) — a prompt-level approximation instead: a new `flag_related_locations` tool the agent can call once, near the end of a turn, when it notices specific unedited locations that likely need the same change (another call site, a test, a doc). Renders as its own tool card, styled distinctly from generic tool output (full opacity, no height clamp) since it's meant to be read in full, not skimmed as a receipt.
+* **Model-tier transparency.** Free-tier responses are now tagged in the chat panel with the model that actually answered (e.g. "Gemini 3.1 Flash Lite") — previously the backend already computed this (`X-Model-Used` response header) but never surfaced it to the extension. The quota-wall upgrade prompt now names the free-tier model explicitly instead of a generic "full Gemini Flash model" line.
+
+### Changed
+
+* **Pro/Enterprise/trial cloud requests now route to Claude Haiku 4.5 by default**, not Gemini 3.6 Flash — confirmed cheaper (~$0.80/M input vs. ~$1.50/M) and higher quality for coding output. New `backend/lib/anthropicModel.js` mirrors `geminiModel.js`'s fallback-chain pattern; `chat.js` and `fallback.js` try Anthropic first for unmetered traffic and fall back to Gemini automatically if Anthropic is unreachable or `ANTHROPIC_API_KEY` isn't set, so a paying user never hard-fails because one upstream provider is down. Free tier is unaffected (still Gemini Flash Lite).
+
+### Docs
+
+* **README: fixed an inaccurate pricing claim, in two layers.** "$6/month for unlimited multi-file editing and team collaboration" implied Team was part of Pro — it isn't, Team is a separate $25/month (5 seats) subscription with its own Stripe price, and the extension itself blocks non-Team licenses from seat management with an explicit "Team plan only" warning; Team now has its own section (it was previously fully built and working — `backend/api/team-seats.js`, `Freebird: Manage Team Seats` — but undocumented anywhere in the README). Deeper than that: what "team collaboration" was actually meant to convey (sharing a snippet with a colleague without exposing the whole codebase) didn't correspond to *any* existing feature, Team seats or otherwise — see Share a Selection above, now built for real.
+* **README: AI tab completion (ghost-text, `src/inline/completionProvider.ts`) added to the feature list and comparison table** — a real, already-shipped capability that was invisible to exactly the audience (Cursor/Copilot switchers) who'd look for it.
+* **README: fixed several stale "Gemini Flash" references** now that Pro runs Claude Haiku 4.5 — the model table, the Free vs Pro table, and the Privacy section (which now separately discloses that Pro/unmetered calls go to Anthropic under Freebird's own account, same trust model as the existing Gemini disclosure).
+* **README: repositioned the DeepSeek BYOK callout.** It previously sat directly beneath the Free vs Pro pricing table, immediately steering a hesitating buyer toward a free workaround right after the paywall pitch. Folded into the "Bring Your Own Keys" feature section instead, where it's contextually relevant without being the first thing after the ask.
+* **README: removed a published internal `<!-- TODO(screenshots) -->` comment** (and three dead commented-out image tags) left in the shipped file since prompt templates were documented — not a fabricated fix, just no longer exposing internal planning notes in a public file while real captures are still pending.
+* **README: "Why Freebird" comparison table** — fixed a confusing row ("Cloud edits throttled | ✅" for competitors, where a checkmark could read as a positive) and added an "Open source (MIT)" row, a real structural differentiator vs. Cursor that was previously only mentioned in the License section at the very bottom.
+
+### Test coverage
+
+* Added `test/rules.test.js` (mirrors `memory.test.js`'s conventions for the read-only rules.md sibling), `test/anthropic-fallback.test.js` (mirrors `gemini-fallback.test.js` for the new Anthropic fallback chain), and `test/share-escape.test.js` (the HTML-escaping helper behind Share Selection's public view page — pulled into its own dependency-free `lib/htmlEscape.js` specifically so it's testable without a live Redis connection). 239/239 checks pass.
+
 ## \[0.9.7] — 2026-07-31
 
 ### Docs

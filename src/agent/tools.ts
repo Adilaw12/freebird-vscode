@@ -164,6 +164,29 @@ export const NATIVE_TOOL_SCHEMAS: ToolSchema[] = [
             },
             required: ['source', 'destination']
         }
+    },
+    {
+        name: 'flag_related_locations',
+        description: 'Call this once, near the end of a turn where you edited files, ONLY if you noticed other specific places in the codebase that likely need a matching change but that you did NOT edit (e.g. another call site of a function you changed, a test asserting the old behavior, a doc/comment describing it, a duplicated implementation elsewhere). Skip it entirely if there\'s nothing genuinely related left unaddressed — do not call this just to say "no related locations found". Not a substitute for editing files you were actually asked to change.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                items: {
+                    type: 'array',
+                    description: 'Up to 6 specific, unedited locations worth a second look',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            file: { type: 'string', description: 'Workspace-relative file path' },
+                            line: { type: 'number', description: 'Line number, if known' },
+                            reason: { type: 'string', description: 'One short sentence: why this location is related to what you just changed' }
+                        },
+                        required: ['file', 'reason']
+                    }
+                }
+            },
+            required: ['items']
+        }
     }
 ];
 
@@ -191,6 +214,7 @@ AVAILABLE TOOLS:
 - copy_file      {"action":"copy_file","source":"src/old.ts","destination":"src/new.ts"}           copy a file
 - git_status     {"action":"git_status"}                                                          repo status
 - git_push       {"action":"git_push"}                                                            push to remote
+- flag_related_locations {"action":"flag_related_locations","items":[{"file":"src/x.ts","line":42,"reason":"other call site of the function you changed"}]}  call once, near the end, only if you noticed specific unedited locations that likely need the same change — skip if there's nothing genuinely related left
 
 GUIDELINES:
 - For tasks that need multiple steps or touch several files, start your reply with a short plan — a numbered list of 2-5 steps — before making any tool calls, so the user knows what you're about to do. Skip the plan for simple one-step requests (answering a question, reading or editing a single file).
@@ -203,6 +227,8 @@ GUIDELINES:
 - When the user asks you to build, create, make, scaffold, or set up something (e.g. "make a website", "create a script that..."), use write_file to create the actual files in their workspace — don't just print example code in chat. Only show inline snippets when they ask for an explanation, example, or something not meant to be saved.
 - When creating a website, write every file the HTML references (e.g. style.css, script.js, image placeholders) — never leave a <link> or <script> pointing at a file you didn't create
 - To remember things across sessions (project conventions, architecture decisions, user preferences, in-progress work), write short bullet notes to .freebird/memory.md using write_file or edit_file. It's automatically loaded into your context next time — keep it concise and up to date, don't let it grow unbounded.
+- .freebird/rules.md, if present, is already loaded into your system prompt as "Project rules" — it's the user's own conventions file. Never write to or edit it yourself, even if asked to "remember" something; that goes in memory.md instead.
+- Before your final summary, briefly consider whether the edit you made has unedited siblings elsewhere (another call site, a test, a doc) — if you're genuinely unsure, a quick search_code/search_codebase_semantic call is worth it. Call flag_related_locations once if you find real ones; otherwise say nothing about it.
 - After all changes are done, write a short summary of what you did
 `;
 
@@ -215,6 +241,8 @@ export const NATIVE_TOOL_GUIDELINES = `GUIDELINES:
 - When the user asks you to build/create something, use write_file to create actual files — don't just print code.
 - When creating a website, write every file the HTML references.
 - To remember things across sessions, write notes to .freebird/memory.md.
+- .freebird/rules.md, if present, is already loaded as "Project rules" — the user's own file. Never write to it; use memory.md instead.
+- If your edit has real unedited siblings elsewhere (another call site, a test, a doc), call flag_related_locations once before your summary. Don't call it just to say nothing was found.
 - After all changes, write a short summary.`;
 
 export function parseToolCalls(text: string): ToolCall[] {
@@ -332,6 +360,7 @@ export async function executeToolCall(
             case 'copy_file':      return await copyFileTool(tool, onApprovalNeeded, turnId);
             case 'git_status':     return { success: true, output: await git.getStatus() };
             case 'git_push':       return await gitPushTool(git, onApprovalNeeded, turnId);
+            case 'flag_related_locations': return flagRelatedLocationsTool(tool);
             default:
                 return { success: false, output: `Unknown tool action: "${tool.action}"` };
         }
@@ -947,4 +976,23 @@ async function gitPushTool(git: GitService, onApprovalNeeded: ApprovalFn, turnId
 
     await git.push();
     return { success: true, output: 'Pushed to remote.' };
+}
+
+// Not a full Cursor-style "jump to next edit" (that needs a custom-trained
+// model) — a prompt-level approximation: the agent flags specific unedited
+// locations it noticed while making changes, surfaced as a normal tool card
+// so it doesn't get lost in prose. No filesystem/approval interaction.
+function flagRelatedLocationsTool(tool: ToolCall): ToolResult {
+    const raw = Array.isArray(tool.items) ? tool.items : [];
+    const items = raw
+        .filter((it): it is { file: string; line?: number; reason: string } =>
+            !!it && typeof it === 'object' && typeof (it as any).file === 'string' && typeof (it as any).reason === 'string')
+        .slice(0, 6);
+
+    if (items.length === 0) return { success: true, output: 'No related locations flagged.' };
+
+    const output = items
+        .map(it => `- ${it.file}${typeof it.line === 'number' ? ':' + it.line : ''} — ${it.reason}`)
+        .join('\n');
+    return { success: true, output };
 }

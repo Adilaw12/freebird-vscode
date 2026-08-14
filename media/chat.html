@@ -241,6 +241,12 @@ kbd {
   opacity: 0.7;
 }
 
+.msg-model-tag {
+  font-size: 0.72em; opacity: 0.5;
+  padding: 1px 6px; border-radius: 999px;
+  border: 1px solid var(--vscode-widget-border, rgba(128,128,128,0.3));
+}
+
 /* ── user content ── */
 .msg.user .msg-content {
   font-size: 0.92em; line-height: 1.6;
@@ -343,6 +349,12 @@ em { font-style: italic; }
   border-top: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.05));
   margin-top: 4px; padding-top: 4px;
 }
+
+/* Related-location lists are a short, actionable list, not a faded receipt — full opacity, no clamp. */
+.tool-related .tool-output {
+  opacity: 0.85; max-height: none;
+}
+.tool-related .tool-label { font-weight: 600; }
 
 /* ── approval cards ── */
 .approval-card {
@@ -986,6 +998,7 @@ function addUserMsg(text) {
   div.appendChild(hdr); div.appendChild(content); msgsEl.appendChild(div); scroll();
 }
 
+var currentHeaderEl=null;
 function startAssistantMsg() {
   // A turn can have multiple assistant bubbles (one per agent-loop iteration) —
   // flush whatever the previous bubble accumulated before starting a new one.
@@ -1001,7 +1014,22 @@ function startAssistantMsg() {
   var content=document.createElement('div'); content.className='msg-content typing';
   div.appendChild(hdr); div.appendChild(content); msgsEl.appendChild(div); scroll();
   currentBubble=content;
+  currentHeaderEl=hdr;
   startThinkingAnimation(content);
+}
+
+// Tags the currently-open assistant bubble with which cloud model answered —
+// arrives after the response completes (headers are read before we know this),
+// so it's appended rather than shown up front. Free tier only sees the lite
+// model tag today, Pro sees its own — same UI for both, not a nag.
+var _lastModelLabel='';
+function addModelTag(label) {
+  if (!label) return;
+  _lastModelLabel = label;
+  if (!currentHeaderEl) return;
+  if (currentHeaderEl.querySelector('.msg-model-tag')) return;
+  var tag=document.createElement('span'); tag.className='msg-model-tag'; tag.textContent=label;
+  currentHeaderEl.appendChild(tag);
 }
 
 function setCurrentText(text) {
@@ -1026,6 +1054,9 @@ function addDivider(label) {
 function addToolStatus(id, state, label) {
   transcript.push({ type: 'tool', label: label });
   var card=document.createElement('div'); card.id='tool-'+id; card.className='tool-card tool-'+state;
+  // Related-location lists are short and meant to be read in full, not faded
+  // out like a generic tool receipt — give this one card type its own style.
+  if (label === 'Checking for related locations') card.classList.add('tool-related');
   var hdr=document.createElement('div'); hdr.className='tool-header';
   var ic=document.createElement('span'); ic.className='tool-icon';
   ic.innerHTML = state==='running'
@@ -1037,7 +1068,8 @@ function addToolStatus(id, state, label) {
 
 function updateToolStatus(id, state, output) {
   var card=document.getElementById('tool-'+id); if (!card) return;
-  card.className='tool-card tool-'+state;
+  var wasRelated=card.classList.contains('tool-related');
+  card.className='tool-card tool-'+state+(wasRelated?' tool-related':'');
   var ic=card.querySelector('.tool-icon');
   if (ic) ic.innerHTML = state==='done' ? svgIcon('M2 8l3 3 6-6') : svgIcon('M3 3l6 6M9 3l-6 6');
   if (output) {
@@ -1207,7 +1239,7 @@ function showQuotaWall() {
     + '</div>'
     + '<div class="quota-wall-features">'
       + '<div class="quota-wall-feature"><span class="quota-wall-check">✓</span> Agent mode — multi-file edits, terminal commands, checkpoints</div>'
-      + '<div class="quota-wall-feature"><span class="quota-wall-check">✓</span> Unlimited cloud edits — no daily cap, full Gemini Flash model</div>'
+      + '<div class="quota-wall-feature"><span class="quota-wall-check">✓</span> Unlimited cloud edits — no daily cap, and a stronger model than the ' + (_lastModelLabel || 'free-tier') + ' you\'ve been using</div>'
       + '<div class="quota-wall-feature"><span class="quota-wall-check">✓</span> Project memory across sessions</div>'
     + '</div>'
     + '<div class="quota-wall-actions">'
@@ -1364,6 +1396,7 @@ window.addEventListener('message',function(e){
   switch(m.type){
     case 'user':             _sessionMessages++; addUserMsg(m.text); break;
     case 'assistant-start':  startAssistantMsg(); break;
+    case 'model-tag':        addModelTag(m.label); break;
     case 'quota-exceeded':   showQuotaWall(); setBusy(false); break;
     case 'auth-required':    showAuthWall(); setBusy(false); break;
     case 'set-text':         setCurrentText(m.text); break;

@@ -12,6 +12,7 @@ import { buildFileContext, resolveMentions, listWorkspaceFiles } from './context
 import { getLicenseStatus, UPGRADE_URL } from '../license/validator';
 import { getCloudEditsRemaining, DAILY_CLOUD_LIMIT } from '../license/usage';
 import { readProjectMemory, clearProjectMemory, MEMORY_RELATIVE_PATH } from '../agent/memory';
+import { readProjectRules, RULES_RELATIVE_PATH } from '../agent/rules';
 import { finalizeTurn, restoreCheckpoint, checkpointsRootFor } from '../agent/checkpoint';
 import { trackEvent, getMachineId } from '../telemetry';
 import { getTrialBannerState } from '../license/trialReminder';
@@ -53,6 +54,12 @@ function getCachedResponse(key: string): string | null {
         return null;
     }
     return entry.response;
+}
+
+// "gemini-3.1-flash-lite" -> "Gemini 3.1 Flash Lite" — no hardcoded model->label
+// table to keep in sync as GEMINI_MODEL_CANDIDATES / the backend LLM changes.
+function formatModelLabel(model: string): string {
+    return model.split('-').map(w => /^\d/.test(w) ? w : w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
 
 function setCachedResponse(key: string, response: string): void {
@@ -259,6 +266,19 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             this.post({ type: 'assistant-end' });
             return;
         }
+        if (trimmed === '/rules') {
+            this.post({ type: 'user', text: '/rules' });
+            this.post({ type: 'assistant-start' });
+            const rules = readProjectRules();
+            this.post({
+                type: 'set-text',
+                text: rules
+                    ? `**Project rules** (\`${RULES_RELATIVE_PATH}\`):\n\n${rules}`
+                    : `No \`${RULES_RELATIVE_PATH}\` yet. Create it in your project root and Freebird will follow it in every chat and Agent-mode turn — coding conventions, style preferences, things to always/never do. Unlike \`${MEMORY_RELATIVE_PATH}\`, this file is yours: Freebird only reads it, never writes or deletes it.`
+            });
+            this.post({ type: 'assistant-end' });
+            return;
+        }
         if (trimmed === '/help') {
             this.post({ type: 'user', text: '/help' });
             this.post({ type: 'assistant-start' });
@@ -269,6 +289,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 '`/commit` — AI-generate a git commit message',
                 '`/push` — push current branch to remote',
                 '`/status` — show git status',
+                '`/rules` — show your project conventions from .freebird/rules.md',
                 '`/memory` — show what Freebird remembers about this project',
                 '`/forget` — clear project memory',
                 '`/clear` — clear conversation history',
@@ -435,8 +456,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             return true;
         }
 
+        const projectRules = readProjectRules();
         const messages: Message[] = [
             ...FREE_SYSTEM,
+            ...(projectRules ? [{
+                role: 'user',
+                content: `Project rules (${RULES_RELATIVE_PATH}) — the user's own conventions for this project. Follow these even when they conflict with your own defaults:\n${projectRules}`
+            } as Message] : []),
             ...this.trimHistory(this.history),
             { role: 'user', content: userContent }
         ];
@@ -466,6 +492,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         response += chunk;
                         this.post({ type: 'set-text', text: response });
                     });
+                    this.postModelTag();
                 }
             } else {
                 // mode = 'cloud' — use CloudProvider with normal quota
@@ -474,6 +501,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     response += chunk;
                     this.post({ type: 'set-text', text: response });
                 });
+                this.postModelTag();
             }
 
             if (response) setCachedResponse(key, response);
@@ -521,6 +549,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         return served && response.length > 0;
     }
 
+    /** Tags the current assistant bubble with which cloud model actually answered — otherwise invisible to users. */
+    private postModelTag() {
+        const model = CloudProvider.getLastModelUsed(this.context);
+        if (model) this.post({ type: 'model-tag', label: formatModelLabel(model) });
+    }
+
     // Returns true if Ollama responded, false if unreachable
     private async tryOllama(
         messages: Message[],
@@ -556,15 +590,19 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 trackEvent(`tool_used_${event.tool.action}`);
                 this.post({ type: 'tool-status', id: event.id, state: 'running', label: toolLabel(event.tool) });
                 break;
-            case 'tool-result':
+            case 'tool-result': {
                 if (!event.success) trackEvent('tool_error', event.tool.action);
+                // Related-location lists are short (max 6 lines) and meant to be read
+                // in full — the generic 200-char preview cap would cut them mid-list.
+                const cap = event.tool.action === 'flag_related_locations' ? Infinity : 200;
                 this.post({
                     type: 'tool-update',
                     id: event.id,
                     state: event.success ? 'done' : 'error',
-                    output: event.output.length > 200 ? event.output.slice(0, 200) + '…' : event.output
+                    output: event.output.length > cap ? event.output.slice(0, cap) + '…' : event.output
                 });
                 break;
+            }
         }
     }
 
@@ -694,6 +732,7 @@ function toolLabel(tool: { action: string; [key: string]: unknown }): string {
         case 'copy_file':      return `Copying ${tool.source} → ${tool.destination}`;
         case 'git_status':     return 'Checking git status';
         case 'git_push':       return 'Pushing to remote';
+        case 'flag_related_locations': return 'Checking for related locations';
         default:               return tool.action;
     }
 }

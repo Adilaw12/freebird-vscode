@@ -2,17 +2,17 @@
 
 **No setup. No throttling. 20 free AI edits/day.**
 
-[![VS Marketplace](https://img.shields.io/badge/VS%20Marketplace-v0.9.7-0066B8?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=TenLabs.freebird-ai)
+[![VS Marketplace](https://img.shields.io/badge/VS%20Marketplace-v0.10.0-0066B8?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=TenLabs.freebird-ai)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](https://github.com/Adilaw12/freebird-vscode/blob/main/LICENSE)
 [![GitHub](https://img.shields.io/badge/GitHub-Adilaw12%2Ffreebird--vscode-181717?style=flat-square&logo=github)](https://github.com/Adilaw12/freebird-vscode)
 
-> AI coding assistant · Copilot alternative · Cursor alternative · multi-file AI edits · AI refactoring · codebase search · Gemini Flash · Kimi K3 · custom LLM providers (OpenRouter, Together, self-hosted) · prompt templates · Ollama · BYOK · local AI · privacy-first
+> AI coding assistant · Copilot alternative · Cursor alternative · multi-file AI edits · AI refactoring · codebase search · Claude Haiku · Gemini Flash · Kimi K3 · custom LLM providers (OpenRouter, Together, self-hosted) · prompt templates · Ollama · BYOK · local AI · privacy-first
 
 ![Freebird AI — inline edit rewriting a selection in place](media/Inline%20AI%20refactor.gif)
 
-**Run full codebase security audits, architecture mapping, and technical debt analysis with Agent mode** — try free for 7 days, no card needed. Pro is $6/month for unlimited multi-file editing and team collaboration — less than half the price of competitors, more capability out of the box.
+**Run full codebase security audits, architecture mapping, and technical debt analysis with Agent mode** — try free for 7 days, no card needed. Pro is $6/month for unlimited multi-file editing, plus sharing a selection with a colleague without giving them your whole codebase — less than a third of Cursor's price, more capability out of the box. Team is $25/month for up to 5 seats.
 
-Install Freebird AI and start coding in seconds — no API keys, no throttling, no configuration. You get **20 free advanced AI edits per day** powered by Gemini Flash, plus free BYOK and unlimited local AI when you want full privacy.
+Install Freebird AI and start coding in seconds — no API keys, no throttling, no configuration. You get **20 free advanced AI edits per day** powered by Gemini Flash Lite, plus free BYOK and unlimited local AI when you want full privacy.
 
 **Copilot throttled? Cursor too expensive? GitHub limits hit?**
 Freebird never blocks you — it picks up where other tools stop.
@@ -34,7 +34,8 @@ Freebird never blocks you — it picks up where other tools stop.
 | Checkpoint + one-click undo, every agent turn | ❌ | Limited | ❌ | ✅ |
 | Local AI (Ollama) | ❌ | ❌ | ✅ | ✅ |
 | BYOK (Claude, GPT-4o, DeepSeek, Qwen, Kimi K3, custom) | ❌ | ✅ | ✅ | ✅ |
-| Cloud edits throttled | ✅ | ✅ | 20/day soft cap | Never |
+| Unlimited cloud edits | ❌ throttled | ❌ throttled | ❌ 20/day soft cap | ✅ |
+| Open source (MIT) | ❌ | ❌ | ✅ | ✅ |
 
 ---
 
@@ -80,12 +81,21 @@ We ran our own **Codebase Cartographer** prompt template against this repo — r
 | Works instantly — no setup | ✅ | ✅ |
 | Unlimited local Ollama (100% private) | ✅ | ✅ |
 | **Bring your own API keys — BYOK (Anthropic / OpenAI / DeepSeek / Qwen / Kimi K3 / Custom Provider)**, direct-to-LLM speed & total privacy | ✅ | ✅ |
+| AI tab completion (ghost text, as you type) | ✅ | ✅ |
+| Project rules — `.freebird/rules.md`, your own conventions, always loaded | ✅ | ✅ |
 | Inline edit (`Ctrl+Alt+K`) & AI commit, cloud-powered | 20/day | **Unlimited** |
 | **Multi-file agent edits, terminal commands, checkpoints** | — | ✅ |
 | **Project memory across sessions** | — | ✅ |
-| Full (non-lite) Gemini model on cloud edits | — | ✅ |
+| **Share a selection with a colleague** — a link, not repo access | — | ✅ |
+| Cloud model | Gemini Flash Lite | **Claude Haiku 4.5** |
 
-> **Pro tip:** Connect your DeepSeek API key — it's free on every plan, scores higher than GPT-4o on coding benchmarks, and costs about $0.20/million tokens. Thousands of unthrottled edits a month for pennies, no Pro required.
+Free tier responses are tagged with the model that answered right in the chat panel — you always know whether you're on the lite model or not, not left to guess.
+
+---
+
+## Team
+
+$25/month for up to 5 seats ($5/seat — cheaper per-seat than an individual Pro subscription) — every Pro feature, one shared subscription. The purchaser becomes the owner and manages teammates from inside the extension with **Freebird: Manage Team Seats** (add, remove, list — no web dashboard). [Contact us](mailto:support@ten-labs.com.au) to set up a Team plan.
 
 ---
 
@@ -104,7 +114,7 @@ We ran our own **Codebase Cartographer** prompt template against this repo — r
 ![Freebird AI feature highlights](media/feature-grid.png)
 
 ### Works Immediately — No Setup Required
-Install and start coding. Your first 20 advanced edits per day are powered by Gemini Flash — no API key, no Ollama, nothing to configure.
+Install and start coding. Your first 20 advanced edits per day are powered by Gemini Flash Lite — no API key, no Ollama, nothing to configure.
 
 ### 20 Free Advanced Edits Every Day
 Unlimited chat, plus 20 cloud-powered inline edits and AI commits a day. Resets daily, no card required. Multi-file agent edits and terminal commands are Pro (see below).
@@ -124,8 +134,11 @@ The agent can fetch a webpage's readable content directly — documentation, an 
 ### Inline Edit — Cursor-style
 Select any code, press `Ctrl+Alt+K`, type an instruction, and the selection is rewritten in place.
 
+### AI Tab Completion
+Ghost-text suggestions as you type, on every tier — accept with `Tab`. Runs through whatever backend you've configured, same as the rest of Freebird: instant and unlimited on Ollama, otherwise it's a cloud-powered edit like inline edit and AI commit.
+
 ### Bring Your Own Keys — Unthrottled, free
-Plug in your own **Anthropic Claude**, **OpenAI**, **DeepSeek**, **Qwen**, or **Kimi K3** API key — or point Freebird at any OpenAI-compatible **Custom Provider** (OpenRouter, Together, self-hosted, etc.). Direct-to-LLM speed, total data privacy, no middleman quotas — free for everyone, since the calls never touch Freebird's servers.
+Plug in your own **Anthropic Claude**, **OpenAI**, **DeepSeek**, **Qwen**, or **Kimi K3** API key — or point Freebird at any OpenAI-compatible **Custom Provider** (OpenRouter, Together, self-hosted, etc.). Direct-to-LLM speed, total data privacy, no middleman quotas — free for everyone, since the calls never touch Freebird's servers. DeepSeek in particular is worth a look even if cost isn't a concern: it scores higher than GPT-4o on coding benchmarks and runs about $0.20/million tokens.
 
 ### Full Agent Mode With Zero Cloud Calls (Pro)
 Agent mode isn't locked to Freebird's cloud — it routes through whatever backend you've configured, same as everything else. Set the backend to **Ollama** and get the full Pro feature set (multi-file edits, terminal commands, checkpoints, project memory) with every request staying on your machine. Built for teams whose policy forbids cloud AI, or freelancers working under an NDA that does the same — the model runs locally, so there's nothing to disclose.
@@ -139,31 +152,28 @@ Two ways the agent finds code: `search_code` for exact/keyword matches (like gre
 ### Git Integration
 Generate commit messages, push to remote, and check git status from the chat panel — and the agent can call `git status` itself mid-turn when it's relevant to the change it's making, not just on request.
 
+### Project Rules
+Write your own conventions to `.freebird/rules.md` — style preferences, things to always or never do, whatever you'd otherwise repeat in every prompt. Freebird loads it automatically into chat and Agent mode alike and follows it over its own defaults. Yours to write; Freebird only ever reads it. Use `/rules` to see what's loaded. Free and Pro both.
+
 ### Project Memory (Pro)
-Freebird saves notes about your project to `.freebird/memory.md` and loads them automatically. Use `/memory` to see what's saved and `/forget` to clear it.
+Freebird saves notes about your project to `.freebird/memory.md` and loads them automatically. Use `/memory` to see what's saved and `/forget` to clear it. The difference from rules.md: this file is Freebird's own scratch notes, written opportunistically during Agent turns — rules.md is yours, written on purpose, and always takes precedence.
+
+### Share a Selection (Pro)
+Select code, right-click → **Freebird: Share Selection** (or run it from the command palette), and get a link back — copied to your clipboard automatically. Whoever opens it sees just that selection in a plain read-only page, nothing else about your project: no repo access, no invite, no Freebird install required on their end. Links expire after 14 days. This is what "team collaboration" means here — not shared repo access, a scoped way to show a colleague one thing.
+
+### Related Locations — Lightweight Next-Edit Awareness (Pro)
+After an Agent-mode edit, Freebird flags specific places elsewhere in your codebase that likely need the same change but weren't touched — another call site, a test asserting the old behavior, a doc describing it — as a short, dedicated card, not buried in prose. This is not Cursor's trained next-edit-prediction model; it's the agent using the same search tools it already has to double-check its own blast radius, and it only speaks up when it actually finds something.
 
 ### Run Specialized Agents on Your Codebase
 Map architecture, audit security, generate tests — all multi-file, all reversible. Or go freeform with BYOK + our managed backends.
 
 Run **Freebird: Use Prompt Template** to start from one of three ready-made prompts — populates the chat input for you to edit before sending, rather than firing immediately. These are deliberately thorough (each is instructed to read broadly across your codebase — up to 15 tool calls in a turn) rather than fast, so expect a couple of minutes on a real project, not a quick chat-style reply.
 
-<!-- TODO(screenshots): each template below needs a real before/after capture —
-     a small sample project run through the actual template, showing the
-     agent's proposed diff / findings / generated tests. Not something to
-     fabricate — needs a real run against a real (ideally public-friendly)
-     codebase, reviewed for quality before it goes in a public README. -->
-
 **Codebase Cartographer** — architecture overview, key abstractions and how data flows end to end, conventions worth knowing, real technical debt (not stylistic nitpicks), and a Mermaid.js dependency diagram. Pairs especially well with a large-context model like Kimi K3 on an unfamiliar codebase.
-
-<!-- ![Codebase Cartographer — before/after](media/prompt-template-cartographer.png) -->
 
 **Security Auditor** — cites the exact file and line for every finding, the concrete failure scenario (specific input/conditions that trigger it, not "this could be a vulnerability"), severity based on real exploitability, and a fix that doesn't change intended behavior. Fewer, real findings — no theoretical padding.
 
-<!-- ![Security Auditor — before/after](media/prompt-template-security-auditor.png) -->
-
 **Multi-File Test Engineer** — reads your existing test suite first to match its actual conventions, then prioritizes business logic with real consequences, easy-to-miss edge cases, and regression coverage for anything that's been a source of bugs before. Runs the tests it writes and fixes failures before finishing.
-
-<!-- ![Multi-File Test Engineer — before/after](media/prompt-template-test-engineer.png) -->
 
 ---
 
@@ -171,7 +181,8 @@ Run **Freebird: Use Prompt Template** to start from one of three ready-made prom
 
 | Model | Best for | Cost |
 |---|---|---|
-| **Gemini Flash (built-in)** | Default free tier — fast, no setup | Free (20/day) |
+| **Gemini Flash Lite (built-in)** | Default free tier — fast, no setup | Free (20/day) |
+| **Claude Haiku 4.5 (built-in, Pro)** | Default Pro cloud model — noticeably stronger than the free tier's | Included in Pro |
 | **Ollama (local)** | Unlimited local AI — free, 100% private | Free |
 | **DeepSeek V4-pro** | Advanced reasoning, coding, debugging | ~$0.14/M tokens |
 | **Qwen 2.5 Coder** | High-accuracy coding | ~$0.16/M tokens |
@@ -180,7 +191,7 @@ Run **Freebird: Use Prompt Template** to start from one of three ready-made prom
 | **Claude Sonnet** | Complex refactoring & architecture | ~$3/M tokens |
 | **Custom Provider** | Any OpenAI-compatible API — OpenRouter, Together, self-hosted, etc. | Depends on provider |
 
-BYOK models are free for everyone (bring your own API key/cost). Gemini Flash and Ollama are also always free. Pro adds Agent mode (multi-file edits, terminal, checkpoints) and unlimited cloud edits on the full Gemini model.
+BYOK models are free for everyone (bring your own API key/cost). Gemini Flash Lite and Ollama are also always free. Pro adds Agent mode (multi-file edits, terminal, checkpoints) and unlimited cloud edits on Claude Haiku 4.5 — automatically falls back to Gemini if Anthropic is ever unreachable, so Pro never hard-fails.
 
 ---
 
@@ -234,6 +245,7 @@ Point Freebird at any OpenAI-compatible API — OpenRouter, Together, Groq, Fire
 | Freebird: AI Commit | — | Generate a commit message |
 | Freebird: Configure AI Backend | — | Switch between Gemini / Ollama / Claude / OpenAI / DeepSeek / Qwen |
 | Freebird: Activate Pro License | — | Enter your Pro license key |
+| Freebird: Share Selection | — | Share the selected code as a read-only link (Pro) |
 
 ### Chat Commands
 
@@ -242,6 +254,7 @@ Point Freebird at any OpenAI-compatible API — OpenRouter, Together, Groq, Fire
 | `/commit` | Generate a commit message |
 | `/push` | Push to remote |
 | `/status` | Show git status |
+| `/rules` | Show your project conventions from `.freebird/rules.md` |
 | `/memory` | Show project memory (Pro) |
 | `/forget` | Clear project memory (Pro) |
 | `/clear` | Clear conversation history |
@@ -279,10 +292,11 @@ Nothing is modified silently. You stay in full control.
 
 ## Privacy
 
-- **Gemini Flash (free tier):** messages processed by Google's API. No code stored by Freebird.
+- **Gemini Flash Lite (free tier):** messages processed by Google's API under Freebird's own account. No code stored by Freebird.
+- **Claude Haiku 4.5 (Pro/Enterprise/trial cloud edits):** messages processed by Anthropic's API under Freebird's own account, not yours — same trust model as the free tier's Gemini calls, just a different upstream provider. Automatically falls back to Gemini if Anthropic is unreachable.
 - **Ollama:** all processing is local — no data leaves your machine. This applies to Agent mode too (Pro) — set the backend to Ollama and multi-file edits, terminal commands, and checkpoints all run without a single cloud call, which is what makes Freebird usable under a corporate no-cloud-AI policy or an NDA that forbids sending code off-machine.
 - **Anthropic / OpenAI / DeepSeek / Qwen / Kimi K3 / Custom Provider:** code sent to that provider's API under your own account.
-- **Freebird AI** (Ten Labs Pty. Limited) never collects or stores your code or conversation data.
+- **Freebird AI** (Ten Labs Pty. Limited) never collects or stores your code or conversation data — the one exception is **Share Selection**: a selection you explicitly choose to share is stored for 14 days (then auto-deleted) so the link keeps working, since the whole point is that the recipient doesn't need Freebird or repo access to view it.
 - **Web fetches (`fetch_url`):** private/internal addresses (localhost, LAN ranges, cloud metadata endpoints) are blocked, and fetched page content is explicitly marked as untrusted before it reaches the model.
 - **Checkpoint restores** can't write outside your workspace folder, even if a checkpoint record were somehow corrupted.
 

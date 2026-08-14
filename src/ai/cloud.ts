@@ -5,6 +5,12 @@ import { QUOTA_KEY } from '../license/usage';
 
 const API_BASE  = 'https://freebird-backend.vercel.app';
 
+// Last model reported by the backend via X-Model-Used (e.g. "gemini-3.1-flash-lite").
+// Read by the chat panel after a stream() call completes so the webview can show
+// which model actually answered — otherwise invisible to users. Stored the same
+// way as QUOTA_KEY since there's no other channel back to the caller mid-stream.
+const MODEL_KEY = 'freebird.lastModelUsed';
+
 /**
  * CloudProvider — calls the Freebird Vercel backend.
  *
@@ -108,6 +114,11 @@ export class CloudProvider implements AIProvider {
             }
         }
 
+        const modelUsed = res.headers.get('X-Model-Used');
+        if (modelUsed) {
+            await this.context.globalState.update(MODEL_KEY, modelUsed);
+        }
+
         // Stream plain-text response
         const reader  = res.body!.getReader();
         const decoder = new TextDecoder();
@@ -128,5 +139,9 @@ export class CloudProvider implements AIProvider {
 
     static getCachedQuota(context: vscode.ExtensionContext): number {
         return context.globalState.get<number>(QUOTA_KEY) ?? 5;
+    }
+
+    static getLastModelUsed(context: vscode.ExtensionContext): string | undefined {
+        return context.globalState.get<string>(MODEL_KEY);
     }
 }

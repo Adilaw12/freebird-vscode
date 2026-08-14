@@ -2,7 +2,7 @@
   "name": "freebird-ai",
   "displayName": "Freebird AI",
   "description": "AI coding assistant — 20 free AI edits/day, no setup. Free BYOK (Claude, GPT-4o, DeepSeek) & local Ollama. Inline edit, AI commit. Pro $6/mo: Agent mode (multi-file edits) + unlimited.",
-  "version": "0.9.7",
+  "version": "0.10.0",
   "publisher": "TenLabs",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -171,6 +171,10 @@
       {
         "command": "freebird.buildCodebaseIndex",
         "title": "Freebird: Build Codebase Index (Semantic Search)"
+      },
+      {
+        "command": "freebird.shareSelection",
+        "title": "Freebird: Share Selection"
       }
     ],
     "keybindings": [
@@ -192,6 +196,11 @@
           "command": "freebird.inlineEdit",
           "when": "editorHasSelection",
           "group": "1_modification@1"
+        },
+        {
+          "command": "freebird.shareSelection",
+          "when": "editorHasSelection",
+          "group": "1_modification@2"
         },
         {
           "command": "freebird.previewHtml",

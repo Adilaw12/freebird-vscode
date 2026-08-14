@@ -10,7 +10,8 @@ import { Redis } from '@upstash/redis';
 import { createHash } from 'crypto';
 import { verifySession } from '../lib/authToken.js';
 import { isLicenseActive } from '../lib/license.js';
-import { fetchGeminiWithFallback } from '../lib/geminiModel.js';
+import { fetchGeminiWithFallback, PRO_GEMINI_MODEL_CANDIDATES } from '../lib/geminiModel.js';
+import { fetchAnthropicWithFallback, anthropicConfigured } from '../lib/anthropicModel.js';
 import { quotaKeysFor, reserveQuota, refundQuota, reserveSingleCounter } from '../lib/quota.js';
 
 const redis = Redis.fromEnv();
@@ -129,17 +130,25 @@ export default async function handler(req, res) {
         }
     }
 
-    // ── Build Gemini request ─────────────────────────────────────────────────
-    const systemParts    = [];
-    const geminiContents = [];
+    // ── Build provider request(s) ────────────────────────────────────────────
+    // Same Haiku-for-unmetered / Gemini-for-everyone-else split as chat.js —
+    // see that file for the full rationale. Both bodies are built
+    // unconditionally so Gemini is ready as an immediate fallback.
+    const systemParts       = [];
+    const geminiContents    = [];
+    const anthropicMessages = [];
 
     for (const msg of messages) {
         if (msg.role === 'system') {
-            systemParts.push({ text: msg.content });
+            systemParts.push(msg.content);
         } else {
             geminiContents.push({
                 role:  msg.role === 'assistant' ? 'model' : 'user',
                 parts: [{ text: msg.content }]
+            });
+            anthropicMessages.push({
+                role: msg.role === 'assistant' ? 'assistant' : 'user',
+                content: msg.content
             });
         }
     }
@@ -151,21 +160,52 @@ export default async function handler(req, res) {
             temperature:     0.2,
         },
         ...(systemParts.length > 0 && {
-            systemInstruction: { parts: systemParts }
+            systemInstruction: { parts: systemParts.map(text => ({ text })) }
         })
+    };
+
+    const anthropicBody = {
+        max_tokens:  maxTokens,
+        temperature: 0.2,
+        stream:      true,
+        messages:    anthropicMessages,
+        ...(systemParts.length > 0 && { system: systemParts.join('\n\n') })
     };
 
     // ── Stream response ──────────────────────────────────────────────────────
     try {
-        const { response: upstream, modelUsed } = await fetchGeminiWithFallback(
-            'streamGenerateContent',
-            geminiBody,
-            { signal: AbortSignal.timeout(30_000) }
-        );
+        let upstream, modelUsed, provider;
+
+        if (unmetered && anthropicConfigured()) {
+            try {
+                const result = await fetchAnthropicWithFallback(anthropicBody, { signal: AbortSignal.timeout(30_000) });
+                if (result.response.ok) {
+                    upstream = result.response;
+                    modelUsed = result.modelUsed;
+                    provider = 'anthropic';
+                } else {
+                    console.error('Anthropic fallback error, falling back to Gemini:', result.response.status, await result.response.text().catch(() => ''));
+                }
+            } catch (err) {
+                console.error('Anthropic request failed, falling back to Gemini:', err);
+            }
+        }
+
+        if (!upstream) {
+            const result = await fetchGeminiWithFallback(
+                'streamGenerateContent',
+                geminiBody,
+                { signal: AbortSignal.timeout(30_000) },
+                unmetered ? PRO_GEMINI_MODEL_CANDIDATES : undefined
+            );
+            upstream = result.response;
+            modelUsed = result.modelUsed;
+            provider = 'gemini';
+        }
 
         if (!upstream.ok) {
             const errText = await upstream.text().catch(() => upstream.statusText);
-            console.error('Gemini fallback error:', upstream.status, errText);
+            console.error(`${provider} fallback error:`, upstream.status, errText);
             if (!unmetered) await refundQuota(redis, quotaKeys); // never charge for a failed upstream request
             return res.status(502).json({
                 error:  'AI provider error',
@@ -212,7 +252,9 @@ export default async function handler(req, res) {
                 if (jsonStr === '[DONE]') continue;
                 try {
                     const parsed = JSON.parse(jsonStr);
-                    const text   = parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
+                    const text = provider === 'anthropic'
+                        ? (parsed?.type === 'content_block_delta' ? parsed?.delta?.text : undefined)
+                        : parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
                     if (text) res.write(text);
                 } catch { /* skip malformed SSE lines */ }
             }

@@ -3,6 +3,7 @@ import { ChatViewProvider } from './chat/panel';
 import { GitService } from './git/service';
 import { registerInlineEdit } from './inline/editor';
 import { registerTabCompletion } from './inline/completionProvider';
+import { registerShareSelection } from './share/share';
 import { getLicenseStatus, warmLicenseCache, activateLicense, clearLicenseCache, startTrial, UPGRADE_URL, API_BASE } from './license/validator';
 import { getCloudEditsRemaining } from './license/usage';
 import { signInWithGitHub, getStoredSession, clearSession } from './auth/github';
@@ -21,6 +22,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     registerInlineEdit(context);
     registerTabCompletion(context);
+    registerShareSelection(context);
 
     // Init systems in background
     warmLicenseCache(context);

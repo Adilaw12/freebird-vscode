@@ -24,6 +24,8 @@ const suites = [
     require('./vector-math.test.js'),
     require('./index-store.test.js'),
     require('./gemini-fallback.test.js'),
+    require('./anthropic-fallback.test.js'),
+    require('./share-escape.test.js'),
     require('./quota-race.test.js'),
     require('./checkpoint.test.js'),
     require('./fetch-url.test.js'),
@@ -31,7 +33,8 @@ const suites = [
     require('./prompt-templates.test.js'),
     require('./context-builder.test.js'),
     require('./auth-token.test.js'),
-    require('./memory.test.js')
+    require('./memory.test.js'),
+    require('./rules.test.js')
 ];
 
 (async () => {

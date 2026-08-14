@@ -50,6 +50,8 @@ Total time: ~20 minutes. Everything is free-tier friendly.
    - `STRIPE_PRICE_ID`
    - `UPSTASH_REDIS_REST_URL`
    - `UPSTASH_REDIS_REST_TOKEN`
+   - `GEMINI_API_KEY` (free tier, and the fallback for Pro/Enterprise/trial)
+   - `ANTHROPIC_API_KEY` (optional — Pro/Enterprise/trial run on Claude Haiku 4.5 when set; on Gemini otherwise)
    - `APP_URL` (set to your Vercel deployment URL after first deploy)
 4. Click **Deploy** → copy the deployment URL (e.g. `https://openpilot-backend.vercel.app`)
 
@@ -190,3 +192,4 @@ a single deprecation from taking down the whole free tier:
 | `POST /api/embed` | Codebase semantic search embeddings (cloud tier) — uses the same `GEMINI_API_KEY`, no new env var needed |
 | `POST /api/webhook` | Stripe calls this when subscriptions change |
 | `GET /api/success?session_id=xxx` | Shows the license key after payment |
+| `POST /api/share` | Creates a Share Selection link (requires an active license); `GET /share/:id` (rewritten to `GET /api/share?id=`) renders it — public, no auth needed to view |
