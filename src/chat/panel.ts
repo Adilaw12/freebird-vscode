@@ -531,10 +531,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             } else {
                 trackEvent('api_error', err?.code || 'unknown');
                 served = false;
-                response =
+                const errorNote =
                     `**Error:** ${err.message}\n\n` +
                     `Try running \`Freebird: Configure AI Backend\` to check your settings, ` +
                     `or [contact support](mailto:support@ten-labs.com.au).`;
+                // A mid-stream abort/network error can fire after most of a real
+                // answer already streamed in (e.g. a slow-but-working response
+                // that hits the timeout) — append rather than overwrite, so a
+                // mostly-good answer doesn't just vanish and get replaced by a
+                // generic error with no trace it was ever there.
+                response = response ? `${response}\n\n---\n${errorNote}` : errorNote;
             }
             this.post({ type: 'set-text', text: response });
         }

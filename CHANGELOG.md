@@ -1,5 +1,11 @@
 # Changelog
 
+## \[0.10.1] — 2026-08-15
+
+### Fixed
+
+* **Cloud chat could appear to "pause with no output" on a slow-but-working response.** Two compounding issues in the free/cloud chat path: (1) `CloudProvider`'s request timeout was 30 seconds — too tight for a legitimate slow response, not just a genuinely hung one — so it could abort a reply that was still actively streaming in; (2) when that happened, the error handler in `runFreeChat` *overwrote* the response instead of appending to it, so a mostly-complete answer would visibly vanish and get replaced by a generic error message. If that error scrolled out of view or was easy to miss, the net effect looked exactly like the turn produced nothing at all — reported by a user as the chat occasionally pausing until they sent another message, which just started a fresh turn and worked normally, masking that the previous one had silently failed. Fixed by raising the timeout to 90s and making the error handler append to whatever had already streamed in rather than replace it.
+
 ## \[0.10.0] — 2026-08-15
 
 ### Added

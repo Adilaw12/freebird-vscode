@@ -63,7 +63,12 @@ export class CloudProvider implements AIProvider {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify(body),
-            signal:  AbortSignal.timeout(30_000)
+            // 30s was too tight for a genuinely slow-but-working response (not
+            // just a hung one) — it would abort mid-stream and, combined with
+            // the old destructive error-overwrite in panel.ts, wipe out an
+            // answer that was actually most of the way through. 90s gives real
+            // slow responses room to finish while still bounding a truly stuck request.
+            signal:  AbortSignal.timeout(90_000)
         });
 
         if (res.status === 401) {
