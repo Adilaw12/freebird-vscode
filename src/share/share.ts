@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { getLicenseStatus, UPGRADE_URL, API_BASE } from '../license/validator';
+import { trackEvent } from '../telemetry';
 
 // "Share a portion of your code with a colleague without exposing your whole
 // codebase" — a Pro feature. Posts the selection to backend/api/share.js,
@@ -28,6 +29,7 @@ async function shareSelection(context: vscode.ExtensionContext) {
 
     const license = await getLicenseStatus(context);
     if (!license.isPro) {
+        trackEvent('share_license_required');
         vscode.window.showWarningMessage(
             'Sharing a snippet with a colleague is a Pro feature — share just this selection, not your whole workspace.',
             'Upgrade to Pro',
@@ -67,11 +69,13 @@ async function shareSelection(context: vscode.ExtensionContext) {
 
                 if (!res.ok) {
                     const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+                    trackEvent('share_failed', (body.code as string) || String(res.status));
                     vscode.window.showErrorMessage(`Couldn't create share link: ${(body.error as string) ?? res.statusText}`);
                     return;
                 }
 
                 const { url, expiresInDays } = await res.json() as { url: string; expiresInDays: number };
+                trackEvent('share_created');
                 await vscode.env.clipboard.writeText(url);
                 vscode.window.showInformationMessage(
                     `Share link copied to clipboard — expires in ${expiresInDays} days.`,
@@ -80,6 +84,7 @@ async function shareSelection(context: vscode.ExtensionContext) {
                     if (choice === 'Open in Browser') vscode.env.openExternal(vscode.Uri.parse(url));
                 });
             } catch (err: any) {
+                trackEvent('share_failed', 'network_error');
                 vscode.window.showErrorMessage(`Couldn't create share link: ${err?.message ?? String(err)}`);
             }
         }

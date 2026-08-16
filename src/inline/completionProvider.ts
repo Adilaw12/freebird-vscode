@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { getProvider } from '../ai';
 import { FIMProvider } from '../ai/provider';
-import { getMachineId } from '../telemetry';
+import { getMachineId, trackEvent } from '../telemetry';
 import { stripFences } from '../util/text';
 
 const MAX_PREFIX_LINES = 100;
@@ -79,6 +79,15 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
         const text = stripFences(raw).replace(/\s+$/, '');
         if (!text.trim()) return [];
         if (suffix.startsWith(text)) return [];
+
+        // This entire feature previously had zero telemetry — a completely
+        // silent, ambient capability running for every user on every keystroke
+        // pause, with no way to know if anyone was actually getting suggestions
+        // from it. "Shown" (a real suggestion was generated) rather than
+        // "accepted" — VS Code's provider API doesn't hand back a clean
+        // accept/reject signal here, and shown-count is still far more visible
+        // than the prior nothing.
+        trackEvent('tab_completion_shown');
 
         return [new vscode.InlineCompletionItem(text, new vscode.Range(position, position))];
     }

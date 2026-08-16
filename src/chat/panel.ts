@@ -267,6 +267,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             return;
         }
         if (trimmed === '/rules') {
+            trackEvent('rules_viewed');
             this.post({ type: 'user', text: '/rules' });
             this.post({ type: 'assistant-start' });
             const rules = readProjectRules();
@@ -457,6 +458,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
 
         const projectRules = readProjectRules();
+        if (projectRules) trackEvent('rules_loaded');
         const messages: Message[] = [
             ...FREE_SYSTEM,
             ...(projectRules ? [{

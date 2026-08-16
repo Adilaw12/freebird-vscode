@@ -6,6 +6,7 @@ import { GitService } from '../git/service';
 import { buildFileContext } from '../chat/contextBuilder';
 import { readProjectMemory, MEMORY_RELATIVE_PATH } from './memory';
 import { readProjectRules, RULES_RELATIVE_PATH } from './rules';
+import { trackEvent } from '../telemetry';
 
 const MAX_ITERATIONS = 15;
 
@@ -71,6 +72,7 @@ async function runNativeToolLoop(opts: AgentRunOptions, turnId: string): Promise
     const projectRules = readProjectRules();
     if (projectRules) {
         systemContent += `\n\nProject rules (${RULES_RELATIVE_PATH}) — the user's own conventions for this project. Follow these even when they conflict with your own defaults:\n${projectRules}`;
+        trackEvent('rules_loaded');
     }
 
     const projectMemory = readProjectMemory();
@@ -163,6 +165,7 @@ async function runTextParsedLoop(opts: AgentRunOptions, turnId: string): Promise
     const projectRules = readProjectRules();
     if (projectRules) {
         systemContent += `\n\nProject rules (${RULES_RELATIVE_PATH}) — the user's own conventions for this project. Follow these even when they conflict with your own defaults:\n${projectRules}`;
+        trackEvent('rules_loaded');
     }
 
     const projectMemory = readProjectMemory();

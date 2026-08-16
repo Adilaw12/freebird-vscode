@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { AIProvider, Message, CompletionOptions } from './provider';
 import { getStoredSession } from '../auth/github';
 import { QUOTA_KEY } from '../license/usage';
+import { trackEvent } from '../telemetry';
 
 const API_BASE  = 'https://freebird-backend.vercel.app';
 
@@ -122,6 +123,11 @@ export class CloudProvider implements AIProvider {
         const modelUsed = res.headers.get('X-Model-Used');
         if (modelUsed) {
             await this.context.globalState.update(MODEL_KEY, modelUsed);
+            // Per-model breakdown (e.g. how often the Anthropic->Gemini fallback
+            // engages for Pro) lands in Redis as telemetry:eventDetails:{date}
+            // under "model_used:<model id>" — readable directly, no dashboard
+            // chart needed for this one.
+            trackEvent('model_used', modelUsed);
         }
 
         // Stream plain-text response

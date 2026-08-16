@@ -1,5 +1,11 @@
 # Changelog
 
+## \[0.10.2] — 2026-08-17
+
+### Added
+
+* **Telemetry for features that previously had none.** Prompted by a dashboard review that showed 66 unique sessions but only single-digit chat/cloud-edit activity, with no visibility into where the rest of that usage was going. Added: `tab_completion_shown` (ghost-text completion had zero telemetry at all — a fully ambient, silent feature running for every user on every keystroke pause); `share_created` / `share_failed` / `share_license_required` for Share Selection; `rules_loaded` (fires wherever `.freebird/rules.md` is actually injected into a prompt — chat and both Agent-mode loops) and `rules_viewed` for the `/rules` command; `model_used` (the model id from `X-Model-Used`, so the Anthropic→Gemini fallback rate for Pro is now visible — lands in Redis as `telemetry:eventDetails:{date}` under `model_used:<id>`, no dashboard change needed to read it directly). New event names also added to `dashboard.js`'s Feature Popularity allowlist, which only charts events it's explicitly told about.
+
 ## \[0.10.1] — 2026-08-15
 
 ### Fixed
