@@ -1,5 +1,11 @@
 # Changelog
 
+## \[0.10.3] — 2026-08-19
+
+### Fixed
+
+* **Agent mode could grind through all 15 iterations retrying the same failing tool, at real cost.** Found via the new `model_used`/`tool_error` telemetry (added in 0.10.2): Anthropic Console showed a ~63:1 input:output token ratio for a burst of Pro traffic, and `telemetry:errors` for the same window showed `tool_error:run_command`/`tool_error:read_file` repeating heavily — up to ~19 failures in a single ~60s flush. Root cause: a tool failing doesn't stop the agent loop, and every retry resends the entire growing conversation history (system prompt, tool schemas, every prior tool result) with no prompt caching on the Anthropic path, so a stuck loop compounds in cost as fast as it does in iterations. Added a circuit breaker to both agent loops (native tool-calling and the Ollama text-parsed fallback): 3 consecutive tool failures within one turn now stops the turn with a clear explanation instead of continuing to `MAX_ITERATIONS`. One or two failures followed by a successful recovery — normal, healthy agent behavior — isn't affected. New `agent_circuit_breaker_engaged` telemetry event to track how often this actually triggers.
+
 ## \[0.10.2] — 2026-08-17
 
 ### Added

@@ -10,6 +10,26 @@ import { trackEvent } from '../telemetry';
 
 const MAX_ITERATIONS = 15;
 
+// A tool failing once or twice in a row and then recovering (wrong path,
+// adjusts, succeeds) is normal agent behavior — not something to interrupt.
+// Three in a row within one turn is a different pattern: the same class of
+// failure repeating without the agent correcting course, and every retry
+// resends the whole growing (uncached, for Anthropic) conversation history,
+// so a stuck loop compounds in cost as fast as it does in iterations. Built
+// after a real incident: telemetry showed tool_error spiking (run_command/
+// read_file repeatedly, up to ~19 failures in one ~60s flush window) with a
+// ~63:1 input:output token ratio on the Anthropic side for the same window —
+// consistent with exactly this pattern running unchecked to MAX_ITERATIONS.
+const MAX_CONSECUTIVE_TOOL_FAILURES = 3;
+
+function circuitBreakerMessage(threshold: number): string {
+    return (
+        `⚠️ Stopped after ${threshold} tool calls failed in a row — continuing would likely just repeat ` +
+        `the same failure without making progress. Check the tool cards above for what went wrong ` +
+        `(a missing command, a bad path, or a permissions issue are common causes), fix it, then try again.`
+    );
+}
+
 // Rough token estimates per model family
 const MODEL_CONTEXT_LIMITS: Record<string, number> = {
     'claude': 200_000,
@@ -94,6 +114,8 @@ async function runNativeToolLoop(opts: AgentRunOptions, turnId: string): Promise
         { role: 'user', content: userMessage }
     ];
 
+    let consecutiveToolFailures = 0;
+
     for (let i = 0; i < MAX_ITERATIONS; i++) {
         onEvent({ type: 'iteration-start' });
 
@@ -116,6 +138,7 @@ async function runNativeToolLoop(opts: AgentRunOptions, turnId: string): Promise
         });
 
         const toolResults: ToolResultEntry[] = [];
+        let circuitBroken = false;
 
         for (const tc of result.toolCalls) {
             const internalTool = nativeToToolCall(tc.name, tc.input);
@@ -129,6 +152,12 @@ async function runNativeToolLoop(opts: AgentRunOptions, turnId: string): Promise
                 output: toolResult.output,
                 isError: !toolResult.success
             });
+
+            consecutiveToolFailures = toolResult.success ? 0 : consecutiveToolFailures + 1;
+            if (consecutiveToolFailures >= MAX_CONSECUTIVE_TOOL_FAILURES) {
+                circuitBroken = true;
+                break; // stop this batch — remaining queued tool calls in this response go unexecuted
+            }
         }
 
         // Add tool results
@@ -139,6 +168,16 @@ async function runNativeToolLoop(opts: AgentRunOptions, turnId: string): Promise
             tr.isError ? `[ERROR] ${tr.output}` : tr.output
         ).join('\n\n---\n\n');
         newHistory.push({ role: 'user', content: toolSummary });
+
+        if (circuitBroken) {
+            trackEvent('agent_circuit_breaker_engaged');
+            const message = circuitBreakerMessage(MAX_CONSECUTIVE_TOOL_FAILURES);
+            onEvent({ type: 'iteration-start' });
+            onEvent({ type: 'text-chunk', text: message });
+            onEvent({ type: 'response-complete', rawText: message });
+            newHistory.push({ role: 'assistant', content: message });
+            break;
+        }
     }
 
     return newHistory;
@@ -191,6 +230,8 @@ async function runTextParsedLoop(opts: AgentRunOptions, turnId: string): Promise
         { role: 'user', content: userMessage }
     ];
 
+    let consecutiveToolFailures = 0;
+
     for (let i = 0; i < MAX_ITERATIONS; i++) {
         let rawText = '';
 
@@ -208,6 +249,7 @@ async function runTextParsedLoop(opts: AgentRunOptions, turnId: string): Promise
         if (toolCalls.length === 0) break;
 
         const toolResultParts: string[] = [];
+        let circuitBroken = false;
 
         for (const tool of toolCalls) {
             const id = `${tool.action}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -218,12 +260,28 @@ async function runTextParsedLoop(opts: AgentRunOptions, turnId: string): Promise
                 `Result of ${tool.action}:\n` +
                 (result.success ? result.output : `[ERROR] ${result.output}`)
             );
+
+            consecutiveToolFailures = result.success ? 0 : consecutiveToolFailures + 1;
+            if (consecutiveToolFailures >= MAX_CONSECUTIVE_TOOL_FAILURES) {
+                circuitBroken = true;
+                break; // stop this batch — remaining queued tool calls in this response go unexecuted
+            }
         }
 
         const toolResultMsg = toolResultParts.join('\n\n---\n\n');
         messages.push({ role: 'assistant', content: rawText });
         messages.push({ role: 'user', content: toolResultMsg });
         newHistory.push({ role: 'user', content: toolResultMsg });
+
+        if (circuitBroken) {
+            trackEvent('agent_circuit_breaker_engaged');
+            const message = circuitBreakerMessage(MAX_CONSECUTIVE_TOOL_FAILURES);
+            onEvent({ type: 'iteration-start' });
+            onEvent({ type: 'text-chunk', text: message });
+            onEvent({ type: 'response-complete', rawText: message });
+            newHistory.push({ role: 'assistant', content: message });
+            break;
+        }
     }
 
     return newHistory;
