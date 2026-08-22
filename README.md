@@ -201,6 +201,12 @@ Run **Freebird: Use Prompt Template** to start from a ready-made prompt — popu
 
 BYOK models are free for everyone (bring your own API key/cost). Gemini Flash Lite and Ollama are also always free. Pro adds Agent mode (multi-file edits, terminal, checkpoints) and unlimited cloud edits on Claude Haiku 4.5 — automatically falls back to Gemini if Anthropic is ever unreachable, so Pro never hard-fails.
 
+### Using Freebird From Hong Kong or Mainland China
+
+Google and Anthropic each independently restrict API access from Hong Kong and mainland China as their own policy — this isn't something Freebird can route around, and in Hong Kong's case it isn't related to local network censorship either (Hong Kong isn't behind mainland China's firewall; Google and Anthropic simply don't serve API traffic from the region). In practice: the free tier's default Gemini backend and Pro's default Claude backend may not work reliably, or at all, from either location, even with a valid subscription.
+
+If you're in Hong Kong or mainland China, skip the cloud tier and use BYOK with **DeepSeek** or **Qwen** instead — both are Chinese-origin providers with no regional restriction, and DeepSeek in particular is priced competitively for what it offers. **Ollama** (fully local, nothing ever leaves your machine) also works everywhere, regardless of any provider's regional policy.
+
 ---
 
 ## Getting Started
