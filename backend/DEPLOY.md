@@ -132,13 +132,46 @@ Cancelling the owner's subscription cancels every seat automatically
 
 ---
 
+## 8b. Template Library (standalone add-on)
+
+A lower-friction paid option for free-tier users not ready for full Pro:
+recurring subscription access to a library of paid prompt templates (Pro/
+Enterprise/Team already get this bundled for free — see `hasTemplateLibraryAccess()`
+in `lib/license.js`). Priced as a recurring subscription, not a one-time
+purchase, deliberately — the catalog keeps growing over time, and a
+subscription is what makes Stripe's existing cancel/payment-failure webhook
+flow (`subscription.updated`/`.deleted`) automatically revoke access, the
+same way it already does for Pro. No new code needed for this part.
+
+1. **Products → Add product** in Stripe: `Freebird Template Library`, set your
+   recurring price
+2. Copy its **Price ID**
+3. In Vercel → **Environment Variables**, add `STRIPE_TEMPLATES_PRICE_ID` set
+   to that price ID
+4. Create a Payment Link for it the same way as step 4 above — set the
+   **Redirect URL** to `.../api/success?session_id={CHECKOUT_SESSION_ID}`,
+   same as every other plan
+5. The webhook tags the purchaser's license `plan: 'templates'` with
+   `templateLibrary: true`. This plan is deliberately excluded from
+   `isLicenseActive()`'s plan whitelist (`lib/license.js`) — a templates-only
+   purchase can never grant Pro chat/cloud-edit access, only
+   `hasTemplateLibraryAccess()` reads it
+6. `POST /api/templates` serves the catalog — free templates stay bundled in
+   the extension as before; paid ones are fetched from this endpoint, locked
+   unless the buyer's key (stored in the extension's separate
+   `freebird.templateLicenseKey` setting) or their Pro/Enterprise/Team key is
+   entitled
+
+---
+
 ## 9. Update the extension constants
 
-Open `src/license/validator.ts` and update two lines:
+Open `src/license/validator.ts` and update three lines:
 
 ```typescript
 export const API_BASE    = 'https://YOUR-VERCEL-URL.vercel.app';
 export const UPGRADE_URL = 'https://buy.stripe.com/YOUR-PAYMENT-LINK';
+export const TEMPLATES_UPGRADE_URL = 'https://buy.stripe.com/YOUR-TEMPLATES-PAYMENT-LINK';
 ```
 
 Then rebuild and republish the extension:
@@ -191,5 +224,6 @@ a single deprecation from taking down the whole free tier:
 | `POST /api/team-seats` | Team plan owner adds/removes/lists seats |
 | `POST /api/embed` | Codebase semantic search embeddings (cloud tier) — uses the same `GEMINI_API_KEY`, no new env var needed |
 | `POST /api/webhook` | Stripe calls this when subscriptions change |
+| `POST /api/templates` | Extension fetches the template library catalog — metadata for all, `prompt` text only for entitled callers |
 | `GET /api/success?session_id=xxx` | Shows the license key after payment |
 | `POST /api/share` | Creates a Share Selection link (requires an active license); `GET /share/:id` (rewritten to `GET /api/share?id=`) renders it — public, no auth needed to view |

@@ -696,6 +696,9 @@ em { font-style: italic; }
     <span id="pro-badge">PRO</span>
   </div>
   <div id="top-bar-right">
+    <button class="icon-btn" id="templates-btn" title="Browse Prompt Templates — free + paid, expert-crafted for common agent tasks" onclick="vscode.postMessage({type:'browse-templates'})">
+      <svg viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
+    </button>
     <button class="icon-btn" id="export-btn" title="Copy conversation to clipboard (prompts &amp; responses only, no file contents)">
       <svg viewBox="0 0 16 16"><path d="M4 2h5l3 3v9H4V2z"/><path d="M9 2v3h3"/><path d="M6 9h4M6 11h4"/></svg>
     </button>
@@ -775,6 +778,10 @@ em { font-style: italic; }
       <button class="welcome-prompt" onclick="sendPrompt('Write tests for the current file')">
         <span class="welcome-prompt-icon">🧪</span>
         <span class="welcome-prompt-text">Write tests for the current file</span>
+      </button>
+      <button class="welcome-prompt" onclick="vscode.postMessage({type:'browse-templates'})">
+        <span class="welcome-prompt-icon">📚</span>
+        <span class="welcome-prompt-text">Browse prompt templates — free + paid library</span>
       </button>
     </div>
 

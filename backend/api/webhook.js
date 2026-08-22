@@ -43,8 +43,8 @@ export default async function handler(req, res) {
 
                 // Determine plan from which Stripe Price was actually purchased —
                 // never trust anything client-supplied for this. Configure
-                // STRIPE_ENTERPRISE_PRICE_ID / STRIPE_TEAM_PRICE_ID in Vercel to
-                // match each Payment Link's price; anything else defaults to 'pro'.
+                // STRIPE_ENTERPRISE_PRICE_ID / STRIPE_TEAM_PRICE_ID / STRIPE_TEMPLATES_PRICE_ID
+                // in Vercel to match each Payment Link's price; anything else defaults to 'pro'.
                 let plan = 'pro';
                 try {
                     const lineItems = await stripe.checkout.sessions.listLineItems(session.id, { limit: 1 });
@@ -53,6 +53,8 @@ export default async function handler(req, res) {
                         plan = 'enterprise';
                     } else if (priceId && process.env.STRIPE_TEAM_PRICE_ID && priceId === process.env.STRIPE_TEAM_PRICE_ID) {
                         plan = 'team';
+                    } else if (priceId && process.env.STRIPE_TEMPLATES_PRICE_ID && priceId === process.env.STRIPE_TEMPLATES_PRICE_ID) {
+                        plan = 'templates';
                     }
                 } catch (err) {
                     console.error('Could not read line items, defaulting to pro plan:', err.message);
@@ -78,6 +80,11 @@ export default async function handler(req, res) {
                     // teamOwnerKey === key. Seat keys generated later via
                     // api/team-seats.js point teamOwnerKey back to this one.
                     ...(plan === 'team' && { teamOwnerKey: key }),
+                    // Templates plan: excluded from isLicenseActive's plan
+                    // whitelist by design (see lib/license.js), so this flag is
+                    // the only thing hasTemplateLibraryAccess() grants access on
+                    // for a standalone purchase — it never implies Pro/chat access.
+                    ...(plan === 'templates' && { templateLibrary: true }),
                     createdAt: existingCustomer?.createdAt ?? new Date().toISOString(),
                     updatedAt: new Date().toISOString()
                 };
@@ -107,7 +114,7 @@ export default async function handler(req, res) {
                 // as quota_wall_shown / upgrade_clicked so the dashboard can
                 // compute wall → click → paid conversion rates.
                 const paidKey = `telemetry:daily:${new Date().toISOString().slice(0, 10)}`;
-                await redis.hincrby(paidKey, 'pro_subscribed', 1).catch(() => {});
+                await redis.hincrby(paidKey, plan === 'templates' ? 'templates_subscribed' : 'pro_subscribed', 1).catch(() => {});
                 await redis.expire(paidKey, 90 * 24 * 60 * 60).catch(() => {});
 
                 console.log(`Freebird ${plan} activated: ${email} → ${key}`);

@@ -2,7 +2,7 @@
   "name": "freebird-ai",
   "displayName": "Freebird AI",
   "description": "AI coding assistant — 20 free AI edits/day, no setup. Free BYOK (Claude, GPT-4o, DeepSeek) & local Ollama. Inline edit, AI commit. Pro $6/mo: Agent mode (multi-file edits) + unlimited.",
-  "version": "0.10.3",
+  "version": "0.11.0",
   "publisher": "TenLabs",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -145,6 +145,10 @@
         "title": "Freebird: Activate Pro License"
       },
       {
+        "command": "freebird.activateTemplateLicense",
+        "title": "Freebird: Activate Template Library License"
+      },
+      {
         "command": "freebird.upgradeToPro",
         "title": "Freebird: Upgrade to Pro"
       },
@@ -261,6 +265,11 @@
           "type": "string",
           "default": "",
           "markdownDescription": "Freebird Pro license key (format: `FB-XXXX-XXXX-XXXX-XXXX`). Get one at [buy.stripe.com](https://buy.stripe.com/9B628t4WheMmeSMccZfAc03)."
+        },
+        "freebird.templateLicenseKey": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Freebird Template Library license key (format: `FB-XXXX-XXXX-XXXX-XXXX`). Only needed if you bought the template library standalone — Pro/Enterprise/Team already include it."
         },
         "freebird.tabCompletion.enabled": {
           "type": "boolean",

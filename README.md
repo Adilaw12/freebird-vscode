@@ -2,7 +2,7 @@
 
 **No setup. No throttling. 20 free AI edits/day.**
 
-[![VS Marketplace](https://img.shields.io/badge/VS%20Marketplace-v0.10.3-0066B8?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=TenLabs.freebird-ai)
+[![VS Marketplace](https://img.shields.io/badge/VS%20Marketplace-v0.11.0-0066B8?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=TenLabs.freebird-ai)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](https://github.com/Adilaw12/freebird-vscode/blob/main/LICENSE)
 [![GitHub](https://img.shields.io/badge/GitHub-Adilaw12%2Ffreebird--vscode-181717?style=flat-square&logo=github)](https://github.com/Adilaw12/freebird-vscode)
 
@@ -99,6 +99,14 @@ $25/month for up to 5 seats ($5/seat — cheaper per-seat than an individual Pro
 
 ---
 
+## Template Library
+
+33 expert-crafted prompt templates on top of the 3 free ones — each built the same way (a role, a prioritized checklist, "cite the exact file and line," no theoretical padding) and covering real, recurring dev work: migration & modernization (framework migrations, dependency upgrades, state management, CSS), review & quality (senior-engineer-style review, DB migration safety, performance, dead code), compliance & accessibility (WCAG, license compliance, PII, i18n), onboarding & docs (PR descriptions, changelogs, API docs), infrastructure & DevOps (CI/CD, Dockerfiles, IaC), team & process, framework specialists (React, SQL, Python typing, GraphQL), release & ops, and testing deep-dives.
+
+**Included free** if you're on Pro, Enterprise, or Team — no separate purchase. Otherwise it's a low-cost standalone subscription, cheaper than a full Pro upgrade, for anyone who wants the template library without everything else Pro includes. Browse the whole catalog (locked items are visible, not hidden) from the 📚 icon in the chat panel's top bar, the "Browse prompt templates" welcome-screen prompt, or **Freebird: Use Prompt Template** in the command palette. Already have a key? **Freebird: Activate Template Library License**.
+
+---
+
 ## What Freebird Replaces
 
 - **GitHub Copilot** — when you hit your monthly speed limit
@@ -167,7 +175,7 @@ After an Agent-mode edit, Freebird flags specific places elsewhere in your codeb
 ### Run Specialized Agents on Your Codebase
 Map architecture, audit security, generate tests — all multi-file, all reversible. Or go freeform with BYOK + our managed backends.
 
-Run **Freebird: Use Prompt Template** to start from one of three ready-made prompts — populates the chat input for you to edit before sending, rather than firing immediately. These are deliberately thorough (each is instructed to read broadly across your codebase — up to 15 tool calls in a turn) rather than fast, so expect a couple of minutes on a real project, not a quick chat-style reply.
+Run **Freebird: Use Prompt Template** to start from a ready-made prompt — populates the chat input for you to edit before sending, rather than firing immediately. These are deliberately thorough (each is instructed to read broadly across your codebase — up to 15 tool calls in a turn) rather than fast, so expect a couple of minutes on a real project, not a quick chat-style reply. Three are free forever; 33 more (migrations, deeper reviews, compliance/accessibility, release automation, framework specialists, and more) are the [Template Library](#template-library) — included with Pro/Enterprise/Team, or its own standalone subscription.
 
 **Codebase Cartographer** — architecture overview, key abstractions and how data flows end to end, conventions worth knowing, real technical debt (not stylistic nitpicks), and a Mermaid.js dependency diagram. Pairs especially well with a large-context model like Kimi K3 on an unfamiliar codebase.
 
@@ -246,6 +254,8 @@ Point Freebird at any OpenAI-compatible API — OpenRouter, Together, Groq, Fire
 | Freebird: Configure AI Backend | — | Switch between Gemini / Ollama / Claude / OpenAI / DeepSeek / Qwen |
 | Freebird: Activate Pro License | — | Enter your Pro license key |
 | Freebird: Share Selection | — | Share the selected code as a read-only link (Pro) |
+| Freebird: Use Prompt Template | — | Browse the free + paid Template Library |
+| Freebird: Activate Template Library License | — | Enter a standalone Template Library license key |
 
 ### Chat Commands
 
@@ -286,6 +296,7 @@ Nothing is modified silently. You stay in full control.
 | `freebird.model` | *(auto)* | Override the default model |
 | `freebird.ollamaUrl` | `http://localhost:11434` | Ollama server URL |
 | `freebird.licenseKey` | *(empty)* | Pro license key |
+| `freebird.templateLicenseKey` | *(empty)* | Standalone Template Library license key (not needed if you're on Pro/Enterprise/Team) |
 | `freebird.telemetry.enabled` | `true` | Anonymous usage analytics (no code/PII) |
 
 ---

@@ -18,3 +18,14 @@ export function isLicenseActive(license) {
 
     return ['pro', 'enterprise', 'team'].includes(license.plan);
 }
+
+// Template library access: bundled free for anyone with active Pro/Enterprise/
+// Team/trial (isLicenseActive), OR a standalone templates-only purchase. This
+// only ever ADDS entitlement on top of isLicenseActive — never subtracts from
+// it — so a templates-only license (plan: 'templates') can't affect Pro/chat/
+// fallback gating, since isLicenseActive's own plan whitelist excludes it.
+export function hasTemplateLibraryAccess(license) {
+    if (!license || license.status !== 'active') return false;
+    if (isLicenseActive(license)) return true;
+    return license.templateLibrary === true;
+}

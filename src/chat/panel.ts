@@ -162,6 +162,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 case 'restore-checkpoint':
                     await this.handleRestoreCheckpoint(msg.id, msg.files as string[] | undefined);
                     break;
+                case 'browse-templates':
+                    trackEvent('templates_button_clicked');
+                    vscode.commands.executeCommand('freebird.usePromptTemplate');
+                    break;
             }
         });
 

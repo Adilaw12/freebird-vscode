@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 
 export const API_BASE    = 'https://freebird-backend.vercel.app';
 export const UPGRADE_URL = 'https://buy.stripe.com/9B628t4WheMmeSMccZfAc03';
+export const TEMPLATES_UPGRADE_URL = 'https://buy.stripe.com/3cI6oJ3SdgUu9ys1ylfAc04';
 
 const CACHE_TTL_MS   = 60 * 60 * 1000;          // 1 hour
 const OFFLINE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days offline grace

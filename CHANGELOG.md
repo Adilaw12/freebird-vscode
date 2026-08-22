@@ -1,5 +1,11 @@
 # Changelog
 
+## \[0.11.0] — 2026-08-22
+
+### Added
+
+* **Template Library — 33 paid prompt templates on top of the 3 free ones.** Migration & modernization, review & quality, compliance & accessibility, onboarding & docs, infrastructure & DevOps, team & process, framework specialists, release & ops, and testing deep-dives — same structure as the existing free templates (role, prioritized checklist, cite-the-exact-file-and-line, no theoretical padding). Content lives server-only (`backend/lib/templateCatalog.js`, served by new `POST /api/templates`) since a VS Code `.vsix` ships fully readable — bundling paid content client-side the way the 3 free templates are would make it trivially extractable. New `hasTemplateLibraryAccess()` in `backend/lib/license.js` grants access two ways: bundled free for anyone with an active Pro/Enterprise/Team/trial license (`isLicenseActive()`), or via a standalone `plan: 'templates'` purchase — deliberately excluded from `isLicenseActive()`'s own plan whitelist, so a templates-only purchase can never grant Pro chat/cloud-edit access. New `freebird.templateLicenseKey` setting and `Freebird: Activate Template Library License` command for the standalone path. The chat panel's prompt-template picker now shows locked paid items (with a buy/activate prompt) rather than only the free ones, and a new 📚 icon in the chat panel's top bar (plus a welcome-screen entry) makes the whole catalog discoverable without needing the command palette.
+
 ## \[0.10.3] — 2026-08-19
 
 ### Fixed

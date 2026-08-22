@@ -21,8 +21,12 @@ export default async function handler(req, res) {
         ));
     }
 
+    const license = await redis.get(`license:${key}`);
+    const isTemplates = license?.plan === 'templates';
+    const commandName = isTemplates ? 'Freebird: Activate Template Library License' : 'Freebird: Activate Pro License';
+
     return res.status(200).send(page(
-        '🚀 Welcome to Freebird Pro!',
+        isTemplates ? '🚀 Welcome to the Freebird Template Library!' : '🚀 Welcome to Freebird Pro!',
         `<p style="margin-bottom:12px">Your license key:</p>
          <div class="key-box" id="key">${key}</div>
          <button onclick="navigator.clipboard.writeText('${key}').then(function(){ this.textContent='Copied!'; }.bind(this))">
@@ -33,7 +37,7 @@ export default async function handler(req, res) {
          <ol>
            <li>Open VS Code</li>
            <li>Press <kbd>Ctrl+Shift+P</kbd> (or <kbd>Cmd+Shift+P</kbd> on Mac)</li>
-           <li>Run <strong>Freebird: Activate Pro License</strong></li>
+           <li>Run <strong>${commandName}</strong></li>
            <li>Paste the key above</li>
          </ol>
          <p style="margin-top:16px;opacity:0.7">

@@ -34,7 +34,8 @@ const suites = [
     require('./context-builder.test.js'),
     require('./auth-token.test.js'),
     require('./memory.test.js'),
-    require('./rules.test.js')
+    require('./rules.test.js'),
+    require('./template-access.test.js')
 ];
 
 (async () => {

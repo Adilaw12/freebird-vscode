@@ -4,7 +4,7 @@ import { GitService } from './git/service';
 import { registerInlineEdit } from './inline/editor';
 import { registerTabCompletion } from './inline/completionProvider';
 import { registerShareSelection } from './share/share';
-import { getLicenseStatus, warmLicenseCache, activateLicense, clearLicenseCache, startTrial, UPGRADE_URL, API_BASE } from './license/validator';
+import { getLicenseStatus, warmLicenseCache, activateLicense, clearLicenseCache, startTrial, UPGRADE_URL, TEMPLATES_UPGRADE_URL, API_BASE } from './license/validator';
 import { getCloudEditsRemaining } from './license/usage';
 import { signInWithGitHub, getStoredSession, clearSession } from './auth/github';
 import { buildIndex, updateFileInIndex, removeFileFromIndex, getIndexStats } from './index/indexer';
@@ -13,9 +13,57 @@ import { previewHtmlFile } from './agent/preview';
 import { checkOllamaSetup } from './ai/ollamaSetup';
 import { initTelemetry, disposeTelemetry, trackEvent, getMachineId } from './telemetry';
 import { buildBackendPickerItems } from './license/backendPicker';
-import { PROMPT_TEMPLATES } from './agent/promptTemplates';
+import { getMergedTemplates, clearTemplateCatalogCache, isTemplateLibraryUnlocked } from './agent/templateCatalog';
 import { checkAnnouncement } from './announcement';
 import { checkTrialReminder } from './license/trialReminder';
+
+// Shared input-box → withProgress → validate → success/buy/retry flow used by
+// both freebird.activateLicense and freebird.activateTemplateLicense — same
+// shape, different validation logic and messaging per opts.
+async function runLicenseActivationFlow(opts: {
+    inputPrompt: string;
+    inputTitle: string;
+    placeHolder: string;
+    progressTitle: string;
+    validate: (key: string) => Promise<{ ok: boolean; email?: string }>;
+    onSuccess: (email: string | undefined, refreshStatusBar: () => void) => void;
+    upgradeUrl: string;
+    notSetUpMessage: string;
+    buyLabel: string;
+    retryCommand: string;
+    refreshStatusBar: () => void;
+}): Promise<void> {
+    const key = await vscode.window.showInputBox({
+        prompt: opts.inputPrompt,
+        placeHolder: opts.placeHolder,
+        title: opts.inputTitle,
+        validateInput: v => v && v.trim().length > 5 ? null : 'Please enter a valid license key'
+    });
+    if (!key) return;
+
+    await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: opts.progressTitle, cancellable: false },
+        async () => {
+            const result = await opts.validate(key);
+            if (result.ok) {
+                opts.onSuccess(result.email, opts.refreshStatusBar);
+            } else {
+                const action = await vscode.window.showErrorMessage(
+                    'License key not recognised or subscription is inactive.',
+                    opts.buyLabel, 'Try Again'
+                );
+                if (action === opts.buyLabel) {
+                    if (opts.upgradeUrl) {
+                        vscode.env.openExternal(vscode.Uri.parse(opts.upgradeUrl));
+                    } else {
+                        vscode.window.showInformationMessage(opts.notSetUpMessage);
+                    }
+                }
+                if (action === 'Try Again') vscode.commands.executeCommand(opts.retryCommand);
+            }
+        }
+    );
+}
 
 export function activate(context: vscode.ExtensionContext) {
     const git = new GitService();
@@ -154,34 +202,53 @@ export function activate(context: vscode.ExtensionContext) {
         }),
 
         vscode.commands.registerCommand('freebird.activateLicense', async () => {
-            const key = await vscode.window.showInputBox({
-                prompt: 'Enter your Freebird AI Pro license key',
+            await runLicenseActivationFlow({
+                inputPrompt: 'Enter your Freebird AI Pro license key',
+                inputTitle: 'Activate Freebird AI Pro',
                 placeHolder: 'FB-XXXX-XXXX-XXXX-XXXX',
-                title: 'Activate Freebird AI Pro',
-                validateInput: v => v && v.trim().length > 5 ? null : 'Please enter a valid license key'
-            });
-            if (!key) return;
-
-            await vscode.window.withProgress(
-                { location: vscode.ProgressLocation.Notification, title: 'Validating license key…', cancellable: false },
-                async () => {
+                progressTitle: 'Validating license key…',
+                validate: async key => {
                     const status = await activateLicense(context, key);
-                    if (status.isPro) {
-                        trackEvent('license_activated');
-                        vscode.window.showInformationMessage(
-                            `Freebird AI Pro activated${status.email ? ` for ${status.email}` : ''}. Enjoy unlimited access!`
-                        );
-                        refreshStatusBar();
-                    } else {
-                        const action = await vscode.window.showErrorMessage(
-                            'License key not recognised or subscription is inactive.',
-                            'Buy Pro', 'Try Again'
-                        );
-                        if (action === 'Buy Pro') vscode.env.openExternal(vscode.Uri.parse(UPGRADE_URL));
-                        if (action === 'Try Again') vscode.commands.executeCommand('freebird.activateLicense');
-                    }
-                }
-            );
+                    return { ok: status.isPro, email: status.email };
+                },
+                onSuccess: (email, refresh) => {
+                    trackEvent('license_activated');
+                    vscode.window.showInformationMessage(
+                        `Freebird AI Pro activated${email ? ` for ${email}` : ''}. Enjoy unlimited access!`
+                    );
+                    refresh();
+                },
+                upgradeUrl: UPGRADE_URL,
+                notSetUpMessage: 'Freebird Pro purchasing isn\'t set up yet.',
+                buyLabel: 'Buy Pro',
+                retryCommand: 'freebird.activateLicense',
+                refreshStatusBar
+            });
+        }),
+
+        vscode.commands.registerCommand('freebird.activateTemplateLicense', async () => {
+            await runLicenseActivationFlow({
+                inputPrompt: 'Enter your Freebird Template Library license key',
+                inputTitle: 'Activate Freebird Template Library',
+                placeHolder: 'FB-XXXX-XXXX-XXXX-XXXX',
+                progressTitle: 'Validating license key…',
+                validate: async key => {
+                    const normalised = key.trim().toUpperCase();
+                    await vscode.workspace.getConfiguration('freebird').update('templateLicenseKey', normalised, true);
+                    clearTemplateCatalogCache(context);
+                    const ok = await isTemplateLibraryUnlocked(context);
+                    return { ok };
+                },
+                onSuccess: () => {
+                    trackEvent('template_license_activated');
+                    vscode.window.showInformationMessage('Freebird Template Library activated. Enjoy the full catalog!');
+                },
+                upgradeUrl: TEMPLATES_UPGRADE_URL,
+                notSetUpMessage: 'Freebird Template Library purchasing isn\'t set up yet.',
+                buyLabel: 'Buy Template Library',
+                retryCommand: 'freebird.activateTemplateLicense',
+                refreshStatusBar
+            });
         }),
 
         vscode.commands.registerCommand('freebird.signInWithGitHub', async () => {
@@ -442,14 +509,37 @@ export function activate(context: vscode.ExtensionContext) {
         }),
 
         vscode.commands.registerCommand('freebird.usePromptTemplate', async () => {
+            const templates = await getMergedTemplates(context);
             const chosen = await vscode.window.showQuickPick(
-                PROMPT_TEMPLATES.map(t => ({ label: t.label, description: t.description, template: t })),
+                templates.map(t => ({
+                    label: t.locked ? `$(lock) ${t.label}` : t.label,
+                    description: t.locked ? `${t.description} — part of the paid Template Library` : t.description,
+                    template: t
+                })),
                 { placeHolder: 'Select a prompt template', title: 'Freebird: Use Prompt Template' }
             );
             if (!chosen) return;
 
-            trackEvent('prompt_template_used');
-            if (ChatViewProvider.current) {
+            if (chosen.template.locked) {
+                trackEvent('template_locked_clicked', chosen.template.id);
+                const action = await vscode.window.showInformationMessage(
+                    `"${chosen.template.label}" is part of the paid Template Library.`,
+                    'Buy Template Library', 'Activate Existing Key', 'Cancel'
+                );
+                if (action === 'Buy Template Library') {
+                    if (TEMPLATES_UPGRADE_URL) {
+                        vscode.env.openExternal(vscode.Uri.parse(TEMPLATES_UPGRADE_URL));
+                    } else {
+                        vscode.window.showInformationMessage('Freebird Template Library purchasing isn\'t set up yet.');
+                    }
+                } else if (action === 'Activate Existing Key') {
+                    vscode.commands.executeCommand('freebird.activateTemplateLicense');
+                }
+                return;
+            }
+
+            trackEvent('prompt_template_used', chosen.template.id);
+            if (ChatViewProvider.current && chosen.template.prompt) {
                 ChatViewProvider.current.useTemplate(chosen.template.prompt);
             }
         }),
