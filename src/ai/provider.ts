@@ -6,6 +6,9 @@ export interface Message {
 export interface CompletionOptions {
     maxTokens?: number;
     temperature?: number;
+    /** Set when this message originated from one of the built-in prompt templates —
+     *  lets CloudProvider request the free-tier Haiku quality bonus for it. */
+    templateId?: string;
 }
 
 // ── Native tool calling ──────────────────────────────────────────────────────

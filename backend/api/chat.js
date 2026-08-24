@@ -17,10 +17,10 @@
 import { Redis } from '@upstash/redis';
 import { createHash } from 'crypto';
 import { verifySession } from '../lib/authToken.js';
-import { isLicenseActive } from '../lib/license.js';
+import { isLicenseActive, hasTemplateLibraryAccess, FREE_TEMPLATE_IDS } from '../lib/license.js';
 import { fetchGeminiWithFallback, PRO_GEMINI_MODEL_CANDIDATES } from '../lib/geminiModel.js';
 import { fetchAnthropicWithFallback, anthropicConfigured } from '../lib/anthropicModel.js';
-import { quotaKeysFor, reserveQuota, refundQuota } from '../lib/quota.js';
+import { quotaKeysFor, reserveQuota, refundQuota, reserveSingleCounter } from '../lib/quota.js';
 
 const redis = Redis.fromEnv();
 
@@ -58,7 +58,7 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: 'Server misconfigured', code: 'NO_API_KEY' });
     }
 
-    const { messages, sessionId: rawSession, authToken, licenseKey, maxTokens = 2048 } = req.body ?? {};
+    const { messages, sessionId: rawSession, authToken, licenseKey, templateId, templateLicenseKey, maxTokens = 2048 } = req.body ?? {};
 
     if (!Array.isArray(messages) || messages.length === 0) {
         return res.status(400).json({ error: 'messages required', code: 'BAD_REQUEST' });
@@ -99,6 +99,38 @@ export default async function handler(req, res) {
     const identityKey = session
         ? `gh:${session.sub}`
         : ((rawSession && typeof rawSession === 'string') ? rawSession : ip);
+
+    // ── Free-template Haiku eligibility ─────────────────────────────────────
+    // The 3 free built-in templates hallucinate noticeably more on Gemini
+    // Flash Lite than on Haiku, and they're exactly the showcase content the
+    // paid Template Library pitch leans on — so a template-seeded message
+    // (identified by templateId, never trusted for anything beyond routing)
+    // gets a quality bump: unlimited for a valid Template Library subscriber,
+    // else one free bonus run per identity per day, else the existing
+    // Gemini-for-free-tier behavior, never blocked either way.
+    let templateHaikuEligible = false;
+    let templateBonusUsed = false;
+    if (!unmetered && templateId && FREE_TEMPLATE_IDS.includes(templateId) && anthropicConfigured()) {
+        let hasTemplateAccess = false;
+        if (templateLicenseKey && typeof templateLicenseKey === 'string') {
+            try {
+                const tLicense = await redis.get(`license:${templateLicenseKey.trim().toUpperCase()}`);
+                hasTemplateAccess = hasTemplateLibraryAccess(tLicense);
+            } catch (err) {
+                console.error('Template license lookup error (chat):', err);
+            }
+        }
+        if (hasTemplateAccess) {
+            templateHaikuEligible = true; // $3/mo subscriber — unlimited
+        } else {
+            const bonusKey = `template-haiku:${identityKey}:${today}`;
+            const { blocked } = await reserveSingleCounter(redis, bonusKey, 1, QUOTA_TTL);
+            if (!blocked) {
+                templateHaikuEligible = true;
+                templateBonusUsed = true;
+            }
+        }
+    }
 
     // ── Quota (two layers: identity + IP) ───────────────────────────────────
     // ATOMIC reserve-then-refund, not check-then-increment — see
@@ -179,14 +211,24 @@ export default async function handler(req, res) {
         temperature: 0.2,
         stream: true,
         messages: anthropicMessages,
-        ...(systemParts.length > 0 && { system: systemParts.join('\n\n') })
+        // Cached as one block: the whole system prompt (workspace tree, project
+        // memory, project rules, tool guidelines) is identical across every
+        // iteration of an Agent-mode turn and unchanged turn-to-turn within a
+        // session — exactly the case prompt caching exists for. Cache writes
+        // cost ~25% more than a normal read, but reads within the 5-minute TTL
+        // run ~90% cheaper, which is a clear win for anything beyond a single
+        // one-shot call. GA on the Anthropic API since Dec 2024 — no beta header
+        // needed for standard ephemeral caching.
+        ...(systemParts.length > 0 && {
+            system: [{ type: 'text', text: systemParts.join('\n\n'), cache_control: { type: 'ephemeral' } }]
+        })
     };
 
     // ── Stream provider response back to extension ──────────────────────────
     try {
         let upstream, modelUsed, provider;
 
-        if (unmetered && anthropicConfigured()) {
+        if ((unmetered || templateHaikuEligible) && anthropicConfigured()) {
             try {
                 const result = await fetchAnthropicWithFallback(anthropicBody, { signal: AbortSignal.timeout(30_000) });
                 if (result.response.ok) {
@@ -236,6 +278,9 @@ export default async function handler(req, res) {
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
         res.setHeader('Transfer-Encoding', 'chunked');
         res.setHeader('X-Model-Used', modelUsed); // helps spot a fallback engaging in the wild
+        if (templateBonusUsed) {
+            res.setHeader('X-Template-Bonus-Used', 'true'); // tells the extension to show the one-time upsell nudge
+        }
 
         if (unmetered) {
             res.setHeader('X-Quota-Unmetered', 'true');

@@ -9,7 +9,7 @@ import { GitService } from '../git/service';
 import { Message } from '../ai/provider';
 import { runAgentLoop, AgentEvent, stripToolBlocks } from '../agent/loop';
 import { buildFileContext, resolveMentions, listWorkspaceFiles } from './contextBuilder';
-import { getLicenseStatus, UPGRADE_URL } from '../license/validator';
+import { getLicenseStatus, UPGRADE_URL, TEMPLATES_UPGRADE_URL } from '../license/validator';
 import { getCloudEditsRemaining, DAILY_CLOUD_LIMIT } from '../license/usage';
 import { readProjectMemory, clearProjectMemory, MEMORY_RELATIVE_PATH } from '../agent/memory';
 import { readProjectRules, RULES_RELATIVE_PATH } from '../agent/rules';
@@ -86,6 +86,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     private toolCallsThisRound = 0;
     private currentTurnId = '';
     private multiFileCtaShownThisSession = false;
+    // Set by useTemplate() right before populating the input with one of the
+    // 3 free built-in templates; consumed (read-and-cleared) by the very next
+    // handleMessage() call so it can't leak into a later, unrelated message.
+    // Not verified against the actual sent text — matches this codebase's
+    // existing loose trust level (e.g. quota is trusted from server headers).
+    private pendingTemplateId: string | undefined;
 
     constructor(context: vscode.ExtensionContext, git: GitService) {
         this.context = context;
@@ -145,6 +151,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     // Funnel stage 2: user clicked through to Stripe checkout
                     vscode.env.openExternal(vscode.Uri.parse(UPGRADE_URL));
                     trackEvent('upgrade_clicked');
+                    break;
+                case 'upgrade-templates':
+                    if (TEMPLATES_UPGRADE_URL) {
+                        vscode.env.openExternal(vscode.Uri.parse(TEMPLATES_UPGRADE_URL));
+                    } else {
+                        vscode.window.showInformationMessage('Freebird Template Library purchasing isn\'t set up yet.');
+                    }
+                    trackEvent('template_upgrade_clicked');
                     break;
                 case 'install-ollama':
                     vscode.env.openExternal(vscode.Uri.parse('https://ollama.com/download'));
@@ -218,7 +232,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
 
     /** Populates the chat input with a prompt template's text for the user to edit before sending — does not send it. */
-    useTemplate(text: string) {
+    useTemplate(text: string, templateId?: string) {
+        this.pendingTemplateId = templateId;
         this.focus();
         this.post({ type: 'populate-input', text });
     }
@@ -232,6 +247,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     private async handleMessage(text: string) {
         const trimmed = text.trim();
+        // Consumed exactly once per call, regardless of which branch below
+        // actually runs — see the field's own comment for why.
+        const templateId = this.pendingTemplateId;
+        this.pendingTemplateId = undefined;
 
         if (trimmed === '/commit') { await this.handleCommit(); return; }
         if (trimmed === '/push')   { await this.handlePush();   return; }
@@ -360,7 +379,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 backend === 'ollama' ? 'ollama-then-cloud' : 'cloud';
 
             this.toolCallsThisRound = 0;
-            const served = await this.runFreeChat(cleanText, mentionContext, mode);
+            const served = await this.runFreeChat(cleanText, mentionContext, mode, templateId);
 
             if (served && mode === 'cloud') {
                 // Count only successfully served edits, using the
@@ -440,7 +459,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     private async runFreeChat(
         text: string,
         mentionContext: string,
-        mode: 'cloud' | 'ollama-then-cloud'
+        mode: 'cloud' | 'ollama-then-cloud',
+        templateId?: string
     ): Promise<boolean> {
         const fileContext  = buildFileContext();
         const contextParts = [mentionContext, fileContext].filter(Boolean).join('\n');
@@ -476,6 +496,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         this.post({ type: 'assistant-start' });
         let response = '';
         let served = true;
+        let cloudProvider: CloudProvider | undefined;
 
         try {
             if (mode === 'ollama-then-cloud') {
@@ -493,21 +514,26 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 if (!ollamaAvailable) {
                     trackEvent('ollama_not_reachable');
                     this.post({ type: 'ollama-fallback' });
-                    const cloud = new CloudProvider(this.context, getMachineId());
-                    await cloud.stream(messages, chunk => {
+                    cloudProvider = new CloudProvider(this.context, getMachineId());
+                    await cloudProvider.stream(messages, chunk => {
                         response += chunk;
                         this.post({ type: 'set-text', text: response });
-                    });
+                    }, { templateId });
                     this.postModelTag();
                 }
             } else {
                 // mode = 'cloud' — use CloudProvider with normal quota
-                const cloud = new CloudProvider(this.context, getMachineId());
-                await cloud.stream(messages, chunk => {
+                cloudProvider = new CloudProvider(this.context, getMachineId());
+                await cloudProvider.stream(messages, chunk => {
                     response += chunk;
                     this.post({ type: 'set-text', text: response });
-                });
+                }, { templateId });
                 this.postModelTag();
+            }
+
+            if (cloudProvider?.templateBonusUsed && templateId) {
+                trackEvent('template_haiku_bonus_used', templateId);
+                this.post({ type: 'upgrade-nudge', variant: 'template-bonus-used' });
             }
 
             if (response) setCachedResponse(key, response);

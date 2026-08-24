@@ -1,5 +1,12 @@
 # Changelog
 
+## \[0.12.0] — 2026-08-24
+
+### Added
+
+* **Anthropic prompt caching.** The system prompt sent to Claude Haiku 4.5 (`backend/api/chat.js`/`fallback.js`) is now marked with `cache_control: { type: 'ephemeral' }` instead of being sent as a plain string every call. Workspace tree, project memory, project rules, and tool guidelines are identical across every iteration of an Agent-mode turn and unchanged turn-to-turn within a session — this is real, previously-unclaimed savings (~90% cheaper on a cache hit) flagged back when the agent-loop circuit breaker shipped (0.10.3) but deferred until now.
+* **The 3 free built-in prompt templates now route to Claude Haiku instead of Gemini Flash Lite**, gated to keep the cost bounded: free tier gets 1 Haiku-quality template run per day (falls back to Gemini after, never blocked), $3/mo Template Library subscribers get unlimited, Pro/Enterprise/trial unaffected (already always Haiku). Prompted by testing surfacing real hallucination problems on Gemini Flash Lite specifically for these templates — worse than for casual chat, since Codebase Cartographer/Security Auditor/Multi-File Test Engineer are built around citing exact files/lines and are the showcase content the whole Template Library pitch leans on. Shows a one-time upsell nudge pointing at the $3/mo tier when the free daily bonus is used.
+
 ## \[0.11.0] — 2026-08-22
 
 ### Added

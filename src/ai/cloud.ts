@@ -26,6 +26,11 @@ export class CloudProvider implements AIProvider {
     private readonly sessionId: string;
     private readonly mode: 'quota' | 'fallback';
 
+    /** True after a stream() call whose response carried X-Template-Bonus-Used —
+     *  the caller (panel.ts) checks this immediately after awaiting stream() to
+     *  decide whether to show the one-time Template Library upsell nudge. */
+    templateBonusUsed = false;
+
     constructor(
         context: vscode.ExtensionContext,
         sessionId: string,
@@ -50,13 +55,23 @@ export class CloudProvider implements AIProvider {
         // after GitHub sign-in — is the real, unspoofable identity. licenseKey
         // lets Pro/Enterprise subscribers skip quota entirely server-side.
         const session    = await getStoredSession(this.context);
-        const licenseKey = vscode.workspace.getConfiguration('freebird').get<string>('licenseKey', '').trim();
+        const cfg        = vscode.workspace.getConfiguration('freebird');
+        const licenseKey = cfg.get<string>('licenseKey', '').trim();
+        const templateLicenseKey = cfg.get<string>('templateLicenseKey', '').trim();
+
+        this.templateBonusUsed = false;
 
         const body = {
             messages,
             sessionId:  this.sessionId,
             authToken:  session?.sessionToken,
             licenseKey: licenseKey || undefined,
+            // templateId is set only when this message originated from one of
+            // the 3 free built-in templates (see panel.ts) — the backend uses
+            // it purely for routing (a free-tier Haiku quality bonus), never
+            // for anything billing/security-relevant.
+            templateId: opts?.templateId,
+            templateLicenseKey: templateLicenseKey || undefined,
             maxTokens:  opts?.maxTokens ?? 2048
         };
 
@@ -118,6 +133,10 @@ export class CloudProvider implements AIProvider {
             if (remaining !== null) {
                 await this.context.globalState.update(QUOTA_KEY, parseInt(remaining, 10));
             }
+        }
+
+        if (res.headers.get('X-Template-Bonus-Used') === 'true') {
+            this.templateBonusUsed = true;
         }
 
         const modelUsed = res.headers.get('X-Model-Used');

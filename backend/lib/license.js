@@ -29,3 +29,11 @@ export function hasTemplateLibraryAccess(license) {
     if (isLicenseActive(license)) return true;
     return license.templateLibrary === true;
 }
+
+// The 3 free, built-in prompt templates — duplicated from
+// src/agent/promptTemplates.ts's ids by necessity (separate deployments, no
+// shared module between the extension and this backend). Used to gate the
+// free-tier "1 Haiku-quality template run/day" bonus (see chat.js/fallback.js)
+// to only these specific templates, not arbitrary chat messages. Stable ids,
+// rarely change — keep in sync manually if the free template set ever does.
+export const FREE_TEMPLATE_IDS = ['codebase-cartographer', 'security-auditor', 'multi-file-test-engineer'];

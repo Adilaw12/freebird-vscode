@@ -540,7 +540,7 @@ export function activate(context: vscode.ExtensionContext) {
 
             trackEvent('prompt_template_used', chosen.template.id);
             if (ChatViewProvider.current && chosen.template.prompt) {
-                ChatViewProvider.current.useTemplate(chosen.template.prompt);
+                ChatViewProvider.current.useTemplate(chosen.template.prompt, chosen.template.id);
             }
         }),
 

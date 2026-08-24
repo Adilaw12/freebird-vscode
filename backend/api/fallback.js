@@ -9,7 +9,7 @@
 import { Redis } from '@upstash/redis';
 import { createHash } from 'crypto';
 import { verifySession } from '../lib/authToken.js';
-import { isLicenseActive } from '../lib/license.js';
+import { isLicenseActive, hasTemplateLibraryAccess, FREE_TEMPLATE_IDS } from '../lib/license.js';
 import { fetchGeminiWithFallback, PRO_GEMINI_MODEL_CANDIDATES } from '../lib/geminiModel.js';
 import { fetchAnthropicWithFallback, anthropicConfigured } from '../lib/anthropicModel.js';
 import { quotaKeysFor, reserveQuota, refundQuota, reserveSingleCounter } from '../lib/quota.js';
@@ -49,7 +49,7 @@ export default async function handler(req, res) {
     }
 
     const ip = ((req.headers['x-forwarded-for'] || '').split(',')[0] || 'anon').trim();
-    const { messages, maxTokens = 2048, sessionId: rawSession, authToken, licenseKey } = req.body ?? {};
+    const { messages, maxTokens = 2048, sessionId: rawSession, authToken, licenseKey, templateId, templateLicenseKey } = req.body ?? {};
 
     if (!Array.isArray(messages) || messages.length === 0) {
         return res.status(400).json({ error: 'messages required', code: 'BAD_REQUEST' });
@@ -101,6 +101,32 @@ export default async function handler(req, res) {
     // Atomic reserve-then-refund — see backend/lib/quota.js for the full
     // race-condition rationale.
     const today = new Date().toISOString().slice(0, 10);
+
+    // ── Free-template Haiku eligibility — see chat.js for the full rationale ──
+    let templateHaikuEligible = false;
+    let templateBonusUsed = false;
+    if (!unmetered && templateId && FREE_TEMPLATE_IDS.includes(templateId) && anthropicConfigured()) {
+        let hasTemplateAccess = false;
+        if (templateLicenseKey && typeof templateLicenseKey === 'string') {
+            try {
+                const tLicense = await redis.get(`license:${templateLicenseKey.trim().toUpperCase()}`);
+                hasTemplateAccess = hasTemplateLibraryAccess(tLicense);
+            } catch (err) {
+                console.error('Template license lookup error (fallback):', err);
+            }
+        }
+        if (hasTemplateAccess) {
+            templateHaikuEligible = true; // $3/mo subscriber — unlimited
+        } else {
+            const bonusKey = `template-haiku:${identityKey}:${today}`;
+            const { blocked } = await reserveSingleCounter(redis, bonusKey, 1, QUOTA_TTL);
+            if (!blocked) {
+                templateHaikuEligible = true;
+                templateBonusUsed = true;
+            }
+        }
+    }
+
     const quotaKeys = quotaKeysFor(identityKey, ip, today);
     let sessionUsed = 0, ipUsed = 0;
 
@@ -169,14 +195,17 @@ export default async function handler(req, res) {
         temperature: 0.2,
         stream:      true,
         messages:    anthropicMessages,
-        ...(systemParts.length > 0 && { system: systemParts.join('\n\n') })
+        // Same caching rationale as chat.js — see that file for the full note.
+        ...(systemParts.length > 0 && {
+            system: [{ type: 'text', text: systemParts.join('\n\n'), cache_control: { type: 'ephemeral' } }]
+        })
     };
 
     // ── Stream response ──────────────────────────────────────────────────────
     try {
         let upstream, modelUsed, provider;
 
-        if (unmetered && anthropicConfigured()) {
+        if ((unmetered || templateHaikuEligible) && anthropicConfigured()) {
             try {
                 const result = await fetchAnthropicWithFallback(anthropicBody, { signal: AbortSignal.timeout(30_000) });
                 if (result.response.ok) {
@@ -225,6 +254,9 @@ export default async function handler(req, res) {
         res.setHeader('Transfer-Encoding', 'chunked');
         res.setHeader('X-Fallback-Active', 'true'); // extension can detect this
         res.setHeader('X-Model-Used', modelUsed); // helps spot a fallback engaging in the wild
+        if (templateBonusUsed) {
+            res.setHeader('X-Template-Bonus-Used', 'true');
+        }
 
         if (unmetered) {
             res.setHeader('X-Quota-Unmetered', 'true');

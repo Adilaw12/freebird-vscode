@@ -1263,22 +1263,32 @@ var NUDGE_MESSAGES = {
   'running-low': {
     icon: '⚡',
     text: 'Only <strong>3 free edits</strong> left today. Pro is unlimited — try it free for 7 days.',
-    cta: 'Upgrade to Pro'
+    cta: 'Upgrade to Pro',
+    postType: 'upgrade'
   },
   'power-user': {
     icon: '🚀',
     text: 'That was a multi-step agent run — <strong>Pro gives you unlimited</strong> of these.',
-    cta: 'Go Pro'
+    cta: 'Go Pro',
+    postType: 'upgrade'
   },
   'periodic': {
     icon: '💡',
     text: 'Enjoying Freebird? <strong>Pro</strong> unlocks cloud AI, multi-file editing, and agent mode.',
-    cta: 'Learn more'
+    cta: 'Learn more',
+    postType: 'upgrade'
   },
   'quota-overflow': {
     icon: '🔄',
     text: 'Free edits used — responding via fallback AI. <strong>Upgrade to Pro</strong> for unlimited fast responses.',
-    cta: 'Upgrade to Pro'
+    cta: 'Upgrade to Pro',
+    postType: 'upgrade'
+  },
+  'template-bonus-used': {
+    icon: '✨',
+    text: 'That ran on <strong>Claude Haiku</strong> — today\'s free quality bonus for built-in templates. Unlimited Haiku on templates is $3/mo.',
+    cta: 'Unlock unlimited',
+    postType: 'upgrade-templates'
   }
 };
 
@@ -1290,7 +1300,7 @@ function showUpgradeNudge(variant) {
   nudge.innerHTML =
     '<span class="nudge-icon">' + msg.icon + '</span>' +
     '<span class="nudge-text">' + msg.text + '</span>' +
-    '<button onclick="vscode.postMessage({type:\'upgrade\'})">' + msg.cta + '</button>' +
+    '<button onclick="vscode.postMessage({type:\'' + (msg.postType || 'upgrade') + '\'})">' + msg.cta + '</button>' +
     '<button class="nudge-dismiss" onclick="this.parentElement.remove()" title="Dismiss">✕</button>';
   msgsEl.appendChild(nudge);
   scroll();
