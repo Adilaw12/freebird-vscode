@@ -171,8 +171,8 @@ function dashboardHtml() {
 <div class="controls">
   <select id="days">
     <option value="7">Last 7 days</option>
-    <option value="14" selected>Last 14 days</option>
-    <option value="30">Last 30 days</option>
+    <option value="14">Last 14 days</option>
+    <option value="30" selected>Last 30 days</option>
     <option value="90">Last 90 days</option>
   </select>
   <button class="refresh-btn" onclick="loadData()">Refresh</button>
@@ -252,6 +252,30 @@ function render(data) {
   html += kpi('Days Since Last Paid Conversion',
               daysSinceConversion === null ? (data.days.length + 'd+') : daysSinceConversion,
               daysSinceConversion === null ? 'none in ' + data.days.length + 'd window' : (daysSinceConversion === 0 ? 'today!' : 'last: ' + data.days[daysSinceConversion].date));
+  html += '</div>';
+
+  // Stickiness (DAU/MAU, WAU/MAU) — the engagement numbers worth quoting when
+  // pitching Freebird externally. Built entirely from data already fetched
+  // above (uniqueMachinesInWindow, last7ActiveMachines, the summed daily
+  // _unique_machines total) — no extra Redis calls. WAU/MAU is called out as
+  // the more honest metric for a coding tool: usage is naturally session/
+  // task-driven, not a daily habit check, so DAU/MAU alone understates
+  // engagement the way a habit-forming consumer app would be measured.
+  var mau = trueUniqueMachines !== null ? trueUniqueMachines : totalMachines;
+  var wau = (typeof data.last7ActiveMachines === 'number') ? data.last7ActiveMachines : null;
+  var avgDau = data.days.length ? (totalMachines / data.days.length) : 0;
+  var dauMauPct = mau > 0 ? (avgDau / mau * 100) : 0;
+  var wauMauPct = (wau !== null && mau > 0) ? (wau / mau * 100) : null;
+
+  html += '<div class="section"><h2>Stickiness (Engagement)</h2>';
+  html += '<div class="kpi-row">';
+  html += kpi('MAU (' + data.days.length + 'd window)', mau, 'deduplicated unique machines');
+  html += kpi('WAU (last 7d)', wau !== null ? wau : '—', wau !== null ? 'deduplicated, last 7 days' : 'need 14d+ window');
+  html += kpi('Avg DAU (' + data.days.length + 'd)', Math.round(avgDau), 'mean daily active machines');
+  html += kpi('DAU/MAU', dauMauPct.toFixed(1) + '%', 'daily habit strength');
+  html += kpi('WAU/MAU', wauMauPct !== null ? wauMauPct.toFixed(1) + '%' : '—', wauMauPct !== null ? 'weekly engagement' : 'need 14d+ window');
+  html += '</div>';
+  html += '<p class="hint">WAU/MAU is the more honest stickiness metric for a coding assistant — usage is session/task-driven, not a daily check-in. General benchmark: 30–50% WAU/MAU is good, 45%+ is high-performing for B2B-SaaS-style tools. DAU/MAU under 20% is normal for tools not designed for daily use, as long as MAU keeps growing.</p>';
   html += '</div>';
 
   // Conversion funnel: wall shown → trial started / upgrade clicked → subscribed
