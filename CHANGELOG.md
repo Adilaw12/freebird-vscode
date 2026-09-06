@@ -1,5 +1,15 @@
 # Changelog
 
+## \[0.13.0] — 2026-09-06
+
+### Added
+
+* **Code Hotspots & Contribution Map prompt template.** A fourth built-in template (`src/agent/promptTemplates.ts`) alongside Codebase Cartographer, Security Auditor, and Multi-File Test Engineer — analyzes real git history rather than just the current file tree to surface a file-churn ranking, co-change pairs (files frequently modified together despite no obvious relationship), and a contribution pattern summary, rendered as a Mermaid graph of the strongest co-change relationships. Explicitly checks for shallow clones and thin history up front rather than presenting a partial picture as complete, and bounds analysis to the last 200 commits or 6 months to stay within tool-output limits. `test/prompt-templates.test.js` updated for the new count and id (also surfaced that this test reads from compiled `out/`, not `src/` — a plain `tsc --noEmit` won't update what it sees, `npm run compile` will).
+
+### Fixed
+
+* **Tab-completion quota exhaustion showed a raw `QUOTA_EXCEEDED` error with no upgrade path, and never counted toward `quota_wall_shown`.** Tab completions share the same 20/day cloud quota as chat (`backend/api/chat.js`) but fire far more often — passively, on nearly every keystroke — so they typically exhaust the quota before a user ever sends a deliberate chat message. `completionProvider.ts`'s catch-all error handler showed the same generic "tab completion unavailable" message for every failure type, with a "Configure AI Backend" button rather than an upgrade prompt, and didn't track the event at all — so the one metric meant to explain trial-conversion behavior was undercounting real quota hits from what telemetry showed is the most-used feature (`tab_completion_shown` far exceeds `pro_message` and `quota_wall_shown` on a typical day). `QUOTA_EXCEEDED` specifically now shows "daily cloud AI limit reached... upgrade to Pro for unlimited" with a real Upgrade to Pro button, and tracks `quota_wall_shown` (tagged `completion` in `telemetry:eventDetails` to distinguish from the chat path). Other completion failures (auth, network) are unchanged.
+
 ## \[0.12.0] — 2026-08-24
 
 ### Added

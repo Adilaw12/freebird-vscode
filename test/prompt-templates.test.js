@@ -11,7 +11,7 @@ const { PROMPT_TEMPLATES } = require(path.join(OUT, 'agent/promptTemplates.js'))
 function run() {
     suite('PROMPT_TEMPLATES structural guarantees');
     {
-        check('exactly 3 built-in templates', PROMPT_TEMPLATES.length === 3);
+        check('exactly 4 built-in templates', PROMPT_TEMPLATES.length === 4);
 
         const ids = PROMPT_TEMPLATES.map(t => t.id);
         check('every template has a non-empty id/label/description/prompt', PROMPT_TEMPLATES.every(t =>
@@ -22,7 +22,8 @@ function run() {
         ));
         check('ids are unique', new Set(ids).size === ids.length);
         check('expected templates are present', ids.includes('codebase-cartographer') &&
-            ids.includes('security-auditor') && ids.includes('multi-file-test-engineer'));
+            ids.includes('security-auditor') && ids.includes('multi-file-test-engineer') &&
+            ids.includes('code-hotspots'));
     }
 }
 

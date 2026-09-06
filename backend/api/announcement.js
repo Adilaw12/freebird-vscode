@@ -5,12 +5,14 @@
 // Extension calls: GET /api/announcement
 // Response: { message: string, variant: string, cta: string, ctaAction: string } | { message: null }
 
-// v0.12.0 update notice — shown for ~14 days after release, then stops
+// v0.13.0 update notice — shown for ~14 days after release, then stops
 // automatically. The extension dedupes per distinct message text, so users
-// see this exactly once. (Previous v0.9.0/v0.11.0 windows have already
-// elapsed — kept only as a reference for the pattern, not still active.)
-const WINDOW_START = new Date('2026-08-24T00:00:00Z');
-const WINDOW_END   = new Date('2026-09-07T00:00:00Z');
+// see this exactly once. (Previous v0.9.0/v0.11.0/v0.12.0 windows have
+// already elapsed — kept only as a reference for the pattern, not still
+// active. v0.12.0's window ran through 2026-09-07; this one starts right
+// after it so there's no gap or overlap.)
+const WINDOW_START = new Date('2026-09-07T00:00:00Z');
+const WINDOW_END   = new Date('2026-09-21T00:00:00Z');
 
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -22,8 +24,8 @@ export default async function handler(req, res) {
     const now = new Date();
     if (now >= WINDOW_START && now < WINDOW_END) {
         return res.status(200).json({
-            variant:   'update-0120',
-            message:   'New: the 3 free prompt templates now run on Claude Haiku instead of Gemini Flash Lite — no more hallucinated citations. 1 free Haiku run/day, unlimited with the $3/mo Template Library. Agent turns are also faster and cheaper thanks to prompt caching.',
+            variant:   'update-0130',
+            message:   'New: Code Hotspots & Contribution Map — a 4th built-in template that mines your real git history for file churn, hidden co-change coupling, and a rendered dependency graph, not just a raw commit log.',
             cta:       'Try a template',
             ctaAction: 'freebird.usePromptTemplate'
         });

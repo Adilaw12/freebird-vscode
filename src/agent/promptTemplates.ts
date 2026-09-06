@@ -36,6 +36,48 @@ export const PROMPT_TEMPLATES: PromptTemplate[] = [
             "Cite specific files and paths throughout, not just module names in the abstract."
     },
     {
+        id: 'code-hotspots',
+        label: 'Code Hotspots & Contribution Map',
+        description: 'Which files change together and which churn the most — a co-change and hotspot map from real git history, not a raw commit log',
+        prompt:
+            "Act as a code archaeologist. Use git history — not just the current file tree — to find where " +
+            "real risk and activity actually concentrate in this codebase.\n\n" +
+            "First, sanity-check what you're working with before analyzing anything:\n" +
+            "- Confirm this is a real git repository with usable history (`git rev-parse --is-inside-work-tree`).\n" +
+            "- Check `git rev-parse --is-shallow-repository` — if true, history is truncated (common in CI " +
+            "checkouts and some cloud sandboxes). Say so plainly in your output rather than presenting a " +
+            "partial picture as if it were complete.\n" +
+            "- If the repo has fewer than ~20 commits, say history is too thin for a meaningful hotspot map " +
+            "instead of forcing an analysis out of it.\n\n" +
+            "When you run `git log`, bound it deliberately — the last 200 commits or the last 6 months, " +
+            "whichever is smaller — both so the analysis reflects current activity rather than the whole " +
+            "project's lifetime, and so the output doesn't blow past tool output limits. Avoid pipe (`|`) and " +
+            "quote characters in any `--pretty=format` string you construct; they're interpreted differently " +
+            "across shells (this runs through whatever shell the user's OS defaults to) and can silently break " +
+            "the command or truncate output. If a git command errors, read the actual error and adjust — don't " +
+            "retry the same command unchanged.\n\n" +
+            "From the history, produce:\n" +
+            "1. **File churn ranking** — the files that changed most often in the analyzed window. High churn " +
+            "isn't automatically bad, but a high-churn file with also-high complexity is worth flagging as a " +
+            "real risk concentration, not just a busy area.\n" +
+            "2. **Co-change pairs** — files that are frequently modified in the same commit despite not being " +
+            "an obvious pair (e.g. not just a `.ts` and its own test file). This surfaces coupling that isn't " +
+            "visible from imports or file structure alone.\n" +
+            "3. **Contribution pattern** — who's been actively working in which areas recently, if author info " +
+            "is available and the repo isn't a solo project. Skip this section entirely rather than guessing " +
+            "if the repo has one contributor or author data is unavailable.\n" +
+            "4. A diagram showing the strongest co-change relationships as a graph — files as nodes, edges " +
+            "weighted or labelled by how often they change together. This MUST be valid Mermaid.js syntax " +
+            "(e.g. `graph TD` or `flowchart TD`) inside a fenced code block whose language tag is exactly " +
+            "`mermaid`:\n" +
+            "```mermaid\ngraph TD\n  A[fileA.ts] ---|8 commits| B[fileB.ts]\n```\n" +
+            "Do NOT draw it as ASCII/box-drawing art, and do NOT use a plain/untagged code fence — it must be " +
+            "real Mermaid syntax so it renders as an actual diagram. Keep it to the strongest 10-15 " +
+            "relationships, not every pair you found — a graph with everything in it shows nothing.\n\n" +
+            "Cite exact file paths throughout. If the data doesn't support a clear finding for a section, say " +
+            "so directly rather than manufacturing a pattern from noise."
+    },
+    {
         id: 'security-auditor',
         label: 'Security Auditor',
         description: 'Systematic security review with concrete exploit scenarios, not theoretical findings (thorough — can take a couple of minutes)',

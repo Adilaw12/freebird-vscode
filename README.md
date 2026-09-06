@@ -2,7 +2,7 @@
 
 **No setup. No throttling. 20 free AI edits/day.**
 
-[![VS Marketplace](https://img.shields.io/badge/VS%20Marketplace-v0.11.0-0066B8?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=TenLabs.freebird-ai)
+[![VS Marketplace](https://img.shields.io/badge/VS%20Marketplace-v0.13.0-0066B8?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=TenLabs.freebird-ai)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](https://github.com/Adilaw12/freebird-vscode/blob/main/LICENSE)
 [![GitHub](https://img.shields.io/badge/GitHub-Adilaw12%2Ffreebird--vscode-181717?style=flat-square&logo=github)](https://github.com/Adilaw12/freebird-vscode)
 
@@ -20,6 +20,9 @@ Freebird never blocks you — it picks up where other tools stop.
 **[Upgrade to Pro — $6 USD/month →](https://buy.stripe.com/9B628t4WheMmeSMccZfAc03)** · or start a **free 7-day Pro trial** (no card needed) right from the chat panel
 
 ⭐ **If Freebird saves you time, a GitHub star helps others find it** — thank you!
+
+> **📅 Heads up: the free daily cloud limit is changing on Monday, September 14.**
+> To keep Freebird fast and reliable as usage grows, the free tier's daily cloud limit is moving from 20 to **10** advanced edits/day, effective **Monday, September 14**. Everything else on Free — unlimited chat, unlimited tab completions on Ollama/BYOK, project rules — is unchanged. If you're already relying on the higher limit day to day, **[Pro's $6/month unlocks unlimited cloud edits](https://buy.stripe.com/9B628t4WheMmeSMccZfAc03)** plus full Agent mode (multi-file edits, terminal commands, one-click checkpoints) — or try it free for 7 days, no card needed, right from the chat panel.
 
 ---
 

@@ -3,6 +3,7 @@ import { getProvider } from '../ai';
 import { FIMProvider } from '../ai/provider';
 import { getMachineId, trackEvent } from '../telemetry';
 import { stripFences } from '../util/text';
+import { UPGRADE_URL } from '../license/validator';
 
 const MAX_PREFIX_LINES = 100;
 const MAX_SUFFIX_LINES = 20;
@@ -62,14 +63,40 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
         } catch (err: any) {
             if (!warnedThisSession) {
                 warnedThisSession = true;
-                vscode.window.showWarningMessage(
-                    `Freebird: tab completion unavailable — ${err?.message ?? String(err)}`,
-                    'Configure AI Backend'
-                ).then(choice => {
-                    if (choice === 'Configure AI Backend') {
-                        vscode.commands.executeCommand('freebird.configure');
-                    }
-                });
+
+                // Tab completions share the same 20/day cloud quota as chat
+                // (see backend/api/chat.js), but fire far more often — passively,
+                // on nearly every keystroke — so they typically exhaust it long
+                // before a user ever sends a deliberate chat message. Previously
+                // this showed a raw "QUOTA_EXCEEDED" error with no upgrade path,
+                // and never counted toward quota_wall_shown — so the wall was
+                // real but invisible for most free users, undercutting the one
+                // metric meant to explain trial-conversion behavior. Route it
+                // through the same upgrade messaging chat already has.
+                if (err?.code === 'QUOTA_EXCEEDED') {
+                    trackEvent('quota_wall_shown', 'completion');
+                    vscode.window.showWarningMessage(
+                        'Freebird: daily cloud AI limit reached. Tab completions (and other cloud AI features) ' +
+                            'resume tomorrow — or upgrade to Pro for unlimited.',
+                        'Upgrade to Pro',
+                        'Switch to Ollama (free, unlimited)'
+                    ).then(choice => {
+                        if (choice === 'Upgrade to Pro') {
+                            vscode.env.openExternal(vscode.Uri.parse(UPGRADE_URL));
+                        } else if (choice === 'Switch to Ollama (free, unlimited)') {
+                            vscode.commands.executeCommand('freebird.configure');
+                        }
+                    });
+                } else {
+                    vscode.window.showWarningMessage(
+                        `Freebird: tab completion unavailable — ${err?.message ?? String(err)}`,
+                        'Configure AI Backend'
+                    ).then(choice => {
+                        if (choice === 'Configure AI Backend') {
+                            vscode.commands.executeCommand('freebird.configure');
+                        }
+                    });
+                }
             }
             return [];
         }
