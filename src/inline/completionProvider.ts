@@ -82,6 +82,7 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
                         'Switch to Ollama (free, unlimited)'
                     ).then(choice => {
                         if (choice === 'Upgrade to Pro') {
+                            trackEvent('upgrade_clicked', 'completion');
                             vscode.env.openExternal(vscode.Uri.parse(UPGRADE_URL));
                         } else if (choice === 'Switch to Ollama (free, unlimited)') {
                             vscode.commands.executeCommand('freebird.configure');

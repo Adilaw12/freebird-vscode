@@ -296,7 +296,10 @@ export function activate(context: vscode.ExtensionContext) {
                         trackEvent('trial_signin_declined');
                         return;
                     }
-                    trackEvent('trial_signin_failed');
+                    // detail is one of the short, bounded messages thrown by
+                    // signInWithGitHub (expired code, timeout, backend
+                    // verification failure) — no PII, safe to send as-is.
+                    trackEvent('trial_signin_failed', err?.message);
                     vscode.window.showErrorMessage(`GitHub sign-in failed: ${err.message}`);
                     return;
                 }
