@@ -113,9 +113,23 @@ export default async function handler(req, res) {
                 // conversion funnel. Recorded in the same daily telemetry hash
                 // as quota_wall_shown / upgrade_clicked so the dashboard can
                 // compute wall → click → paid conversion rates.
-                const paidKey = `telemetry:daily:${new Date().toISOString().slice(0, 10)}`;
+                const today = new Date().toISOString().slice(0, 10);
+                const paidKey = `telemetry:daily:${today}`;
                 await redis.hincrby(paidKey, plan === 'templates' ? 'templates_subscribed' : 'pro_subscribed', 1).catch(() => {});
                 await redis.expire(paidKey, 90 * 24 * 60 * 60).catch(() => {});
+
+                // Same breakdown as backend/api/telemetry.js's countryFunnel hash —
+                // written here too so pro_subscribed lands next to
+                // quota_wall_shown/upgrade_clicked for the same country, letting a
+                // click-to-paid ratio be compared across countries. Only present
+                // when Stripe collected a billing address on this Payment Link;
+                // best-effort, never blocks license activation if absent.
+                const billingCountry = session.customer_details?.address?.country;
+                if (billingCountry && plan !== 'templates') {
+                    const countryFunnelKey = `telemetry:countryFunnel:${today}`;
+                    await redis.hincrby(countryFunnelKey, `${billingCountry}:pro_subscribed`, 1).catch(() => {});
+                    await redis.expire(countryFunnelKey, 90 * 24 * 60 * 60).catch(() => {});
+                }
 
                 console.log(`Freebird ${plan} activated: ${email} → ${key}`);
                 break;

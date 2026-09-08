@@ -25,6 +25,15 @@ const redis = Redis.fromEnv();
 //                                          "tool_error:write_file") — lets a spike be attributed
 //                                          to a specific cause instead of just a raw timestamp
 //                                          in telemetry:errors
+//   telemetry:countryFunnel:{YYYY-MM-DD}  hash  — "country:eventName" → count, for the
+//                                          checkout-funnel events only (quota_wall_shown,
+//                                          upgrade_clicked; pro_subscribed is written here too,
+//                                          from backend/api/webhook.js). Lets a country's
+//                                          click-to-paid ratio be compared against the norm —
+//                                          the closest proxy available for "is Stripe itself
+//                                          the blocker" without a custom Checkout Session flow,
+//                                          since a Payment Link never reports back to us if the
+//                                          customer's card/country is declined mid-checkout.
 //   telemetry:errors:{YYYY-MM-DD}         list  — error event names + detail (capped)
 //   telemetry:session:{sessionId}         string — "1", TTL 1 hour (dedup)
 //   telemetry:machines:{YYYY-MM-DD}       set   — unique machineIds seen that day
@@ -37,6 +46,12 @@ const ERROR_EVENTS = new Set([
     'api_error', 'ollama_not_reachable',
     'commit_failed', 'push_failed', 'tool_error'
 ]);
+
+// The two client-side steps of the checkout funnel worth breaking down by
+// country. Kept to a small allowlist (not every event) so this hash stays
+// bounded — countries × all ~40 event names would grow unbounded for no
+// benefit, since only these two bear on "did Stripe availability cost us."
+const FUNNEL_EVENTS = new Set(['quota_wall_shown', 'upgrade_clicked']);
 
 export default async function handler(req, res) {
     // No CORS restriction — extension calls don't send Origin
@@ -63,6 +78,7 @@ export default async function handler(req, res) {
     const countriesKey = `telemetry:countries:${today}`;
     const ollamaFallbackVersionsKey = `telemetry:ollamaFallbackVersions:${today}`;
     const eventDetailsKey = `telemetry:eventDetails:${today}`;
+    const countryFunnelKey = `telemetry:countryFunnel:${today}`;
     const errorsKey = `telemetry:errors:${today}`;
 
     // Country from Vercel's own edge network — set automatically per request,
@@ -92,6 +108,10 @@ export default async function handler(req, res) {
 
             if (detail) {
                 pipeline.hincrby(eventDetailsKey, `${name}:${detail}`, count);
+            }
+
+            if (country && FUNNEL_EVENTS.has(name)) {
+                pipeline.hincrby(countryFunnelKey, `${country.slice(0, 4)}:${name}`, count);
             }
 
             if (ERROR_EVENTS.has(name)) {
@@ -136,6 +156,7 @@ export default async function handler(req, res) {
         pipeline.expire(countriesKey, TTL);
         pipeline.expire(ollamaFallbackVersionsKey, TTL);
         pipeline.expire(eventDetailsKey, TTL);
+        pipeline.expire(countryFunnelKey, TTL);
         pipeline.expire(errorsKey, TTL);
 
         // Cap error list
