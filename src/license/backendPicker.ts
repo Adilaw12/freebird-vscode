@@ -12,7 +12,7 @@ export interface BackendPickerItem {
 }
 
 const BASE_ITEMS: { name: string; icon: string; value: string; description: string }[] = [
-    { name: 'Freebird Cloud (default)', icon: 'zap',    value: 'cloud',     description: 'Gemini Flash — works instantly, 20 free edits/day' },
+    { name: 'Freebird Cloud (default)', icon: 'zap',    value: 'cloud',     description: 'Gemini Flash — works instantly, 10 free edits/day'},
     { name: 'Ollama (local — free)',    icon: 'server', value: 'ollama',    description: 'Unlimited, 100% private, runs on your machine' },
     { name: 'Anthropic Claude',         icon: 'cloud',  value: 'anthropic', description: 'BYOK — direct-to-LLM speed, total privacy' },
     { name: 'OpenAI',                   icon: 'cloud',  value: 'openai',    description: 'BYOK — direct-to-LLM speed, total privacy' },

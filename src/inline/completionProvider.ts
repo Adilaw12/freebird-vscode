@@ -64,7 +64,7 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
             if (!warnedThisSession) {
                 warnedThisSession = true;
 
-                // Tab completions share the same 20/day cloud quota as chat
+                // Tab completions share the same 10/day cloud quota as chat
                 // (see backend/api/chat.js), but fire far more often — passively,
                 // on nearly every keystroke — so they typically exhaust it long
                 // before a user ever sends a deliberate chat message. Previously

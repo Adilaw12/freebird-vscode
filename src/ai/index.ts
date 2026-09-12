@@ -63,7 +63,7 @@ export function getProvider(context: vscode.ExtensionContext, sessionId: string)
             );
 
         default:
-            // 'cloud' or unrecognised — use cloud tier (Gemini Flash, 20 free edits/day)
+            // 'cloud' or unrecognised — use cloud tier (Gemini Flash, 10 free edits/day)
             return new CloudProvider(context, sessionId);
     }
 }
@@ -150,7 +150,7 @@ class FallbackProvider implements AIProvider {
         await this.context.globalState.update('freebird.fallbackNotified', true);
 
         const action = await vscode.window.showWarningMessage(
-            'Ollama is not reachable — using your free Freebird cloud edits instead (20/day).',
+            'Ollama is not reachable — using your free Freebird cloud edits instead (10/day).',
             'Set up Ollama',
             'Dismiss'
         );

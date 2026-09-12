@@ -1,5 +1,16 @@
 # Changelog
 
+## \[0.13.1] — 2026-09-14
+
+### Changed
+
+* **Free tier daily cloud quota cut from 20 to 10 edits/day**, as announced in the README on 2026-09-06. `DAILY_LIMIT` in `backend/api/chat.js` and `backend/api/fallback.js` (tab completions share the same quota) updated to match, along with every user-facing mention of the old limit — README, in-app chat banner, walkthrough, and backend-picker/Ollama-fallback messages. Everything else on Free (unlimited chat, unlimited local/BYOK, project rules) is unchanged.
+
+### Fixed
+
+* **Tab-completion's "Upgrade to Pro" button never fired `upgrade_clicked`.** Unlike the chat panel's identical button, clicking through from the tab-completion quota wall opened the checkout link but didn't track it — undercounting clicks from what v0.13.0's quota-wall fix made the highest-volume, newly-instrumented surface. Now tagged `upgrade_clicked:completion`, matching `quota_wall_shown:completion`.
+* **`trial_signin_failed` carried no error detail.** GitHub sign-in (gates the free trial) has a real, non-trivial failure rate with no prior visibility into cause. `signInWithGitHub`'s existing short, bounded, non-PII error messages (expired code, timeout, backend verification failure) are now passed through as the event detail.
+
 ## \[0.13.0] — 2026-09-06
 
 ### Added

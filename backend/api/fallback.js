@@ -19,7 +19,7 @@ const redis = Redis.fromEnv();
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 // Daily quota — shared with /api/chat via identical Redis keys
-const DAILY_LIMIT    = 20;  // per machine/session per day
+const DAILY_LIMIT    = 10;  // per machine/session per day (cut from 20 on 2026-09-14)
 const IP_DAILY_LIMIT = 200; // per IP per day — higher so shared networks aren't blocked
 const QUOTA_TTL      = 24 * 60 * 60; // 1 day in seconds
 

@@ -11,7 +11,8 @@
 //   or { error, code } on failure
 //
 // Quota is enforced server-side using Redis (same db as telemetry).
-// 20 free edits per sessionId per UTC day.
+// 10 free edits per sessionId per UTC day (cut from 20 on 2026-09-14 — see
+// README/CHANGELOG for the announcement and rationale).
 // Quota is only incremented on successful responses — failed requests are never charged.
 
 import { Redis } from '@upstash/redis';
@@ -26,7 +27,7 @@ const redis = Redis.fromEnv();
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-const DAILY_LIMIT    = 20;  // per machine/session per day
+const DAILY_LIMIT    = 10;  // per machine/session per day
 const IP_DAILY_LIMIT = 200; // per IP per day — higher so shared networks (offices, VPNs) aren't blocked
 const QUOTA_TTL      = 24 * 60 * 60; // 1 day in seconds
 

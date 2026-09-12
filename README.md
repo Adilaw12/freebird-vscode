@@ -1,8 +1,8 @@
 # Freebird AI — AI Coding Assistant for VS Code
 
-**No setup. No throttling. 20 free AI edits/day.**
+**No setup. No throttling. 10 free AI edits/day.**
 
-[![VS Marketplace](https://img.shields.io/badge/VS%20Marketplace-v0.13.0-0066B8?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=TenLabs.freebird-ai)
+[![VS Marketplace](https://img.shields.io/badge/VS%20Marketplace-v0.13.1-0066B8?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=TenLabs.freebird-ai)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](https://github.com/Adilaw12/freebird-vscode/blob/main/LICENSE)
 [![GitHub](https://img.shields.io/badge/GitHub-Adilaw12%2Ffreebird--vscode-181717?style=flat-square&logo=github)](https://github.com/Adilaw12/freebird-vscode)
 
@@ -12,7 +12,7 @@
 
 **Run full codebase security audits, architecture mapping, and technical debt analysis with Agent mode** — try free for 7 days, no card needed. Pro is $6/month for unlimited multi-file editing, plus sharing a selection with a colleague without giving them your whole codebase — less than a third of Cursor's price, more capability out of the box. Team is $25/month for up to 5 seats.
 
-Install Freebird AI and start coding in seconds — no API keys, no throttling, no configuration. You get **20 free advanced AI edits per day** powered by Gemini Flash Lite, plus free BYOK and unlimited local AI when you want full privacy.
+Install Freebird AI and start coding in seconds — no API keys, no throttling, no configuration. You get **10 free advanced AI edits per day** powered by Gemini Flash Lite, plus free BYOK and unlimited local AI when you want full privacy.
 
 **Copilot throttled? Cursor too expensive? GitHub limits hit?**
 Freebird never blocks you — it picks up where other tools stop.
@@ -37,7 +37,7 @@ Freebird never blocks you — it picks up where other tools stop.
 | Checkpoint + one-click undo, every agent turn | ❌ | Limited | ❌ | ✅ |
 | Local AI (Ollama) | ❌ | ❌ | ✅ | ✅ |
 | BYOK (Claude, GPT-4o, DeepSeek, Qwen, Kimi K3, custom) | ❌ | ✅ | ✅ | ✅ |
-| Unlimited cloud edits | ❌ throttled | ❌ throttled | ❌ 20/day soft cap | ✅ |
+| Unlimited cloud edits | ❌ throttled | ❌ throttled | ❌ 10/day soft cap | ✅ |
 | Open source (MIT) | ❌ | ❌ | ✅ | ✅ |
 
 ---
@@ -86,7 +86,7 @@ We ran our own **Codebase Cartographer** prompt template against this repo — r
 | **Bring your own API keys — BYOK (Anthropic / OpenAI / DeepSeek / Qwen / Kimi K3 / Custom Provider)**, direct-to-LLM speed & total privacy | ✅ | ✅ |
 | AI tab completion (ghost text, as you type) | ✅ | ✅ |
 | Project rules — `.freebird/rules.md`, your own conventions, always loaded | ✅ | ✅ |
-| Inline edit (`Ctrl+Alt+K`) & AI commit, cloud-powered | 20/day | **Unlimited** |
+| Inline edit (`Ctrl+Alt+K`) & AI commit, cloud-powered | 10/day | **Unlimited** |
 | **Multi-file agent edits, terminal commands, checkpoints** | — | ✅ |
 | **Project memory across sessions** | — | ✅ |
 | **Share a selection with a colleague** — a link, not repo access | — | ✅ |
@@ -192,7 +192,7 @@ Run **Freebird: Use Prompt Template** to start from a ready-made prompt — popu
 
 | Model | Best for | Cost |
 |---|---|---|
-| **Gemini Flash Lite (built-in)** | Default free tier — fast, no setup | Free (20/day) |
+| **Gemini Flash Lite (built-in)** | Default free tier — fast, no setup | Free (10/day) |
 | **Claude Haiku 4.5 (built-in, Pro)** | Default Pro cloud model — noticeably stronger than the free tier's | Included in Pro |
 | **Ollama (local)** | Unlimited local AI — free, 100% private | Free |
 | **DeepSeek V4-pro** | Advanced reasoning, coding, debugging | ~$0.14/M tokens |
@@ -217,7 +217,7 @@ If you're in Hong Kong or mainland China, skip the cloud tier and use BYOK with 
 ### Option 1 — Just Install (Recommended)
 1. Install Freebird AI
 2. Open chat (`Ctrl+Alt+O`)
-3. Start coding — 20 free AI edits/day, no setup needed
+3. Start coding — 10 free AI edits/day, no setup needed
 
 ### Option 2 — Ollama (Unlimited Free, Local)
 1. Install [Ollama](https://ollama.com/download)

@@ -368,7 +368,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             }
             // Free tier — route by the backend the user actually configured.
             // Quota is enforced by the SERVER only (backend/api/chat.js,
-            // 20/day). The old client-side 5-edit counter is gone: it
+            // 10/day). The old client-side 5-edit counter is gone: it
             // contradicted the advertised limit and pushed non-Ollama users
             // into a confusing Ollama-fallback path before the real quota
             // wall could ever show. Now the wall is the server's 429.
