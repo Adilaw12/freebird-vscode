@@ -210,6 +210,10 @@ Google and Anthropic each independently restrict API access from Hong Kong and m
 
 If you're in Hong Kong or mainland China, skip the cloud tier and use BYOK with **DeepSeek** or **Qwen** instead — both are Chinese-origin providers with no regional restriction, and DeepSeek in particular is priced competitively for what it offers. **Ollama** (fully local, nothing ever leaves your machine) also works everywhere, regardless of any provider's regional policy.
 
+### Using Freebird in the EU (Data Residency)
+
+Freebird's own cloud backend (Gemini for Free, Claude Haiku for Pro) runs on US-based infrastructure — that's true regardless of Ten Labs being an Australian company, since company registration and server location aren't the same thing. If GDPR-native, EU-hosted processing matters for your work, skip the cloud tier and use BYOK with **Mistral** instead: set Backend to **Custom Provider**, Base URL to `https://api.mistral.ai/v1`, and Model to a current Codestral model id (check [Mistral's API docs](https://docs.mistral.ai/api) for the latest — dated model ids get deprecated, e.g. `codestral-latest` no longer resolves). Mistral is Paris-headquartered, hosts inference in Paris and Frankfurt by default, and is subject to GDPR rather than the US CLOUD Act. **Ollama** (fully local, nothing ever leaves your machine) also works everywhere, regardless of any provider's jurisdiction.
+
 ---
 
 ## Getting Started
