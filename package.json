@@ -1,8 +1,8 @@
 {
   "name": "freebird-ai",
   "displayName": "Freebird AI",
-  "description": "AI coding assistant — 20 free AI edits/day, no setup. Free BYOK (Claude, GPT-4o, DeepSeek) & local Ollama. Inline edit, AI commit. Pro $6/mo: Agent mode (multi-file edits) + unlimited.",
-  "version": "0.13.1",
+  "description": "AI coding assistant — 10 free AI edits/day, no setup. Free BYOK (Claude, GPT-4o, DeepSeek) & local Ollama. Inline edit, AI commit. Pro $6/mo: Agent mode (multi-file edits) + unlimited.",
+  "version": "0.13.2",
   "publisher": "TenLabs",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -57,12 +57,12 @@
       {
         "id": "freebirdWelcome",
         "title": "Get started with Freebird AI",
-        "description": "20 free cloud edits a day, no setup — from install to your first AI edit in under a minute.",
+        "description": "10 free cloud edits a day, no setup — from install to your first AI edit in under a minute.",
         "steps": [
           {
             "id": "chooseBackend",
             "title": "Pick how Freebird runs",
-            "description": "Freebird works out of the box with **20 free cloud edits/day** (Gemini Flash) — no setup needed. Prefer unlimited local AI or your own API key? Configure that here anytime.\n[Configure AI Backend](command:freebird.configure)",
+            "description": "Freebird works out of the box with **10 free cloud edits/day** (Gemini Flash) — no setup needed. Prefer unlimited local AI or your own API key? Configure that here anytime.\n[Configure AI Backend](command:freebird.configure)",
             "media": { "markdown": "media/walkthrough/choose-backend.md" },
             "completionEvents": [ "onCommand:freebird.configure" ]
           },
@@ -229,7 +229,7 @@
             "custom"
           ],
           "enumDescriptions": [
-            "Freebird Cloud (Gemini Flash) — works instantly, 20 free edits/day, no setup",
+            "Freebird Cloud (Gemini Flash) — works instantly, 10 free edits/day, no setup",
             "Local AI via Ollama — unlimited, 100% private, runs on your machine",
             "Anthropic Claude API — BYOK, direct-to-LLM speed, free",
             "OpenAI API — BYOK, direct-to-LLM speed, free",

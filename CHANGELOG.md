@@ -1,5 +1,11 @@
 # Changelog
 
+## \[0.13.2] — 2026-09-14
+
+### Fixed
+
+* **`package.json`'s own quota references were missed in 0.13.1's 20→10 sweep.** The Marketplace listing's short description, two walkthrough step descriptions, and the backend-picker setting's `enumDescriptions` all live in `package.json`, separate from README/source files already checked — the Marketplace card kept showing "20 free AI edits/day" after 0.13.1 shipped. All four updated to 10/day.
+
 ## \[0.13.1] — 2026-09-14
 
 ### Changed
