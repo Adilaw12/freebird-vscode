@@ -718,5 +718,40 @@ export const TEMPLATE_CATALOG = [
             "actually assert on the meaningful behavior) — coverage percentage alone doesn't catch this.\n\n" +
             "Present this as a prioritized list a team could actually act on, not a wall of uncovered line " +
             "numbers. If asked, write tests for the highest-priority gaps first."
+    },
+
+    // ── Data Analysis ────────────────────────────────────────────────────────
+    {
+        id: 'exploratory-data-analysis',
+        label: 'Exploratory Data Analysis',
+        description: 'Profiles a dataset for data-quality issues, distributions, and correlations that actually matter before you build on it',
+        group: 'data-analysis',
+        tier: 'paid',
+        prompt:
+            "Act as a data analyst doing exploratory data analysis on the dataset I point you at (a CSV/Parquet " +
+            "file, a DataFrame already loaded in a notebook or script, or a database table). Produce a " +
+            "prioritized profile, not a wall of summary statistics.\n\n" +
+            "Check specifically for:\n" +
+            "1. Shape and schema — row/column count, dtypes per column, and whether any column's dtype looks " +
+            "wrong for its content (e.g. a numeric ID stored as float, a date stored as a string).\n" +
+            "2. Missing values — which columns, what percentage, and whether the pattern looks random or " +
+            "structural (e.g. always missing together, or correlated with another column's value).\n" +
+            "3. Duplicate rows or duplicate keys where the column names imply a unique identifier.\n" +
+            "4. Outliers in numeric columns — state the method used (IQR or z-score) and cite the actual row " +
+            "indices and values found, not just 'there are some outliers'.\n" +
+            "5. Distribution shape per numeric column — flag meaningful skew, unexpected clustering at a single " +
+            "value (often a disguised null, e.g. 0 or -1), or a range that doesn't match what the column name " +
+            "implies.\n" +
+            "6. Correlations between numeric columns — report only the ones strong enough to matter for " +
+            "analysis or modelling, not the full matrix.\n" +
+            "7. Categorical columns — cardinality, class imbalance, and inconsistent value formatting (e.g. " +
+            "'NSW' vs 'New South Wales' vs 'nsw' meaning the same thing).\n" +
+            "8. If there's a date/time column: gaps in the expected frequency, and any obvious seasonality worth " +
+            "noting before someone builds a time-series model on it.\n\n" +
+            "For every finding, cite the exact column name and specific row/value examples — not a generic " +
+            "statement. Prioritize what would actually break or mislead an analysis built on this data over " +
+            "minor cosmetic issues. Close with concrete next steps (specific cleaning operations, columns " +
+            "needing transformation, or a note on what to watch for in a train/test split) rather than stopping " +
+            "at description."
     }
 ];
