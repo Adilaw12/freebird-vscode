@@ -2,9 +2,9 @@
 
 **No setup. No throttling. 10 free AI edits/day.**
 
-[![VS Marketplace](https://img.shields.io/badge/VS%20Marketplace-v0.13.2-0066B8?style=flat-square)](https://marketplace.visualstudio.com/items?itemName=TenLabs.freebird-ai)
+[![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/TenLabs.freebird-ai?style=flat-square&label=VS%20Marketplace&color=0066B8)](https://marketplace.visualstudio.com/items?itemName=TenLabs.freebird-ai)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](https://github.com/Adilaw12/freebird-vscode/blob/main/LICENSE)
-[![GitHub](https://img.shields.io/badge/GitHub-Adilaw12%2Ffreebird--vscode-181717?style=flat-square&logo=github)](https://github.com/Adilaw12/freebird-vscode)
+[![GitHub Stars](https://img.shields.io/github/stars/Adilaw12/freebird-vscode?style=flat-square&logo=github&label=stars&color=181717)](https://github.com/Adilaw12/freebird-vscode)
 
 > AI coding assistant · Copilot alternative · Cursor alternative · multi-file AI edits · AI refactoring · codebase search · Claude Haiku · Gemini Flash · Kimi K3 · custom LLM providers (OpenRouter, Together, self-hosted) · prompt templates · Ollama · BYOK · local AI · privacy-first
 
