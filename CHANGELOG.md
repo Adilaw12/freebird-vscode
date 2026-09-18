@@ -1,5 +1,16 @@
 # Changelog
 
+## \[0.13.3] — 2026-09-19
+
+### Changed
+
+* **The free 7-day Pro trial no longer requires GitHub sign-in.** Telemetry showed that sign-in step alone was losing ~86% of everyone who reached it (43 of 50 declined or failed, over 90 days) — trial-to-paid conversion itself was fine (7 trials, 2 paid), the problem was people never reaching a trial at all. The trial is now gated on the same stable per-device `machineId` already used for the free-tier daily quota, and the sign-in prompt is gone entirely — clicking "Try Pro free for 7 days" starts the trial immediately. This trades some abuse-resistance (machineId resets on reinstall) for removing the friction; accepted at current volume.
+
+### Fixed
+
+* **`trial_started` was double-counted in the daily funnel.** Every real trial start incremented the counter twice — once server-side (`api/start-trial.js`, tied to the actual license write) and once client-side (`trackEvent('trial_started')` after the extension saw a successful response). The client-side call is removed; the server-side count, tied to an actual persisted license, is now the only source.
+* **Trial sign-in failures/declines could be lost before their reason was recorded.** These fired right before a user was likely to close VS Code in frustration, and the normal 60-second telemetry batch window meant the *why* (the only diagnostically useful part) could be dropped. They now flush immediately instead of waiting for the batch. (Moot for the sign-in-specific events now that the sign-in step itself is gone, but `trial_start_failed`/`trial_already_used` keep this immediate-flush behavior going forward.)
+
 ## \[0.13.2] — 2026-09-14
 
 ### Fixed

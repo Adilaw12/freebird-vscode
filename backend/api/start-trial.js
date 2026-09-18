@@ -1,11 +1,14 @@
-// api/start-trial.js — self-serve 7-day Pro trial, no email required.
+// api/start-trial.js — self-serve 7-day Pro trial, no sign-in required.
 //
-// Replaces the old "email the founder" trial flow. Gated on a GitHub-verified
-// session token (same identity used for the free-tier quota) so a trial can
-// only be claimed once per real GitHub account, not once per install.
+// Replaces the old "email the founder" trial flow, and later the GitHub-
+// sign-in-gated flow (telemetry showed that sign-in step alone was losing
+// ~86% of everyone who reached it). Gated on the client's stable per-device
+// machineId instead — same identity already used as the free-tier quota
+// fallback. Trades some abuse-resistance for near-zero friction: machineId
+// resets on reinstall, so a determined user could reclaim a trial. Accepted
+// at current volume; revisit if scripted abuse actually shows up.
 
 import { Redis } from '@upstash/redis';
-import { verifySession } from '../lib/authToken.js';
 import { generateKey } from '../lib/keygen.js';
 import { TRIAL_DAYS } from '../lib/license.js';
 
@@ -18,14 +21,14 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-    const { authToken } = req.body ?? {};
-    const session = authToken ? verifySession(authToken) : null;
+    const { machineId } = req.body ?? {};
 
-    if (!session) {
-        return res.status(401).json({ error: 'Sign in with GitHub first.', code: 'AUTH_REQUIRED' });
+    if (!machineId || typeof machineId !== 'string' || !machineId.trim()) {
+        return res.status(400).json({ error: 'Missing device id.', code: 'MACHINE_ID_REQUIRED' });
     }
+    const safeMachineId = machineId.trim().slice(0, 48);
 
-    const trialMarkerKey = `trial:gh:${session.sub}`;
+    const trialMarkerKey = `trial:machine:${safeMachineId}`;
 
     let existing;
     try {
@@ -36,7 +39,7 @@ export default async function handler(req, res) {
     }
 
     if (existing) {
-        return res.status(409).json({ error: 'Free trial already used on this GitHub account.', code: 'TRIAL_USED' });
+        return res.status(409).json({ error: 'Free trial already used on this device.', code: 'TRIAL_USED' });
     }
 
     const key = generateKey('FBT');
@@ -45,8 +48,7 @@ export default async function handler(req, res) {
     const nowIso = new Date(now).toISOString();
 
     const license = {
-        githubId: session.sub,
-        login: session.login,
+        machineId: safeMachineId,
         key,
         plan: 'trial',
         status: 'active',
@@ -62,7 +64,7 @@ export default async function handler(req, res) {
 
     try {
         await redis.set(`license:${key}`, license);
-        // Permanent marker (no TTL) — one trial per GitHub account, ever.
+        // Permanent marker (no TTL) — one trial per device, ever.
         await redis.set(trialMarkerKey, { key, claimedAt: nowIso });
 
         // Funnel: trials sit between "quota wall shown" and "subscribed" —
@@ -75,6 +77,6 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: 'Could not create trial. Please try again.' });
     }
 
-    console.log(`Freebird trial started: ${session.login} -> ${key}`);
+    console.log(`Freebird trial started: machine ${safeMachineId} -> ${key}`);
     return res.status(200).json({ key, trialEndsAt });
 }

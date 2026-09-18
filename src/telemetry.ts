@@ -4,6 +4,15 @@ const API_BASE = 'https://freebird-backend.vercel.app';
 const FLUSH_INTERVAL_MS = 60_000; // flush every 60 seconds
 const SESSION_KEY = 'freebird.telemetrySession';
 
+// These fire right at the moments a frustrated user is most likely to close
+// VS Code immediately after — batching them into the normal 60s flush risks
+// losing the only diagnostic detail we'll ever get for that failure. Flush
+// right away instead of waiting for the timer.
+const IMMEDIATE_FLUSH_EVENTS = new Set([
+    'trial_start_failed',
+    'trial_already_used'
+]);
+
 let _enabled = false;
 let _context: vscode.ExtensionContext | undefined;
 let _machineId = '';
@@ -76,6 +85,10 @@ export function trackEvent(name: string, detail?: string): void {
     const key = detail || '';
     if (!_pendingEvents[name]) _pendingEvents[name] = {};
     _pendingEvents[name][key] = (_pendingEvents[name][key] ?? 0) + 1;
+
+    if (IMMEDIATE_FLUSH_EVENTS.has(name)) {
+        void flush();
+    }
 }
 
 export function getSessionId(): string {

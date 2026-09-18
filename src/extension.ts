@@ -273,46 +273,16 @@ export function activate(context: vscode.ExtensionContext) {
         }),
 
         vscode.commands.registerCommand('freebird.startTrial', async () => {
-            let session = await getStoredSession(context);
-
-            if (!session) {
-                const choice = await vscode.window.showInformationMessage(
-                    'Starting your free 7-day Pro trial needs a quick GitHub sign-in (so trials can\'t be reused) — no email required.',
-                    'Sign in with GitHub', 'Cancel'
-                );
-                if (choice !== 'Sign in with GitHub') {
-                    trackEvent('trial_signin_declined');
-                    return;
-                }
-
-                try {
-                    session = await vscode.window.withProgress(
-                        { location: vscode.ProgressLocation.Notification, title: 'Waiting for GitHub sign-in…', cancellable: false },
-                        () => signInWithGitHub(context)
-                    );
-                    trackEvent('github_signed_in');
-                } catch (err: any) {
-                    if (err?.message === 'CANCELLED') {
-                        trackEvent('trial_signin_declined');
-                        return;
-                    }
-                    // detail is one of the short, bounded messages thrown by
-                    // signInWithGitHub (expired code, timeout, backend
-                    // verification failure) — no PII, safe to send as-is.
-                    trackEvent('trial_signin_failed', err?.message);
-                    vscode.window.showErrorMessage(`GitHub sign-in failed: ${err.message}`);
-                    return;
-                }
-            }
-
-            const activeSession = session;
             await vscode.window.withProgress(
                 { location: vscode.ProgressLocation.Notification, title: 'Starting your Pro trial…', cancellable: false },
                 async () => {
-                    const result = await startTrial(context, activeSession.sessionToken);
+                    const result = await startTrial(context, getMachineId());
 
                     if (result.ok) {
-                        trackEvent('trial_started');
+                        // Not tracked client-side: api/start-trial.js already
+                        // increments 'trial_started' server-side, atomically
+                        // with the actual license write — tracking it here too
+                        // double-counted every real trial in the daily funnel.
                         vscode.window.showInformationMessage(
                             '🎉 7-day Freebird Pro trial activated — Agent mode, unlimited cloud edits, and project memory. Enjoy!'
                         );
@@ -320,7 +290,7 @@ export function activate(context: vscode.ExtensionContext) {
                     } else if (result.code === 'TRIAL_USED') {
                         trackEvent('trial_already_used');
                         const action = await vscode.window.showWarningMessage(
-                            'You\'ve already used your free trial on this GitHub account.',
+                            'You\'ve already used your free trial on this device.',
                             'Upgrade to Pro'
                         );
                         if (action === 'Upgrade to Pro') {

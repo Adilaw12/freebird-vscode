@@ -141,18 +141,19 @@ export function getCachedLicenseStatus(): LicenseStatus {
 }
 
 /**
- * Claims a self-serve 7-day Pro trial for the signed-in GitHub account and,
- * on success, activates it immediately — no manual key copy/paste needed.
+ * Claims a self-serve 7-day Pro trial for this device (machineId-gated, no
+ * sign-in required) and, on success, activates it immediately — no manual
+ * key copy/paste needed.
  */
 export async function startTrial(
     context: vscode.ExtensionContext,
-    sessionToken: string
+    machineId: string
 ): Promise<StartTrialResult> {
     try {
         const res = await fetch(`${API_BASE}/api/start-trial`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ authToken: sessionToken }),
+            body: JSON.stringify({ machineId }),
             signal: AbortSignal.timeout(10_000)
         });
 
