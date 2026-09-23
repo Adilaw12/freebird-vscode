@@ -3,6 +3,7 @@ src/**
 out/**/*.js.map
 out/**/*.d.ts
 node_modules/**
+!node_modules/ignore/**
 tsconfig.json
 package-lock.json
 generate-icon.js

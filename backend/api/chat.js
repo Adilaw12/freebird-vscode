@@ -21,6 +21,7 @@ import { verifySession } from '../lib/authToken.js';
 import { isLicenseActive, hasTemplateLibraryAccess, FREE_TEMPLATE_IDS } from '../lib/license.js';
 import { fetchGeminiWithFallback, PRO_GEMINI_MODEL_CANDIDATES } from '../lib/geminiModel.js';
 import { fetchAnthropicWithFallback, anthropicConfigured } from '../lib/anthropicModel.js';
+import { fetchCerebrasWithFallback, cerebrasConfigured } from '../lib/cerebrasModel.js';
 import { quotaKeysFor, reserveQuota, refundQuota, reserveSingleCounter } from '../lib/quota.js';
 
 const redis = Redis.fromEnv();
@@ -59,7 +60,7 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: 'Server misconfigured', code: 'NO_API_KEY' });
     }
 
-    const { messages, sessionId: rawSession, authToken, licenseKey, templateId, templateLicenseKey, maxTokens = 2048 } = req.body ?? {};
+    const { messages, sessionId: rawSession, authToken, licenseKey, templateId, templateLicenseKey, maxTokens = 2048, isTabCompletion } = req.body ?? {};
 
     if (!Array.isArray(messages) || messages.length === 0) {
         return res.status(400).json({ error: 'messages required', code: 'BAD_REQUEST' });
@@ -180,6 +181,7 @@ export default async function handler(req, res) {
     const systemParts = [];
     const geminiContents = [];
     const anthropicMessages = [];
+    const cerebrasMessages = [];
 
     for (const msg of messages) {
         if (msg.role === 'system') {
@@ -190,6 +192,10 @@ export default async function handler(req, res) {
                 parts: [{ text: msg.content }]
             });
             anthropicMessages.push({
+                role: msg.role === 'assistant' ? 'assistant' : 'user',
+                content: msg.content
+            });
+            cerebrasMessages.push({
                 role: msg.role === 'assistant' ? 'assistant' : 'user',
                 content: msg.content
             });
@@ -225,6 +231,28 @@ export default async function handler(req, res) {
         })
     };
 
+    // OpenAI-compatible shape — system prompt is just another message in the
+    // array (unlike Anthropic's separate top-level `system` field), placed first.
+    //
+    // reasoning_effort: 'low' is NOT optional — verified live against the
+    // real API that gpt-oss-120b defaults to heavy chain-of-thought,
+    // streamed as separate delta.reasoning tokens BEFORE any delta.content.
+    // At this feature's tight maxTokens (128), the default reasoning depth
+    // can consume the entire budget and return an empty completion with
+    // finish_reason:"length" — confirmed happening at 30 tokens in testing.
+    // 'none' is rejected by this model (only low/medium/high accepted);
+    // 'low' still reasons some but reliably leaves room for real content.
+    const cerebrasBody = {
+        max_tokens: maxTokens,
+        temperature: 0.2,
+        stream: true,
+        reasoning_effort: 'low',
+        messages: [
+            ...(systemParts.length > 0 ? [{ role: 'system', content: systemParts.join('\n\n') }] : []),
+            ...cerebrasMessages
+        ]
+    };
+
     // ── Stream provider response back to extension ──────────────────────────
     try {
         let upstream, modelUsed, provider;
@@ -241,6 +269,27 @@ export default async function handler(req, res) {
                 }
             } catch (err) {
                 console.error('Anthropic request failed, falling back to Gemini:', err);
+            }
+        }
+
+        // Free-tier tab completions only — Pro/unmetered already gets Haiku
+        // above. 8s timeout (not the usual 30s): Cerebras is fast enough that
+        // a slow response already signals trouble (including its own rate
+        // limiting), so bailing quickly to Gemini keeps a misbehaving
+        // Cerebras request from making a completion feel slower than the
+        // pre-Cerebras baseline — defeating the entire point of using it.
+        if (!upstream && !unmetered && isTabCompletion && cerebrasConfigured()) {
+            try {
+                const result = await fetchCerebrasWithFallback(cerebrasBody, { signal: AbortSignal.timeout(8_000) });
+                if (result.response.ok) {
+                    upstream = result.response;
+                    modelUsed = result.modelUsed;
+                    provider = 'cerebras';
+                } else {
+                    console.error('Cerebras error, falling back to Gemini:', result.response.status, await result.response.text().catch(() => ''));
+                }
+            } catch (err) {
+                console.error('Cerebras request failed, falling back to Gemini:', err);
             }
         }
 
@@ -313,8 +362,11 @@ export default async function handler(req, res) {
                     const parsed = JSON.parse(jsonStr);
                     // Gemini: candidates[0].content.parts[0].text
                     // Anthropic: content_block_delta events carry delta.text
+                    // Cerebras: OpenAI-compatible choices[0].delta.content
                     const text = provider === 'anthropic'
                         ? (parsed?.type === 'content_block_delta' ? parsed?.delta?.text : undefined)
+                        : provider === 'cerebras'
+                        ? parsed?.choices?.[0]?.delta?.content
                         : parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
                     if (text) res.write(text);
                 } catch { /* skip malformed SSE lines */ }

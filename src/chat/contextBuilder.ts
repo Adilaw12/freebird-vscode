@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import { isPathIgnored } from '../agent/ignoreCheck';
 
 const MAX_FILE_CHARS   = 8_000;
 const CONTEXT_LINES    = 60;
@@ -70,9 +71,15 @@ export async function resolveMentions(text: string): Promise<MentionResult> {
             const stat = fs.statSync(fullPath);
             if (!stat.isFile()) continue;
 
+            const rel = vscode.workspace.asRelativePath(fullPath);
+            if (isPathIgnored(workspaceRoot, rel)) {
+                mentionContext += `**@${rel}:** excluded by .gitignore/.freebirdignore — not readable by Freebird.\n\n`;
+                resolved.push(match[0]);
+                continue;
+            }
+
             const content = fs.readFileSync(fullPath, 'utf8');
             const ext     = path.extname(fullPath).slice(1) || 'text';
-            const rel     = vscode.workspace.asRelativePath(fullPath);
             const budget  = Math.min(MAX_FILE_CHARS, MAX_MENTION_CHARS - totalChars);
 
             if (budget <= 0) break;
@@ -105,5 +112,8 @@ export async function listWorkspaceFiles(maxFiles = 200): Promise<string[]> {
         '{**/node_modules/**,**/.git/**,**/dist/**,**/build/**,**/__pycache__/**}',
         maxFiles
     );
-    return uris.map(u => vscode.workspace.asRelativePath(u));
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const rels = uris.map(u => vscode.workspace.asRelativePath(u));
+    if (!workspaceRoot) return rels;
+    return rels.filter(r => !isPathIgnored(workspaceRoot, r));
 }

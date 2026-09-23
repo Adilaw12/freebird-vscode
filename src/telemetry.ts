@@ -1,8 +1,40 @@
 import * as vscode from 'vscode';
+import * as crypto from 'crypto';
 
 const API_BASE = 'https://freebird-backend.vercel.app';
 const FLUSH_INTERVAL_MS = 60_000; // flush every 60 seconds
 const SESSION_KEY = 'freebird.telemetrySession';
+
+// VS Code returns this exact literal string from vscode.env.machineId when
+// telemetry is disabled/restricted at the OS or VS Code level — a known,
+// documented upstream quirk (see microsoft/vscode-extension-telemetry
+// issues: one report showed 10,000+ events from ~20 different countries all
+// sharing this identical "machine" id). Since machineId is Freebird's only
+// per-device key for trial-claim gating AND free-tier quota (see
+// initTelemetry below, and getMachineId's callers), using it verbatim would
+// silently collapse every such user — worldwide, indefinitely — into one
+// shared trial-claim slot and one shared daily quota pool. Detected and
+// confirmed live in production data: a single Redis identity
+// ("m-someValuemachineId") had been accumulating activity since the day
+// machineId-based quota shipped.
+const VSCODE_MACHINE_ID_PLACEHOLDER = 'someValue.machineId';
+const FALLBACK_MACHINE_ID_KEY = 'freebird.fallbackMachineId';
+
+// Returns a per-device id: VS Code's real machineId normally, or — for users
+// hitting the placeholder above — a UUID generated once and persisted in
+// this extension's own globalState, so each real affected user gets their
+// own stable identity instead of colliding with every other such user.
+function resolveMachineId(context: vscode.ExtensionContext): string {
+    const raw = vscode.env.machineId;
+    if (raw !== VSCODE_MACHINE_ID_PLACEHOLDER) return raw;
+
+    let fallback = context.globalState.get<string>(FALLBACK_MACHINE_ID_KEY);
+    if (!fallback) {
+        fallback = crypto.randomUUID();
+        context.globalState.update(FALLBACK_MACHINE_ID_KEY, fallback);
+    }
+    return fallback;
+}
 
 // These fire right at the moments a frustrated user is most likely to close
 // VS Code immediately after — batching them into the normal 60s flush risks
@@ -37,7 +69,7 @@ export function initTelemetry(context: vscode.ExtensionContext): void {
     // requests) so the daily limit can't be reset by quitting VS Code and
     // reopening — machineId persists across restarts. Also reported in
     // telemetry for unique-user analytics.
-    _machineId = `m-${vscode.env.machineId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 40)}`;
+    _machineId = `m-${resolveMachineId(context).replace(/[^a-zA-Z0-9]/g, '').slice(0, 40)}`;
 
     // Per-launch session ID for session-level analytics. Namespaced by machine
     // so sessions can still be attributed to a machine.

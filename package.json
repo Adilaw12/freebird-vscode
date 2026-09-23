@@ -2,7 +2,7 @@
   "name": "freebird-ai",
   "displayName": "Freebird AI",
   "description": "AI coding assistant — 10 free AI edits/day, no setup. Free BYOK (Claude, GPT-4o, DeepSeek) & local Ollama. Inline edit, AI commit. Pro $6/mo: Agent mode (multi-file edits) + unlimited.",
-  "version": "0.13.3",
+  "version": "0.13.4",
   "publisher": "TenLabs",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -63,36 +63,56 @@
             "id": "chooseBackend",
             "title": "Pick how Freebird runs",
             "description": "Freebird works out of the box with **10 free cloud edits/day** (Gemini Flash) — no setup needed. Prefer unlimited local AI or your own API key? Configure that here anytime.\n[Configure AI Backend](command:freebird.configure)",
-            "media": { "markdown": "media/walkthrough/choose-backend.md" },
-            "completionEvents": [ "onCommand:freebird.configure" ]
+            "media": {
+              "markdown": "media/walkthrough/choose-backend.md"
+            },
+            "completionEvents": [
+              "onCommand:freebird.configure"
+            ]
           },
           {
             "id": "signIn",
             "title": "Sign in with GitHub",
             "description": "Signing in with GitHub verifies your free daily quota is really yours — it takes 10 seconds and doesn't need a password.\n[Sign in with GitHub](command:freebird.signInWithGitHub)",
-            "media": { "markdown": "media/walkthrough/sign-in.md" },
-            "completionEvents": [ "onCommand:freebird.signInWithGitHub" ]
+            "media": {
+              "markdown": "media/walkthrough/sign-in.md"
+            },
+            "completionEvents": [
+              "onCommand:freebird.signInWithGitHub"
+            ]
           },
           {
             "id": "firstEdit",
             "title": "Make your first AI edit",
             "description": "Open the Freebird chat, select some code and press **Ctrl+Alt+K** (**Cmd+Alt+K** on Mac) for an inline edit, or just ask a question in the sidebar.\n[Open Freebird Chat](command:freebird.openChat)",
-            "media": { "markdown": "media/walkthrough/first-edit.md" },
-            "completionEvents": [ "onCommand:freebird.openChat" ]
+            "media": {
+              "markdown": "media/walkthrough/first-edit.md"
+            },
+            "completionEvents": [
+              "onCommand:freebird.openChat"
+            ]
           },
           {
             "id": "learnCommands",
             "title": "Learn the shortcuts",
             "description": "Type `/help` in the chat anytime for the full command list — `/commit`, `/status`, `@filename` mentions, and your current quota.\n`Ctrl+Alt+O` / `Cmd+Alt+O` — open chat\n`Ctrl+Alt+K` / `Cmd+Alt+K` — inline edit selection",
-            "media": { "markdown": "media/walkthrough/commands.md" },
-            "completionEvents": [ "onView:freebird.chatView" ]
+            "media": {
+              "markdown": "media/walkthrough/commands.md"
+            },
+            "completionEvents": [
+              "onView:freebird.chatView"
+            ]
           },
           {
             "id": "goPro",
             "title": "Need more? Go unlimited",
             "description": "Pro unlocks Agent mode — multi-file edits and terminal commands, with a checkpoint saved on every turn so you can undo the whole thing in one click if anything goes wrong. Plus unlimited cloud edits and project memory. $6/month, 7-day free trial, no card needed.\n[Upgrade to Pro](command:freebird.upgradeToPro)",
-            "media": { "markdown": "media/walkthrough/go-pro.md" },
-            "completionEvents": [ "onCommand:freebird.upgradeToPro" ]
+            "media": {
+              "markdown": "media/walkthrough/go-pro.md"
+            },
+            "completionEvents": [
+              "onCommand:freebird.upgradeToPro"
+            ]
           }
         ]
       }
@@ -285,6 +305,16 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "Allow Freebird to collect anonymous usage statistics (feature usage counts, no code or personal data). Helps us improve the extension."
+        },
+        "freebird.agent.respectGitignore": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Exclude files matched by `.gitignore` from every agent tool (read, write, search, and `@mentions`)."
+        },
+        "freebird.agent.ignoreFile": {
+          "type": "string",
+          "default": ".freebirdignore",
+          "markdownDescription": "Name of an additional custom ignore file (`.gitignore` syntax) at the workspace root. Leave blank to disable."
         }
       }
     }
@@ -300,12 +330,15 @@
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.90.0",
-    "typescript": "^5.4.0",
-    "@vscode/vsce": "^3.9.2"
+    "@vscode/vsce": "^3.9.2",
+    "typescript": "^5.4.0"
   },
   "overrides": {
     "js-yaml": "^4.3.1",
     "fast-uri": "^3.1.5",
     "undici": "^7.29.0"
+  },
+  "dependencies": {
+    "ignore": "^7.0.9"
   }
 }

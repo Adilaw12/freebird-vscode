@@ -5,6 +5,7 @@ import * as crypto from 'crypto';
 import { chunkFile, INDEXABLE_EXTENSIONS, MAX_INDEXABLE_FILE_BYTES } from './chunker';
 import { loadIndex, saveIndex, emptyIndex, addFileChunks, removeFileChunks, search, IndexData, IndexedChunk } from './store';
 import { getEmbeddingProvider } from './embeddings';
+import { isPathIgnored } from '../agent/ignoreCheck';
 
 const EXCLUDE_GLOB = '{**/node_modules/**,**/.git/**,**/dist/**,**/out/**,**/build/**,**/.freebird/**}';
 const MAX_FILES = 3000; // sanity cap for huge monorepos — avoids pathological first-index cost/time
@@ -83,6 +84,7 @@ export async function buildIndex(
 
     for (const uri of candidates) {
         const relPath = toRelPath(root, uri.fsPath);
+        if (isPathIgnored(root, relPath)) continue;
         let stat: fs.Stats;
         try {
             stat = fs.statSync(uri.fsPath);

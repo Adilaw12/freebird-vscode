@@ -11,6 +11,7 @@ import { previewHtmlFile } from './preview';
 import { ToolSchema } from '../ai/provider';
 import { searchCodebaseSemantic } from '../index/indexer';
 import * as checkpoint from './checkpoint';
+import { isPathIgnored, ignoreBlockMessage } from './ignoreCheck';
 
 export interface ToolCall {
     action: string;
@@ -289,9 +290,10 @@ export async function getWorkspaceTree(): Promise<string> {
             '{**/node_modules/**,**/.git/**,**/dist/**,**/out/**,**/build/**}',
             500
         );
+        const root = getWorkspaceRoot();
         _workspaceTreeCache = uris
             .map(u => vscode.workspace.asRelativePath(u))
-            .filter(p => !p.startsWith('.'))
+            .filter(p => !p.startsWith('.') && !isPathIgnored(root, p))
             .sort()
             .join('\n');
         return _workspaceTreeCache;
@@ -372,6 +374,9 @@ export async function executeToolCall(
 async function readFileTool(tool: ToolCall): Promise<ToolResult> {
     const relPath = String(tool.path ?? '');
     if (!relPath) return { success: false, output: 'read_file requires "path".' };
+    if (isPathIgnored(getWorkspaceRoot(), relPath)) {
+        return { success: false, output: ignoreBlockMessage(relPath, 'read') };
+    }
 
     const full = resolveWorkspacePath(relPath);
     const content = fs.readFileSync(full, 'utf8');
@@ -381,7 +386,11 @@ async function readFileTool(tool: ToolCall): Promise<ToolResult> {
 async function listFilesTool(tool: ToolCall): Promise<ToolResult> {
     const pattern = String(tool.pattern ?? '**/*');
     const uris = await vscode.workspace.findFiles(pattern, EXCLUDE_GLOB, 500);
-    const files = uris.map(u => vscode.workspace.asRelativePath(u)).sort();
+    const root = getWorkspaceRoot();
+    const files = uris
+        .map(u => vscode.workspace.asRelativePath(u))
+        .filter(f => !isPathIgnored(root, f))
+        .sort();
     return { success: true, output: files.length ? files.join('\n') : 'No files matched.' };
 }
 
@@ -399,6 +408,7 @@ async function searchCodeTool(tool: ToolCall): Promise<ToolResult> {
 
     // Fallback: manual file-by-file search with regex support
     const uris = await vscode.workspace.findFiles(filePattern, EXCLUDE_GLOB, 1000);
+    const searchRoot = getWorkspaceRoot();
     let regex: RegExp;
     try {
         regex = new RegExp(query, 'g');
@@ -410,6 +420,9 @@ async function searchCodeTool(tool: ToolCall): Promise<ToolResult> {
     for (const uri of uris) {
         if (matches.length >= MAX_SEARCH_MATCHES) break;
 
+        const rel = vscode.workspace.asRelativePath(uri);
+        if (isPathIgnored(searchRoot, rel)) continue;
+
         let text: string;
         try {
             text = fs.readFileSync(uri.fsPath, 'utf8');
@@ -418,7 +431,6 @@ async function searchCodeTool(tool: ToolCall): Promise<ToolResult> {
         }
         if (text.includes('\0')) continue;
 
-        const rel = vscode.workspace.asRelativePath(uri);
         const lines = text.split('\n');
         for (let i = 0; i < lines.length && matches.length < MAX_SEARCH_MATCHES; i++) {
             if (regex.test(lines[i])) {
@@ -467,7 +479,16 @@ async function ripgrepSearch(query: string, filePattern: string): Promise<string
         execFile('rg', args, { cwd: root, timeout: 10_000, maxBuffer: 512 * 1024 },
             (err, stdout) => {
                 if (err && !stdout) { resolve(null); return; }
-                const output = stdout.trim();
+                // Ripgrep already respects .gitignore itself by default, but not
+                // the ALWAYS_EXCLUDE safety list or a custom .freebirdignore —
+                // post-filter through the same check used everywhere else so
+                // there's one source of truth instead of building a second
+                // --glob-based exclusion mechanism just for this path.
+                const lines = stdout.trim().split('\n').filter(line => {
+                    const match = /^(.*?):\d+:/.exec(line);
+                    return !match || !isPathIgnored(root, match[1]);
+                });
+                const output = lines.join('\n').trim();
                 resolve(output ? truncate(output, MAX_TOOL_OUTPUT_CHARS) : 'No matches found.');
             }
         );
@@ -640,6 +661,9 @@ async function writeFileTool(tool: ToolCall, onApprovalNeeded: ApprovalFn, turnI
     const relPath = String(tool.path ?? '');
     const content = String(tool.content ?? '');
     if (!relPath) return { success: false, output: 'write_file requires "path".' };
+    if (isPathIgnored(getWorkspaceRoot(), relPath)) {
+        return { success: false, output: ignoreBlockMessage(relPath, 'write') };
+    }
 
     const full = resolveWorkspacePath(relPath);
     const exists = fs.existsSync(full);
@@ -693,6 +717,9 @@ async function editFileTool(tool: ToolCall, onApprovalNeeded: ApprovalFn, turnId
     const oldStr  = String(tool.oldStr ?? '');
     const newStr  = String(tool.newStr ?? '');
     if (!relPath || !oldStr) return { success: false, output: 'edit_file requires "path" and "oldStr".' };
+    if (isPathIgnored(getWorkspaceRoot(), relPath)) {
+        return { success: false, output: ignoreBlockMessage(relPath, 'write') };
+    }
 
     const full = resolveWorkspacePath(relPath);
     const content = fs.readFileSync(full, 'utf8');
@@ -804,6 +831,9 @@ async function downloadFileTool(tool: ToolCall, onApprovalNeeded: ApprovalFn, tu
     const url = String(tool.url ?? '');
     const relPath = String(tool.path ?? '');
     if (!url || !relPath) return { success: false, output: 'download_file requires "url" and "path".' };
+    if (isPathIgnored(getWorkspaceRoot(), relPath)) {
+        return { success: false, output: ignoreBlockMessage(relPath, 'write') };
+    }
 
     // Validate URL
     let parsedUrl: URL;
@@ -899,6 +929,9 @@ async function createDiagramTool(tool: ToolCall): Promise<ToolResult> {
 
     const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
     const relPath = String(tool.path ?? '') || `diagrams/${slug}.html`;
+    if (isPathIgnored(getWorkspaceRoot(), relPath)) {
+        return { success: false, output: ignoreBlockMessage(relPath, 'write') };
+    }
     const full = resolveWorkspacePath(relPath);
 
     const html = `<!DOCTYPE html>
@@ -937,6 +970,10 @@ async function copyFileTool(tool: ToolCall, onApprovalNeeded: ApprovalFn, turnId
     const source = String(tool.source ?? '').trim();
     const destination = String(tool.destination ?? '').trim();
     if (!source || !destination) return { success: false, output: 'copy_file requires "source" and "destination".' };
+
+    const copyRoot = getWorkspaceRoot();
+    if (isPathIgnored(copyRoot, source)) return { success: false, output: ignoreBlockMessage(source, 'read') };
+    if (isPathIgnored(copyRoot, destination)) return { success: false, output: ignoreBlockMessage(destination, 'write') };
 
     const srcFull = resolveWorkspacePath(source);
     const dstFull = resolveWorkspacePath(destination);

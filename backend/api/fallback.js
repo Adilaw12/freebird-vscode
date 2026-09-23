@@ -12,6 +12,7 @@ import { verifySession } from '../lib/authToken.js';
 import { isLicenseActive, hasTemplateLibraryAccess, FREE_TEMPLATE_IDS } from '../lib/license.js';
 import { fetchGeminiWithFallback, PRO_GEMINI_MODEL_CANDIDATES } from '../lib/geminiModel.js';
 import { fetchAnthropicWithFallback, anthropicConfigured } from '../lib/anthropicModel.js';
+import { fetchCerebrasWithFallback, cerebrasConfigured } from '../lib/cerebrasModel.js';
 import { quotaKeysFor, reserveQuota, refundQuota, reserveSingleCounter } from '../lib/quota.js';
 
 const redis = Redis.fromEnv();
@@ -49,7 +50,7 @@ export default async function handler(req, res) {
     }
 
     const ip = ((req.headers['x-forwarded-for'] || '').split(',')[0] || 'anon').trim();
-    const { messages, maxTokens = 2048, sessionId: rawSession, authToken, licenseKey, templateId, templateLicenseKey } = req.body ?? {};
+    const { messages, maxTokens = 2048, sessionId: rawSession, authToken, licenseKey, templateId, templateLicenseKey, isTabCompletion } = req.body ?? {};
 
     if (!Array.isArray(messages) || messages.length === 0) {
         return res.status(400).json({ error: 'messages required', code: 'BAD_REQUEST' });
@@ -163,6 +164,7 @@ export default async function handler(req, res) {
     const systemParts       = [];
     const geminiContents    = [];
     const anthropicMessages = [];
+    const cerebrasMessages  = [];
 
     for (const msg of messages) {
         if (msg.role === 'system') {
@@ -173,6 +175,10 @@ export default async function handler(req, res) {
                 parts: [{ text: msg.content }]
             });
             anthropicMessages.push({
+                role: msg.role === 'assistant' ? 'assistant' : 'user',
+                content: msg.content
+            });
+            cerebrasMessages.push({
                 role: msg.role === 'assistant' ? 'assistant' : 'user',
                 content: msg.content
             });
@@ -201,6 +207,19 @@ export default async function handler(req, res) {
         })
     };
 
+    // OpenAI-compatible shape — see chat.js for the full rationale, including
+    // why reasoning_effort: 'low' is required (not optional) for this model.
+    const cerebrasBody = {
+        max_tokens: maxTokens,
+        temperature: 0.2,
+        stream: true,
+        reasoning_effort: 'low',
+        messages: [
+            ...(systemParts.length > 0 ? [{ role: 'system', content: systemParts.join('\n\n') }] : []),
+            ...cerebrasMessages
+        ]
+    };
+
     // ── Stream response ──────────────────────────────────────────────────────
     try {
         let upstream, modelUsed, provider;
@@ -217,6 +236,23 @@ export default async function handler(req, res) {
                 }
             } catch (err) {
                 console.error('Anthropic request failed, falling back to Gemini:', err);
+            }
+        }
+
+        // Free-tier tab completions only — see chat.js for the full rationale
+        // (including why an 8s timeout, not the usual 30s).
+        if (!upstream && !unmetered && isTabCompletion && cerebrasConfigured()) {
+            try {
+                const result = await fetchCerebrasWithFallback(cerebrasBody, { signal: AbortSignal.timeout(8_000) });
+                if (result.response.ok) {
+                    upstream = result.response;
+                    modelUsed = result.modelUsed;
+                    provider = 'cerebras';
+                } else {
+                    console.error('Cerebras fallback error, falling back to Gemini:', result.response.status, await result.response.text().catch(() => ''));
+                }
+            } catch (err) {
+                console.error('Cerebras request failed, falling back to Gemini:', err);
             }
         }
 
@@ -284,8 +320,11 @@ export default async function handler(req, res) {
                 if (jsonStr === '[DONE]') continue;
                 try {
                     const parsed = JSON.parse(jsonStr);
+                    // Cerebras: OpenAI-compatible choices[0].delta.content — see chat.js
                     const text = provider === 'anthropic'
                         ? (parsed?.type === 'content_block_delta' ? parsed?.delta?.text : undefined)
+                        : provider === 'cerebras'
+                        ? parsed?.choices?.[0]?.delta?.content
                         : parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
                     if (text) res.write(text);
                 } catch { /* skip malformed SSE lines */ }

@@ -32,6 +32,7 @@ const suites = [
     require('./backend-picker.test.js'),
     require('./prompt-templates.test.js'),
     require('./context-builder.test.js'),
+    require('./ignore-check.test.js'),
     require('./auth-token.test.js'),
     require('./memory.test.js'),
     require('./rules.test.js'),

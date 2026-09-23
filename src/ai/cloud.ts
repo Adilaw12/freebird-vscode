@@ -72,7 +72,8 @@ export class CloudProvider implements AIProvider {
             // for anything billing/security-relevant.
             templateId: opts?.templateId,
             templateLicenseKey: templateLicenseKey || undefined,
-            maxTokens:  opts?.maxTokens ?? 2048
+            maxTokens:  opts?.maxTokens ?? 2048,
+            isTabCompletion: opts?.isTabCompletion
         };
 
         const res = await fetch(endpoint, {

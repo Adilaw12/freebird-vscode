@@ -1,5 +1,16 @@
 # Changelog
 
+## \[0.13.4] — 2026-09-23
+
+### Added
+
+* **Tab completions on the free tier now try Cerebras first, falling back to Gemini.** Cerebras's inference hardware is dramatically faster (2,600+ tokens/second) — a real win specifically for completions, where perceived latency matters most and prompts are already short. Scoped narrowly: free-tier tab completions only, never regular chat, never Pro/Enterprise/trial traffic (already on Claude Haiku). An 8-second timeout (not the usual 30s) means a slow or rate-limited Cerebras request falls back to the existing Gemini path fast enough that a completion never feels slower than before this was added — Cerebras engaging or not is invisible either way. This is a modest paid cost, not a free-tier resource — Cerebras discontinued its permanent free tier in August 2026.
+* **`.gitignore`/`.freebirdignore` file exclusion for every agent tool.** Read, write, search, and `@mentions` now all skip files matched by the workspace's `.gitignore` by default (`freebird.agent.respectGitignore`, on by default), plus an optional custom ignore file (`freebird.agent.ignoreFile`, defaults to `.freebirdignore`) for exclusions that don't belong in `.gitignore` itself. Brings Freebird to parity with GitHub Copilot's content-exclusion feature, and closes a real gap where `read_file` had no exclusion checking at all.
+
+### Fixed
+
+* **A shared, non-unique `machineId` was silently colliding many different users into one trial-claim slot and one shared free-tier quota pool.** VS Code returns a known literal placeholder (`"someValue.machineId"`) from `vscode.env.machineId` when telemetry is disabled or restricted — confirmed via Microsoft's own `vscode-extension-telemetry` issue tracker, and directly in Freebird's own production data (one Redis identity had been accumulating activity, across what were almost certainly many different real users, since the day machineId-based quota shipped). Every user hitting this placeholder now gets their own randomly-generated, persisted fallback id instead of colliding with every other such user worldwide.
+
 ## \[0.13.3] — 2026-09-19
 
 ### Changed

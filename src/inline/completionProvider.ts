@@ -57,7 +57,7 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
 
                 raw = await provider.complete(
                     [{ role: 'user', content: prompt }],
-                    { maxTokens: 128, temperature: 0.2 }
+                    { maxTokens: 128, temperature: 0.2, isTabCompletion: true }
                 );
             }
         } catch (err: any) {

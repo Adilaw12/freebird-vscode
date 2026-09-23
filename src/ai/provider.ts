@@ -9,6 +9,10 @@ export interface CompletionOptions {
     /** Set when this message originated from one of the built-in prompt templates —
      *  lets CloudProvider request the free-tier Haiku quality bonus for it. */
     templateId?: string;
+    /** Set for tab-completion requests specifically — lets CloudProvider route
+     *  free-tier completions through Cerebras (fast, paid) before the existing
+     *  Gemini path, without touching regular chat. See api/chat.js. */
+    isTabCompletion?: boolean;
 }
 
 // ── Native tool calling ──────────────────────────────────────────────────────
