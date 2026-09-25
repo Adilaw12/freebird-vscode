@@ -80,6 +80,20 @@ export function activate(context: vscode.ExtensionContext) {
     checkAnnouncement(context).catch(() => {});
     checkTrialReminder(context).catch(() => {});
 
+    // checkTrialReminder() previously only ran once, at activation — a
+    // trial's 3/2/1-day marks were only ever seen by someone who happened to
+    // restart VS Code on exactly the right day. Anyone who just leaves the
+    // same window open for days (common) never got re-checked, and the data
+    // bore this out: the reminder fired only 3 times in 60 days across every
+    // trial started. Re-running it daily while the session stays open closes
+    // that gap; checkTrialReminder() itself already dedupes each day-mark via
+    // globalState, so calling it repeatedly is safe — this just gives it more
+    // chances to actually catch the boundary.
+    const trialReminderTimer = setInterval(() => {
+        checkTrialReminder(context).catch(() => {});
+    }, 24 * 60 * 60 * 1000);
+    context.subscriptions.push({ dispose: () => clearInterval(trialReminderTimer) });
+
     // ── Sidebar chat ───────────────────────────────────────────────────────
     const chatProvider = new ChatViewProvider(context, git);
     context.subscriptions.push(

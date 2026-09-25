@@ -1,5 +1,11 @@
 # Changelog
 
+## \[0.13.5] — 2026-09-25
+
+### Fixed
+
+* **The trial-ending reminder (3/2/1 days left) only ever ran once, at extension activation** — so a trial's day-marks were only seen by someone who happened to restart VS Code on exactly the right day. Anyone who just left the same window open for days (common) never got re-checked, and the data confirmed it: the reminder had fired only 3 times in 60 days across every trial started. It now also re-runs every 24 hours for the life of the session, properly disposed on deactivation. The underlying logic is unchanged — still dedupes each day-mark via `globalState`, so this only gives it more chances to actually catch the boundary, not a behavior change for anyone it was already reaching.
+
 ## \[0.13.4] — 2026-09-23
 
 ### Added
