@@ -27,6 +27,7 @@ const suites = [
     require('./anthropic-fallback.test.js'),
     require('./share-escape.test.js'),
     require('./quota-race.test.js'),
+    require('./checkout-pricing.test.js'),
     require('./checkpoint.test.js'),
     require('./fetch-url.test.js'),
     require('./backend-picker.test.js'),

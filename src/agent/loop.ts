@@ -237,10 +237,12 @@ async function runTextParsedLoop(opts: AgentRunOptions, turnId: string): Promise
 
         onEvent({ type: 'iteration-start' });
 
+        // premium: lets Freebird Cloud serve this from the Pro Sonnet allowance;
+        // other providers ignore it.
         await provider.stream(messages, chunk => {
             rawText += chunk;
             onEvent({ type: 'text-chunk', text: chunk });
-        });
+        }, { premium: true });
 
         onEvent({ type: 'response-complete', rawText });
         newHistory.push({ role: 'assistant', content: rawText });

@@ -20,6 +20,13 @@ export const ANTHROPIC_MODEL_CANDIDATES = [
     'claude-haiku-4-5-20251001'
 ];
 
+// Pro "premium" Agent-mode requests (metered monthly — see api/chat.js).
+// Sonnet 5 rejects `temperature` and thinks by default, so callers must build
+// a separate request body rather than reuse the Haiku one.
+export const SONNET_MODEL_CANDIDATES = [
+    'claude-sonnet-5'
+];
+
 /**
  * Tries each candidate model in order until one returns an ok response.
  * Same 404-only-advances semantics as fetchGeminiWithFallback — a 429/5xx/

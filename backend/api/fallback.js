@@ -20,9 +20,15 @@ const redis = Redis.fromEnv();
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 // Daily quota — shared with /api/chat via identical Redis keys
-const DAILY_LIMIT    = 10;  // per machine/session per day (cut from 20 on 2026-09-14)
+const DAILY_LIMIT    = 10;  // chat/edits, per machine/session per day (cut from 20 on 2026-09-14)
 const IP_DAILY_LIMIT = 200; // per IP per day — higher so shared networks aren't blocked
 const QUOTA_TTL      = 24 * 60 * 60; // 1 day in seconds
+
+// Tab completions: separate bucket, same numbers as chat.js — see that file.
+const COMPLETION_DAILY_LIMIT    = 100;
+const COMPLETION_IP_DAILY_LIMIT = 1000;
+const COMPLETION_MAX_TOKENS     = 256;
+const COMPLETION_GLOBAL_DAILY_LIMIT = parseInt(process.env.COMPLETION_GLOBAL_DAILY_LIMIT || '0', 10);
 
 // See chat.js — same rollout flag, same meaning.
 const REQUIRE_AUTH = process.env.REQUIRE_AUTH === 'true';
@@ -32,8 +38,11 @@ const GLOBAL_DAILY_LIMIT = parseInt(process.env.GLOBAL_DAILY_LIMIT || '0', 10); 
 const MONITOR_TTL        = 8 * 24 * 60 * 60;
 const hashIp = (ip) => createHash('sha256').update(ip).digest('hex').slice(0, 16);
 
-// Short-term abuse protection: 20 fallback calls per IP per hour
+// Short-term abuse protection: 20 fallback calls per IP per hour. Completions
+// get their own, larger burst counter — they fire on typing pauses, so 20/hour
+// would cap them far below their daily allowance.
 const IP_RATE_LIMIT  = 20;
+const COMPLETION_IP_RATE_LIMIT = 200;
 const IP_RATE_TTL    = 60 * 60; // 1 hour
 
 export const config = { runtime: 'nodejs' };
@@ -50,7 +59,8 @@ export default async function handler(req, res) {
     }
 
     const ip = ((req.headers['x-forwarded-for'] || '').split(',')[0] || 'anon').trim();
-    const { messages, maxTokens = 2048, sessionId: rawSession, authToken, licenseKey, templateId, templateLicenseKey, isTabCompletion } = req.body ?? {};
+    const { messages, maxTokens: requestedMaxTokens = 2048, sessionId: rawSession, authToken, licenseKey, templateId, templateLicenseKey, isTabCompletion } = req.body ?? {};
+    const isCompletion = isTabCompletion === true;
 
     if (!Array.isArray(messages) || messages.length === 0) {
         return res.status(400).json({ error: 'messages required', code: 'BAD_REQUEST' });
@@ -71,9 +81,9 @@ export default async function handler(req, res) {
 
     // ── IP burst rate limit ─────────────────────────────────────────────────
     if (!unmetered) {
-        const ipKey = `fallback:ip:${ip}`;
+        const ipKey = isCompletion ? `fallback:cmp:ip:${ip}` : `fallback:ip:${ip}`;
         try {
-            const { blocked } = await reserveSingleCounter(redis, ipKey, IP_RATE_LIMIT, IP_RATE_TTL);
+            const { blocked } = await reserveSingleCounter(redis, ipKey, isCompletion ? COMPLETION_IP_RATE_LIMIT : IP_RATE_LIMIT, IP_RATE_TTL);
             if (blocked) {
                 return res.status(429).json({
                     error: 'Too many fallback requests. Please try again later or upgrade to Pro.',
@@ -128,14 +138,16 @@ export default async function handler(req, res) {
         }
     }
 
-    const quotaKeys = quotaKeysFor(identityKey, ip, today);
+    const quotaKeys = quotaKeysFor(identityKey, ip, today, isCompletion ? 'completion' : 'chat');
+    const dailyLimit = isCompletion ? COMPLETION_DAILY_LIMIT : DAILY_LIMIT;
+    const ipDailyLimit = isCompletion ? COMPLETION_IP_DAILY_LIMIT : IP_DAILY_LIMIT;
     let sessionUsed = 0, ipUsed = 0;
 
     if (!unmetered) {
         const result = await reserveQuota(redis, quotaKeys, {
-            dailyLimit: DAILY_LIMIT,
-            ipDailyLimit: IP_DAILY_LIMIT,
-            globalDailyLimit: GLOBAL_DAILY_LIMIT,
+            dailyLimit,
+            ipDailyLimit,
+            globalDailyLimit: isCompletion ? COMPLETION_GLOBAL_DAILY_LIMIT : GLOBAL_DAILY_LIMIT,
             quotaTtl: QUOTA_TTL,
             monitorTtl: MONITOR_TTL
         });
@@ -149,13 +161,24 @@ export default async function handler(req, res) {
             });
         }
         if (result.blocked) {
-            return res.status(429).json({
-                error: 'Daily cloud edit limit reached. Upgrade to Pro for unlimited access.',
-                code:  'QUOTA_EXCEEDED',
-                limit: DAILY_LIMIT
-            });
+            // Distinct code for completions — see chat.js.
+            return res.status(429).json(isCompletion
+                ? {
+                    error: 'Daily tab-completion limit reached. Upgrade to Pro for unlimited access.',
+                    code:  'COMPLETION_QUOTA_EXCEEDED',
+                    limit: COMPLETION_DAILY_LIMIT
+                }
+                : {
+                    error: 'Daily cloud edit limit reached. Upgrade to Pro for unlimited access.',
+                    code:  'QUOTA_EXCEEDED',
+                    limit: DAILY_LIMIT
+                });
         }
     }
+
+    const maxTokens = (isCompletion && !unmetered)
+        ? Math.min(Number(requestedMaxTokens) || COMPLETION_MAX_TOKENS, COMPLETION_MAX_TOKENS)
+        : requestedMaxTokens;
 
     // ── Build provider request(s) ────────────────────────────────────────────
     // Same Haiku-for-unmetered / Gemini-for-everyone-else split as chat.js —
@@ -299,10 +322,10 @@ export default async function handler(req, res) {
         } else {
             // sessionUsed/ipUsed are already POST-increment (this request included)
             const remaining = Math.max(0, Math.min(
-                DAILY_LIMIT - sessionUsed,
-                IP_DAILY_LIMIT - ipUsed
+                dailyLimit - sessionUsed,
+                ipDailyLimit - ipUsed
             ));
-            res.setHeader('X-Quota-Remaining', String(remaining));
+            res.setHeader(isCompletion ? 'X-Completion-Quota-Remaining' : 'X-Quota-Remaining', String(remaining));
         }
 
         const reader  = upstream.body.getReader();

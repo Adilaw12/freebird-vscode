@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { getProvider } from '../ai';
-import { CloudProvider } from '../ai/cloud';
+import { CloudProvider, getPremiumAllowance } from '../ai/cloud';
 import { OllamaProvider } from '../ai/ollama';
 import { GitService } from '../git/service';
 import { Message } from '../ai/provider';
@@ -334,6 +334,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     `${getCloudEditsRemaining(this.context)}/${DAILY_CLOUD_LIMIT} cloud edits left today (Gemini Flash) — resets daily.`,
                     `After cloud edits: falls back to local Ollama if available.`,
                     `[Upgrade to Pro](${UPGRADE_URL}) for unlimited cloud edits + BYOK.`,
+                    ''
+                );
+            } else {
+                const premium = getPremiumAllowance(this.context);
+                helpLines.push(
+                    '**Pro plan (Freebird Cloud):**',
+                    premium
+                        ? `${premium.remaining}/${premium.limit} premium Agent-mode requests left this month on Claude Sonnet 5 — after that, Agent mode continues on Claude Haiku.`
+                        : 'Agent mode uses your monthly Claude Sonnet 5 allowance first, then continues on Claude Haiku.',
                     ''
                 );
             }

@@ -72,6 +72,27 @@ async function run() {
         const count = await redis.get(keys.sessionQuotaKey);
         check('quota returns to 0 after a full reserve+refund cycle', parseInt(count, 10) === 0);
     }
+
+    suite('tab completions use a separate bucket and never consume the chat quota');
+    {
+        const redis = Redis.fromEnv();
+        const chatKeys = quotaKeysFor('fourth-user', '4.4.4.4', '2026-07-10');
+        const completionKeys = quotaKeysFor('fourth-user', '4.4.4.4', '2026-07-10', 'completion');
+        const chatLimits = { dailyLimit: 10, ipDailyLimit: 200, globalDailyLimit: 0, quotaTtl: 86400, monitorTtl: 86400 };
+        const completionLimits = { dailyLimit: 100, ipDailyLimit: 1000, globalDailyLimit: 0, quotaTtl: 86400, monitorTtl: 86400 };
+
+        check('chat keys are unchanged from before the split (existing counters carry over)',
+            chatKeys.sessionQuotaKey === 'quota:fourth-user:2026-07-10' && chatKeys.ipQuotaKey === 'quota:ip:4.4.4.4:2026-07-10');
+        check('completion keys never collide with chat keys',
+            completionKeys.sessionQuotaKey !== chatKeys.sessionQuotaKey &&
+            completionKeys.ipQuotaKey !== chatKeys.ipQuotaKey &&
+            completionKeys.globalKey !== chatKeys.globalKey);
+
+        for (let i = 0; i < 50; i++) await reserveQuota(redis, completionKeys, completionLimits);
+        const chatResult = await reserveQuota(redis, chatKeys, chatLimits);
+
+        check('50 completions leave the chat quota untouched (first chat request still allowed)', chatResult.blocked === false && chatResult.sessionUsed === 1);
+    }
 }
 
 module.exports = { run };

@@ -10,19 +10,19 @@
 
 ![Freebird AI — inline edit rewriting a selection in place](media/Inline%20AI%20refactor.gif)
 
-**Run full codebase security audits, architecture mapping, and technical debt analysis with Agent mode** — try free for 7 days, no card needed. Pro is $6/month for unlimited multi-file editing, plus sharing a selection with a colleague without giving them your whole codebase — less than a third of Cursor's price, more capability out of the box. Team is $25/month for up to 5 seats.
+**Run full codebase security audits, architecture mapping, and technical debt analysis with Agent mode** — try free for 7 days, no card needed. Pro is $9.90/month (or $99/year) for unlimited multi-file editing, plus sharing a selection with a colleague without giving them your whole codebase — Agent mode works on any model, including fully local Ollama, not just our cloud. Team is $25/month for up to 5 seats.
 
 Install Freebird AI and start coding in seconds — no API keys, no throttling, no configuration. You get **10 free advanced AI edits per day** powered by Gemini Flash Lite, plus free BYOK and unlimited local AI when you want full privacy.
 
 **Copilot throttled? Cursor too expensive? GitHub limits hit?**
 Freebird never blocks you — it picks up where other tools stop.
 
-**[Upgrade to Pro — $6 USD/month →](https://buy.stripe.com/9B628t4WheMmeSMccZfAc03)** · or start a **free 7-day Pro trial** (no card needed) right from the chat panel
+**[Upgrade to Pro — $9.90 USD/month →](https://freebird-backend.vercel.app/upgrade)** ([$99/year](https://freebird-backend.vercel.app/upgrade?cadence=annual)) · or start a **free 7-day Pro trial** (no card needed) right from the chat panel
 
 ⭐ **If Freebird saves you time, a GitHub star helps others find it** — thank you!
 
 > **📅 Heads up: the free daily cloud limit is changing on Monday, September 14.**
-> To keep Freebird fast and reliable as usage grows, the free tier's daily cloud limit is moving from 20 to **10** advanced edits/day, effective **Monday, September 14**. Everything else on Free — unlimited chat, unlimited tab completions on Ollama/BYOK, project rules — is unchanged. If you're already relying on the higher limit day to day, **[Pro's $6/month unlocks unlimited cloud edits](https://buy.stripe.com/9B628t4WheMmeSMccZfAc03)** plus full Agent mode (multi-file edits, terminal commands, one-click checkpoints) — or try it free for 7 days, no card needed, right from the chat panel.
+> To keep Freebird fast and reliable as usage grows, the free tier's daily cloud limit is moving from 20 to **10** advanced edits/day, effective **Monday, September 14**. Everything else on Free — unlimited chat, unlimited tab completions on Ollama/BYOK, project rules — is unchanged. If you're already relying on the higher limit day to day, **[Pro's $9.90/month unlocks unlimited cloud edits](https://freebird-backend.vercel.app/upgrade)** plus full Agent mode (multi-file edits, terminal commands, one-click checkpoints) — or try it free for 7 days, no card needed, right from the chat panel.
 
 ---
 
@@ -30,7 +30,7 @@ Freebird never blocks you — it picks up where other tools stop.
 
 | | Copilot | Cursor | Freebird Free | Freebird Pro |
 |---|:---:|:---:|:---:|:---:|
-| Price | $10/mo | $20/mo | **Free** | **$6/mo** |
+| Price | $10/mo | $20/mo | **Free** | **$9.90/mo** |
 | Setup required | No | Yes | **No** | No |
 | Multi-file agent edits + terminal | Limited | ✅ | ❌ | ✅ |
 | Semantic codebase search (finds code by meaning) | Limited | ✅ | ❌ | ✅ |
@@ -76,7 +76,7 @@ We ran our own **Codebase Cartographer** prompt template against this repo — r
 
 ## Free vs Pro
 
-| Feature | Free | Pro ($6 USD/mo) |
+| Feature | Free | Pro ($9.90 USD/mo) |
 |---|:---:|:---:|
 | AI chat (unlimited questions) | ✅ | ✅ |
 | Active file + `@` file context | ✅ | ✅ |

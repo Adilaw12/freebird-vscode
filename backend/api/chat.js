@@ -20,7 +20,7 @@ import { createHash } from 'crypto';
 import { verifySession } from '../lib/authToken.js';
 import { isLicenseActive, hasTemplateLibraryAccess, FREE_TEMPLATE_IDS } from '../lib/license.js';
 import { fetchGeminiWithFallback, PRO_GEMINI_MODEL_CANDIDATES } from '../lib/geminiModel.js';
-import { fetchAnthropicWithFallback, anthropicConfigured } from '../lib/anthropicModel.js';
+import { fetchAnthropicWithFallback, anthropicConfigured, SONNET_MODEL_CANDIDATES } from '../lib/anthropicModel.js';
 import { fetchCerebrasWithFallback, cerebrasConfigured } from '../lib/cerebrasModel.js';
 import { quotaKeysFor, reserveQuota, refundQuota, reserveSingleCounter } from '../lib/quota.js';
 
@@ -28,9 +28,20 @@ const redis = Redis.fromEnv();
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-const DAILY_LIMIT    = 10;  // per machine/session per day
+const DAILY_LIMIT    = 10;  // chat/edits, per machine/session per day
 const IP_DAILY_LIMIT = 200; // per IP per day — higher so shared networks (offices, VPNs) aren't blocked
 const QUOTA_TTL      = 24 * 60 * 60; // 1 day in seconds
+
+// Tab completions have their own, much larger bucket (see lib/quota.js).
+// 100/day ≈ 3,000/month — above Copilot Free's completion allowance. Served
+// on Cerebras at ~$0.0007 each, so even every daily-active free user maxing
+// out stays around $4/day.
+const COMPLETION_DAILY_LIMIT    = 100;
+const COMPLETION_IP_DAILY_LIMIT = 1000;
+// isTabCompletion is client-supplied, so a modified client could label a chat
+// message as a "completion" to use the larger bucket. Capping output length
+// for that bucket makes it useless for real chat (completions request 128).
+const COMPLETION_MAX_TOKENS     = 256;
 
 // Once REQUIRE_AUTH=true is set in Vercel, unauthenticated requests (no valid
 // GitHub session token) are rejected outright instead of falling back to the
@@ -44,6 +55,19 @@ const REQUIRE_AUTH = process.env.REQUIRE_AUTH === 'true';
 // GLOBAL_DAILY_LIMIT env var in Vercel to activate once daily volume is large
 // enough that runaway abuse could matter (~10k+/day).
 const GLOBAL_DAILY_LIMIT = parseInt(process.env.GLOBAL_DAILY_LIMIT || '0', 10);
+const COMPLETION_GLOBAL_DAILY_LIMIT = parseInt(process.env.COMPLETION_GLOBAL_DAILY_LIMIT || '0', 10);
+
+// Premium Agent-mode requests on Claude Sonnet 5, metered per licence per
+// calendar month (UTC). Counted per model request, not per task: one Agent-mode
+// task is typically 4-5 requests, and at ~$0.04/request (Sonnet 5, $2/$10 per
+// MTok, cached system prompt) 100 requests is a worst case of ~$4 of the $10
+// Pro price. Trials get a smaller taste. Past the limit, requests silently use
+// the normal Haiku path — never blocked.
+const PREMIUM_MONTHLY_LIMITS = { pro: 100, team: 100, enterprise: 100, trial: 25 };
+const PREMIUM_TTL = 35 * 24 * 60 * 60;
+// Sonnet 5 thinks by default and thinking tokens count against max_tokens, so
+// the agent loop's default 2048 would truncate real output.
+const SONNET_MIN_MAX_TOKENS = 8192;
 const MONITOR_TTL        = 8 * 24 * 60 * 60; // keep daily monitoring keys ~8 days
 const hashIp = (ip) => createHash('sha256').update(ip).digest('hex').slice(0, 16);
 
@@ -60,7 +84,8 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: 'Server misconfigured', code: 'NO_API_KEY' });
     }
 
-    const { messages, sessionId: rawSession, authToken, licenseKey, templateId, templateLicenseKey, maxTokens = 2048, isTabCompletion } = req.body ?? {};
+    const { messages, sessionId: rawSession, authToken, licenseKey, templateId, templateLicenseKey, maxTokens: requestedMaxTokens = 2048, isTabCompletion, premium } = req.body ?? {};
+    const isCompletion = isTabCompletion === true;
 
     if (!Array.isArray(messages) || messages.length === 0) {
         return res.status(400).json({ error: 'messages required', code: 'BAD_REQUEST' });
@@ -73,15 +98,35 @@ export default async function handler(req, res) {
     // Checked first and independently of identity — a valid active license on
     // either plan skips every limit below.
     let unmetered = false;
-    if (licenseKey && typeof licenseKey === 'string') {
+    let licensePlan = null;
+    const normalizedLicenseKey = (licenseKey && typeof licenseKey === 'string') ? licenseKey.trim().toUpperCase() : null;
+    if (normalizedLicenseKey) {
         try {
-            const license = await redis.get(`license:${licenseKey.trim().toUpperCase()}`);
+            const license = await redis.get(`license:${normalizedLicenseKey}`);
             if (isLicenseActive(license)) {
                 unmetered = true;
+                licensePlan = license.plan;
             }
         } catch (err) {
             console.error('License lookup error (chat):', err);
             // fail closed — treat as unlicensed rather than blocking the request
+        }
+    }
+
+    // ── Premium (Sonnet) allowance ─────────────────────────────────────────────
+    // Only the Agent-mode loop sends premium:true. Spoofing it can only spend
+    // the caller's own monthly allowance, so it isn't a security boundary.
+    const premiumLimit = PREMIUM_MONTHLY_LIMITS[licensePlan] ?? 0;
+    const premiumKey = normalizedLicenseKey ? `premium:${normalizedLicenseKey}:${new Date().toISOString().slice(0, 7)}` : null;
+    let premiumReserved = false;
+    let premiumRemaining = null;
+    if (unmetered && premium === true && isTabCompletion !== true && premiumLimit > 0 && anthropicConfigured()) {
+        try {
+            const { count, blocked } = await reserveSingleCounter(redis, premiumKey, premiumLimit, PREMIUM_TTL);
+            premiumReserved = !blocked;
+            premiumRemaining = blocked ? 0 : Math.max(0, premiumLimit - count);
+        } catch (err) {
+            console.error('Premium allowance error (chat):', err); // fall through to Haiku
         }
     }
 
@@ -139,14 +184,16 @@ export default async function handler(req, res) {
     // backend/lib/quota.js for the full race-condition rationale (this is
     // exactly how users ended up with a quota reading of 21 instead of
     // capping at 20).
-    const quotaKeys = quotaKeysFor(identityKey, ip, today);
+    const quotaKeys = quotaKeysFor(identityKey, ip, today, isCompletion ? 'completion' : 'chat');
+    const dailyLimit = isCompletion ? COMPLETION_DAILY_LIMIT : DAILY_LIMIT;
+    const ipDailyLimit = isCompletion ? COMPLETION_IP_DAILY_LIMIT : IP_DAILY_LIMIT;
     let sessionUsed = 0, ipUsed = 0;
 
     if (!unmetered) {
         const result = await reserveQuota(redis, quotaKeys, {
-            dailyLimit: DAILY_LIMIT,
-            ipDailyLimit: IP_DAILY_LIMIT,
-            globalDailyLimit: GLOBAL_DAILY_LIMIT,
+            dailyLimit,
+            ipDailyLimit,
+            globalDailyLimit: isCompletion ? COMPLETION_GLOBAL_DAILY_LIMIT : GLOBAL_DAILY_LIMIT,
             quotaTtl: QUOTA_TTL,
             monitorTtl: MONITOR_TTL
         });
@@ -160,13 +207,26 @@ export default async function handler(req, res) {
             });
         }
         if (result.blocked) {
-            return res.status(429).json({
-                error: 'Daily cloud edit limit reached. Upgrade to Pro for unlimited access.',
-                code:  'QUOTA_EXCEEDED',
-                limit: DAILY_LIMIT
-            });
+            // Distinct code for completions: clients treat QUOTA_EXCEEDED as
+            // "chat quota is 0" and gate chat features on it (extension.ts),
+            // which would wrongly lock chat once completions run out.
+            return res.status(429).json(isCompletion
+                ? {
+                    error: 'Daily tab-completion limit reached. Upgrade to Pro for unlimited access.',
+                    code:  'COMPLETION_QUOTA_EXCEEDED',
+                    limit: COMPLETION_DAILY_LIMIT
+                }
+                : {
+                    error: 'Daily cloud edit limit reached. Upgrade to Pro for unlimited access.',
+                    code:  'QUOTA_EXCEEDED',
+                    limit: DAILY_LIMIT
+                });
         }
     }
+
+    const maxTokens = (isCompletion && !unmetered)
+        ? Math.min(Number(requestedMaxTokens) || COMPLETION_MAX_TOKENS, COMPLETION_MAX_TOKENS)
+        : requestedMaxTokens;
 
     // ── Build provider request(s) ────────────────────────────────────────────
     // NOTE: quota is only incremented AFTER a successful response so users
@@ -257,7 +317,36 @@ export default async function handler(req, res) {
     try {
         let upstream, modelUsed, provider;
 
-        if ((unmetered || templateHaikuEligible) && anthropicConfigured()) {
+        if (premiumReserved) {
+            // Separate body: Sonnet 5 rejects `temperature`, and effort bounds
+            // how much it spends thinking (thinking is on by default).
+            const sonnetBody = {
+                max_tokens: Math.max(Number(maxTokens) || 0, SONNET_MIN_MAX_TOKENS),
+                stream: true,
+                output_config: { effort: 'medium' },
+                messages: anthropicMessages,
+                ...(anthropicBody.system && { system: anthropicBody.system })
+            };
+            try {
+                const result = await fetchAnthropicWithFallback(sonnetBody, { signal: AbortSignal.timeout(90_000) }, SONNET_MODEL_CANDIDATES);
+                if (result.response.ok) {
+                    upstream = result.response;
+                    modelUsed = result.modelUsed;
+                    provider = 'anthropic';
+                } else {
+                    console.error('Sonnet error, falling back to Haiku:', result.response.status, await result.response.text().catch(() => ''));
+                }
+            } catch (err) {
+                console.error('Sonnet request failed, falling back to Haiku:', err);
+            }
+            if (!upstream) {
+                // Don't charge the allowance for a request Sonnet didn't serve.
+                await redis.decr(premiumKey).catch(() => {});
+                premiumRemaining = premiumRemaining === null ? null : premiumRemaining + 1;
+            }
+        }
+
+        if (!upstream && (unmetered || templateHaikuEligible) && anthropicConfigured()) {
             try {
                 const result = await fetchAnthropicWithFallback(anthropicBody, { signal: AbortSignal.timeout(30_000) });
                 if (result.response.ok) {
@@ -334,14 +423,24 @@ export default async function handler(req, res) {
 
         if (unmetered) {
             res.setHeader('X-Quota-Unmetered', 'true');
+            if (premiumRemaining !== null) {
+                res.setHeader('X-Premium-Remaining', String(premiumRemaining));
+                res.setHeader('X-Premium-Limit', String(premiumLimit));
+            }
         } else {
             // sessionUsed/ipUsed are already POST-increment (this request included)
             const remaining = Math.max(0, Math.min(
-                DAILY_LIMIT - sessionUsed,
-                IP_DAILY_LIMIT - ipUsed
+                dailyLimit - sessionUsed,
+                ipDailyLimit - ipUsed
             ));
-            res.setHeader('X-Quota-Used',      String(sessionUsed));
-            res.setHeader('X-Quota-Remaining', String(remaining));
+            if (isCompletion) {
+                // Separate header on purpose — installed clients write
+                // X-Quota-Remaining into their cached chat counter.
+                res.setHeader('X-Completion-Quota-Remaining', String(remaining));
+            } else {
+                res.setHeader('X-Quota-Used',      String(sessionUsed));
+                res.setHeader('X-Quota-Remaining', String(remaining));
+            }
         }
 
         const reader  = upstream.body.getReader();

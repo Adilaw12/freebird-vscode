@@ -1,7 +1,14 @@
 import * as vscode from 'vscode';
 
 export const API_BASE    = 'https://freebird-backend.vercel.app';
-export const UPGRADE_URL = 'https://buy.stripe.com/9B628t4WheMmeSMccZfAc03';
+// A dynamic redirect (api/upgrade-page.js), not a hardcoded Payment Link —
+// the backend picks the actual Stripe Price server-side by cadence and the
+// buyer's own country (e.g. India gets a PPP-priced, UPI-enabled Price; see
+// lib/checkoutPricing.js). Every existing "Upgrade to Pro" call site in this
+// extension just opens this URL, so all of them get that routing for free
+// without needing their own fetch/JSON logic. Append "?cadence=annual" for
+// the annual price once a UI offers that choice.
+export const UPGRADE_URL = `${API_BASE}/upgrade`;
 export const TEMPLATES_UPGRADE_URL = 'https://buy.stripe.com/3cI6oJ3SdgUu9ys1ylfAc04';
 
 const CACHE_TTL_MS   = 60 * 60 * 1000;          // 1 hour

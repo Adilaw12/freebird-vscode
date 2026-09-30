@@ -6,11 +6,17 @@
 // injected Redis client, rather than only reachable through a full Vercel
 // handler.
 
-export function quotaKeysFor(identityKey, ip, today) {
+// bucket 'completion' gets its own counters: tab completions fire passively
+// on nearly every typing pause, and sharing the chat/edit counter meant free
+// users burned their whole daily allowance on ghost text before ever reaching
+// chat (89% of quota walls in Sept 2026 telemetry were the completion toast).
+// 'chat' keeps the original key names so existing counters carry over.
+export function quotaKeysFor(identityKey, ip, today, bucket = 'chat') {
+    const prefix = bucket === 'completion' ? 'quota:cmp' : 'quota';
     return {
-        sessionQuotaKey: `quota:${identityKey.slice(0, 48)}:${today}`,
-        ipQuotaKey:      `quota:ip:${ip}:${today}`,
-        globalKey:       `quota:global:${today}`
+        sessionQuotaKey: `${prefix}:${identityKey.slice(0, 48)}:${today}`,
+        ipQuotaKey:      `${prefix}:ip:${ip}:${today}`,
+        globalKey:       `${prefix}:global:${today}`
     };
 }
 

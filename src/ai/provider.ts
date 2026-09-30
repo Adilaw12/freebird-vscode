@@ -13,6 +13,9 @@ export interface CompletionOptions {
      *  free-tier completions through Cerebras (fast, paid) before the existing
      *  Gemini path, without touching regular chat. See api/chat.js. */
     isTabCompletion?: boolean;
+    /** Set only by the Agent-mode loop — asks the backend to serve this request
+     *  from the licence's monthly Claude Sonnet allowance (see api/chat.js). */
+    premium?: boolean;
 }
 
 // ── Native tool calling ──────────────────────────────────────────────────────

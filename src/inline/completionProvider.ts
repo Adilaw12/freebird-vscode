@@ -73,18 +73,23 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
                 // real but invisible for most free users, undercutting the one
                 // metric meant to explain trial-conversion behavior. Route it
                 // through the same upgrade messaging chat already has.
-                if (err?.code === 'QUOTA_EXCEEDED') {
+                // COMPLETION_QUOTA_EXCEEDED: completions' own daily bucket ran out
+                // (chat is unaffected). QUOTA_EXCEEDED kept for older backends.
+                if (err?.code === 'COMPLETION_QUOTA_EXCEEDED' || err?.code === 'QUOTA_EXCEEDED') {
                     trackEvent('quota_wall_shown', 'completion');
                     vscode.window.showWarningMessage(
-                        'Freebird: daily cloud AI limit reached. Tab completions (and other cloud AI features) ' +
-                            'resume tomorrow — or upgrade to Pro for unlimited.',
+                        err.code === 'COMPLETION_QUOTA_EXCEEDED'
+                            ? 'Freebird: you\'ve used today\'s free tab completions — chat still works. ' +
+                                'Pro makes completions unlimited and adds Agent mode.'
+                            : 'Freebird: daily cloud AI limit reached. Tab completions (and other cloud AI features) ' +
+                                'resume tomorrow — or upgrade to Pro for unlimited.',
                         'Upgrade to Pro',
-                        'Switch to Ollama (free, unlimited)'
+                        'Use a local model'
                     ).then(choice => {
                         if (choice === 'Upgrade to Pro') {
                             trackEvent('upgrade_clicked', 'completion');
                             vscode.env.openExternal(vscode.Uri.parse(UPGRADE_URL));
-                        } else if (choice === 'Switch to Ollama (free, unlimited)') {
+                        } else if (choice === 'Use a local model') {
                             vscode.commands.executeCommand('freebird.configure');
                         }
                     });

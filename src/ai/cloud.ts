@@ -12,6 +12,13 @@ const API_BASE  = 'https://freebird-backend.vercel.app';
 // way as QUOTA_KEY since there's no other channel back to the caller mid-stream.
 const MODEL_KEY = 'freebird.lastModelUsed';
 
+// Last monthly Sonnet allowance reported via X-Premium-Remaining/-Limit.
+const PREMIUM_KEY = 'freebird.premiumAllowance';
+
+export function getPremiumAllowance(context: vscode.ExtensionContext): { remaining: number; limit: number } | undefined {
+    return context.globalState.get<{ remaining: number; limit: number }>(PREMIUM_KEY);
+}
+
 /**
  * CloudProvider — calls the Freebird Vercel backend.
  *
@@ -73,7 +80,8 @@ export class CloudProvider implements AIProvider {
             templateId: opts?.templateId,
             templateLicenseKey: templateLicenseKey || undefined,
             maxTokens:  opts?.maxTokens ?? 2048,
-            isTabCompletion: opts?.isTabCompletion
+            isTabCompletion: opts?.isTabCompletion,
+            premium: opts?.premium
         };
 
         const res = await fetch(endpoint, {
@@ -106,6 +114,14 @@ export class CloudProvider implements AIProvider {
                 throw err;
             }
 
+            // Completions have their own server-side bucket — running out of
+            // it must not zero the cached chat quota, which gates chat features.
+            if (code === 'COMPLETION_QUOTA_EXCEEDED') {
+                const err  = new Error('COMPLETION_QUOTA_EXCEEDED') as any;
+                err.code   = 'COMPLETION_QUOTA_EXCEEDED';
+                throw err;
+            }
+
             if (code === 'IP_RATE_LIMITED') {
                 const err  = new Error('IP_RATE_LIMITED') as any;
                 err.code   = 'IP_RATE_LIMITED';
@@ -134,6 +150,15 @@ export class CloudProvider implements AIProvider {
             if (remaining !== null) {
                 await this.context.globalState.update(QUOTA_KEY, parseInt(remaining, 10));
             }
+        }
+
+        const premiumRemaining = res.headers.get('X-Premium-Remaining');
+        const premiumLimit = res.headers.get('X-Premium-Limit');
+        if (premiumRemaining !== null && premiumLimit !== null) {
+            await this.context.globalState.update(PREMIUM_KEY, {
+                remaining: parseInt(premiumRemaining, 10),
+                limit: parseInt(premiumLimit, 10)
+            });
         }
 
         if (res.headers.get('X-Template-Bonus-Used') === 'true') {
