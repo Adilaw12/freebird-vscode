@@ -3,7 +3,7 @@ import { getProvider } from '../ai';
 import { FIMProvider } from '../ai/provider';
 import { getMachineId, trackEvent } from '../telemetry';
 import { stripFences } from '../util/text';
-import { UPGRADE_URL } from '../license/validator';
+import { UPGRADE_URL, XENDIT_CHECKOUT_URL } from '../license/validator';
 
 const MAX_PREFIX_LINES = 100;
 const MAX_SUFFIX_LINES = 20;
@@ -84,11 +84,15 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
                             : 'Freebird: daily cloud AI limit reached. Tab completions (and other cloud AI features) ' +
                                 'resume tomorrow — or upgrade to Pro for unlimited.',
                         'Upgrade to Pro',
+                        'Pay with Local Methods (VN/ID)',
                         'Use a local model'
                     ).then(choice => {
                         if (choice === 'Upgrade to Pro') {
                             trackEvent('upgrade_clicked', 'completion');
                             vscode.env.openExternal(vscode.Uri.parse(UPGRADE_URL));
+                        } else if (choice === 'Pay with Local Methods (VN/ID)') {
+                            trackEvent('upgrade_clicked_local', 'completion');
+                            vscode.env.openExternal(vscode.Uri.parse(XENDIT_CHECKOUT_URL));
                         } else if (choice === 'Use a local model') {
                             vscode.commands.executeCommand('freebird.configure');
                         }

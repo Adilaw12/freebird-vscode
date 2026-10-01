@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { getLicenseStatus, UPGRADE_URL, API_BASE } from '../license/validator';
+import { getLicenseStatus, UPGRADE_URL, XENDIT_CHECKOUT_URL, API_BASE } from '../license/validator';
 import { trackEvent } from '../telemetry';
 
 // "Share a portion of your code with a colleague without exposing your whole
@@ -33,9 +33,14 @@ async function shareSelection(context: vscode.ExtensionContext) {
         vscode.window.showWarningMessage(
             'Sharing a snippet with a colleague is a Pro feature — share just this selection, not your whole workspace.',
             'Upgrade to Pro',
+            'Pay with Local Methods (VN/ID)',
             'Dismiss'
         ).then(choice => {
             if (choice === 'Upgrade to Pro') vscode.env.openExternal(vscode.Uri.parse(UPGRADE_URL));
+            if (choice === 'Pay with Local Methods (VN/ID)') {
+                trackEvent('upgrade_clicked_local');
+                vscode.env.openExternal(vscode.Uri.parse(XENDIT_CHECKOUT_URL));
+            }
         });
         return;
     }

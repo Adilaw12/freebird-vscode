@@ -713,6 +713,7 @@ em { font-style: italic; }
   <span>10 free cloud edits/day &bull; free BYOK &amp; local Ollama &bull; Pro = Agent mode + unlimited</span>
   <div class="banner-links">
     <button class="link-btn" onclick="vscode.postMessage({type:'upgrade'})">Upgrade to Pro</button>
+    <button class="link-btn" onclick="vscode.postMessage({type:'upgrade-local'})" title="E-wallets for Vietnam/Indonesia — Stripe doesn't support these">Pay with Local Methods (VN/ID)</button>
     <button class="link-btn" onclick="vscode.postMessage({type:'activate-license'})">Enter license key</button>
     <button class="banner-close" onclick="document.getElementById('upgrade-banner').style.display='none'" title="Dismiss">&#x2715;</button>
   </div>
@@ -723,6 +724,7 @@ em { font-style: italic; }
   <span id="trial-banner-text"></span>
   <div class="banner-links">
     <button class="link-btn" onclick="vscode.postMessage({type:'upgrade'})">Upgrade to Pro</button>
+    <button class="link-btn" onclick="vscode.postMessage({type:'upgrade-local'})">Pay with Local Methods (VN/ID)</button>
   </div>
 </div>
 
@@ -1238,7 +1240,7 @@ function showQuotaWall() {
       + '<svg width="16" height="16" viewBox="0 0 16 16" style="stroke:#d97757;fill:none;stroke-width:1.8;stroke-linecap:round;flex-shrink:0"><polygon points="8,2 15,13 1,13"/><line x1="8" y1="6" x2="8" y2="9"/><circle cx="8" cy="11" r="0.5" fill="#d97757"/></svg>'
       + '<span class="quota-wall-title">You\'ve flown ' + DAILY_LIMIT + ' miles today! ✈️</span>'
     + '</div>'
-    + '<div class="quota-wall-subtitle">Pro unlocks Agent mode and unlimited cloud edits for $9.90/month — on Freebird Cloud or your own model.</div>'
+    + '<div class="quota-wall-subtitle">Pro unlocks Agent mode and unlimited cloud edits for $6/month — on Freebird Cloud or your own model.</div>'
     + '<div class="quota-wall-stats">'
       + '<div class="quota-wall-stat"><span class="quota-wall-stat-value">' + _sessionEdits + '</span><span class="quota-wall-stat-label">edits used</span></div>'
       + '<div class="quota-wall-stat"><span class="quota-wall-stat-value">' + _sessionMessages + '</span><span class="quota-wall-stat-label">messages</span></div>'
@@ -1251,7 +1253,8 @@ function showQuotaWall() {
     + '</div>'
     + '<div class="quota-wall-actions">'
       + '<button class="quota-wall-btn-primary" onclick="vscode.postMessage({type:\'start-trial\'})">Try Pro free for 7 days — no card →</button>'
-      + '<button class="quota-wall-btn-secondary" onclick="vscode.postMessage({type:\'upgrade\'})">Upgrade now — $9.90/month</button>'
+      + '<button class="quota-wall-btn-secondary" onclick="vscode.postMessage({type:\'upgrade\'})">Upgrade now — $6/month</button>'
+      + '<button class="quota-wall-btn-secondary" onclick="vscode.postMessage({type:\'upgrade-local\'})" title="E-wallets for Vietnam/Indonesia — Stripe doesn\'t support these">Pay with Local Methods (VN/ID)</button>'
       + '<button class="quota-wall-btn-secondary" onclick="vscode.postMessage({type:\'install-ollama\'})">Use a local model instead</button>'
     + '</div>'
     + '<div class="quota-wall-reset">Free edits reset in ' + resetTime + ' (midnight UTC)</div>';

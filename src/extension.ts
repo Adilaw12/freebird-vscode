@@ -4,7 +4,7 @@ import { GitService } from './git/service';
 import { registerInlineEdit } from './inline/editor';
 import { registerTabCompletion } from './inline/completionProvider';
 import { registerShareSelection } from './share/share';
-import { getLicenseStatus, warmLicenseCache, activateLicense, clearLicenseCache, startTrial, UPGRADE_URL, TEMPLATES_UPGRADE_URL, API_BASE } from './license/validator';
+import { getLicenseStatus, warmLicenseCache, activateLicense, clearLicenseCache, startTrial, UPGRADE_URL, TEMPLATES_UPGRADE_URL, XENDIT_CHECKOUT_URL, API_BASE } from './license/validator';
 import { getCloudEditsRemaining } from './license/usage';
 import { signInWithGitHub, getStoredSession, clearSession } from './auth/github';
 import { buildIndex, updateFileInIndex, removeFileFromIndex, getIndexStats } from './index/indexer';
@@ -28,6 +28,8 @@ async function runLicenseActivationFlow(opts: {
     validate: (key: string) => Promise<{ ok: boolean; email?: string }>;
     onSuccess: (email: string | undefined, refreshStatusBar: () => void) => void;
     upgradeUrl: string;
+    // Pro only (v1 scope) — omit for Templates, which has no Xendit path.
+    localUpgradeUrl?: string;
     notSetUpMessage: string;
     buyLabel: string;
     retryCommand: string;
@@ -48,9 +50,12 @@ async function runLicenseActivationFlow(opts: {
             if (result.ok) {
                 opts.onSuccess(result.email, opts.refreshStatusBar);
             } else {
+                const actions = [opts.buyLabel];
+                if (opts.localUpgradeUrl) actions.push('Pay with Local Methods (VN/ID)');
+                actions.push('Try Again');
                 const action = await vscode.window.showErrorMessage(
                     'License key not recognised or subscription is inactive.',
-                    opts.buyLabel, 'Try Again'
+                    ...actions
                 );
                 if (action === opts.buyLabel) {
                     if (opts.upgradeUrl) {
@@ -58,6 +63,10 @@ async function runLicenseActivationFlow(opts: {
                     } else {
                         vscode.window.showInformationMessage(opts.notSetUpMessage);
                     }
+                }
+                if (action === 'Pay with Local Methods (VN/ID)' && opts.localUpgradeUrl) {
+                    trackEvent('upgrade_clicked_local');
+                    vscode.env.openExternal(vscode.Uri.parse(opts.localUpgradeUrl));
                 }
                 if (action === 'Try Again') vscode.commands.executeCommand(opts.retryCommand);
             }
@@ -158,9 +167,14 @@ export function activate(context: vscode.ExtensionContext) {
         const action = await vscode.window.showWarningMessage(
             `Daily cloud edits used. "${featureName}" needs cloud AI — upgrade to Pro for unlimited, or wait until tomorrow.`,
             'Upgrade to Pro',
+            'Pay with Local Methods (VN/ID)',
             'Activate License'
         );
         if (action === 'Upgrade to Pro') vscode.env.openExternal(vscode.Uri.parse(UPGRADE_URL));
+        if (action === 'Pay with Local Methods (VN/ID)') {
+            trackEvent('upgrade_clicked_local');
+            vscode.env.openExternal(vscode.Uri.parse(XENDIT_CHECKOUT_URL));
+        }
         if (action === 'Activate License') vscode.commands.executeCommand('freebird.activateLicense');
         return false;
     }
@@ -233,6 +247,7 @@ export function activate(context: vscode.ExtensionContext) {
                     refresh();
                 },
                 upgradeUrl: UPGRADE_URL,
+                localUpgradeUrl: XENDIT_CHECKOUT_URL,
                 notSetUpMessage: 'Freebird Pro purchasing isn\'t set up yet.',
                 buyLabel: 'Buy Pro',
                 retryCommand: 'freebird.activateLicense',
@@ -429,9 +444,22 @@ export function activate(context: vscode.ExtensionContext) {
             }
         }),
 
-        vscode.commands.registerCommand('freebird.upgradeToPro', () => {
-            trackEvent('upgrade_clicked');
-            vscode.env.openExternal(vscode.Uri.parse(UPGRADE_URL));
+        vscode.commands.registerCommand('freebird.upgradeToPro', async () => {
+            const choice = await vscode.window.showQuickPick(
+                [
+                    { label: '$(credit-card) Upgrade to Pro', description: 'International card, via Stripe', value: 'stripe' },
+                    { label: '$(globe) Pay with Local Methods (VN/ID)', description: 'E-wallets — OVO, DANA, ShopeePay, MoMo, ZaloPay', value: 'xendit' },
+                ],
+                { placeHolder: 'How would you like to pay?' }
+            );
+            if (!choice) return;
+            if (choice.value === 'xendit') {
+                trackEvent('upgrade_clicked_local');
+                vscode.env.openExternal(vscode.Uri.parse(XENDIT_CHECKOUT_URL));
+            } else {
+                trackEvent('upgrade_clicked');
+                vscode.env.openExternal(vscode.Uri.parse(UPGRADE_URL));
+            }
         }),
 
         vscode.commands.registerCommand('freebird.previewHtml', (uri?: vscode.Uri) => {
@@ -455,9 +483,14 @@ export function activate(context: vscode.ExtensionContext) {
                 vscode.window.showWarningMessage(
                     `${backend.name} requires an active Pro/Team/Enterprise license.`,
                     'Upgrade to Pro',
+                    'Pay with Local Methods (VN/ID)',
                     'Dismiss'
                 ).then(choice => {
                     if (choice === 'Upgrade to Pro') vscode.env.openExternal(vscode.Uri.parse(UPGRADE_URL));
+                    if (choice === 'Pay with Local Methods (VN/ID)') {
+                        trackEvent('upgrade_clicked_local');
+                        vscode.env.openExternal(vscode.Uri.parse(XENDIT_CHECKOUT_URL));
+                    }
                 });
                 return;
             }

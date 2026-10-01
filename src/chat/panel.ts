@@ -9,7 +9,7 @@ import { GitService } from '../git/service';
 import { Message } from '../ai/provider';
 import { runAgentLoop, AgentEvent, stripToolBlocks } from '../agent/loop';
 import { buildFileContext, resolveMentions, listWorkspaceFiles } from './contextBuilder';
-import { getLicenseStatus, UPGRADE_URL, TEMPLATES_UPGRADE_URL } from '../license/validator';
+import { getLicenseStatus, UPGRADE_URL, TEMPLATES_UPGRADE_URL, XENDIT_CHECKOUT_URL } from '../license/validator';
 import { getCloudEditsRemaining, DAILY_CLOUD_LIMIT } from '../license/usage';
 import { readProjectMemory, clearProjectMemory, MEMORY_RELATIVE_PATH } from '../agent/memory';
 import { readProjectRules, RULES_RELATIVE_PATH } from '../agent/rules';
@@ -151,6 +151,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     // Funnel stage 2: user clicked through to Stripe checkout
                     vscode.env.openExternal(vscode.Uri.parse(UPGRADE_URL));
                     trackEvent('upgrade_clicked');
+                    break;
+                case 'upgrade-local':
+                    // Same funnel stage, Xendit path — Stripe doesn't support
+                    // Indonesia/Vietnam's local e-wallet rails at all.
+                    vscode.env.openExternal(vscode.Uri.parse(XENDIT_CHECKOUT_URL));
+                    trackEvent('upgrade_clicked_local');
                     break;
                 case 'upgrade-templates':
                     if (TEMPLATES_UPGRADE_URL) {
@@ -333,7 +339,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     '**Free plan:**',
                     `${getCloudEditsRemaining(this.context)}/${DAILY_CLOUD_LIMIT} cloud edits left today (Gemini Flash) — resets daily.`,
                     `After cloud edits: falls back to local Ollama if available.`,
-                    `[Upgrade to Pro](${UPGRADE_URL}) for unlimited cloud edits + BYOK.`,
+                    `[Upgrade to Pro](${UPGRADE_URL}) for unlimited cloud edits + BYOK, or ` +
+                    `[pay with local methods](${XENDIT_CHECKOUT_URL}) (Vietnam/Indonesia e-wallets).`,
                     ''
                 );
             } else {
@@ -567,7 +574,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 served = false;
                 response =
                     `**Too many requests** — you've hit the fallback rate limit (20/hr).\n\n` +
-                    `[Upgrade to Pro](${UPGRADE_URL}) for unlimited access, or install ` +
+                    `[Upgrade to Pro](${UPGRADE_URL}) (or [pay with local methods](${XENDIT_CHECKOUT_URL}) ` +
+                    `for Vietnam/Indonesia) for unlimited access, or install ` +
                     `[Ollama](https://ollama.com) for unlimited free local AI.`;
             } else {
                 trackEvent('api_error', err?.code || 'unknown');

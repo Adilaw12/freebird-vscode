@@ -10,6 +10,11 @@ export const API_BASE    = 'https://freebird-backend.vercel.app';
 // the annual price once a UI offers that choice.
 export const UPGRADE_URL = `${API_BASE}/upgrade`;
 export const TEMPLATES_UPGRADE_URL = 'https://buy.stripe.com/3cI6oJ3SdgUu9ys1ylfAc04';
+// Stripe doesn't support Indonesia's QRIS/OVO/DANA/ShopeePay or Vietnam's
+// MoMo/ZaloPay at all — customers there click Upgrade but can never pay.
+// This is a second, self-selected checkout path (not geo-detected) for
+// those two markets — see backend/api/xendit-*.js.
+export const XENDIT_CHECKOUT_URL = `${API_BASE}/pay-local`;
 
 const CACHE_TTL_MS   = 60 * 60 * 1000;          // 1 hour
 const OFFLINE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days offline grace

@@ -15,7 +15,7 @@
 // no way to tell "never had a license" apart from "trial just ended."
 
 import * as vscode from 'vscode';
-import { getLicenseStatus, LicenseStatus, UPGRADE_URL } from './validator';
+import { getLicenseStatus, LicenseStatus, UPGRADE_URL, XENDIT_CHECKOUT_URL } from './validator';
 import { trackEvent } from '../telemetry';
 
 export const TRACKED_TRIAL_KEY = 'freebird.trackedTrial';
@@ -72,11 +72,14 @@ export async function checkTrialReminder(context: vscode.ExtensionContext): Prom
         trackEvent('trial_reminder_shown', String(daysLeft));
         const action = await vscode.window.showInformationMessage(
             `Freebird trial ends in ${daysLeft} day${daysLeft === 1 ? '' : 's'} — keep unlimited multi-file edits, terminal commands, and checkpoints by upgrading to Pro.`,
-            'Upgrade to Pro', 'Dismiss'
+            'Upgrade to Pro', 'Pay with Local Methods (VN/ID)', 'Dismiss'
         );
         if (action === 'Upgrade to Pro') {
             trackEvent('trial_reminder_upgrade_clicked', String(daysLeft));
             vscode.env.openExternal(vscode.Uri.parse(UPGRADE_URL));
+        } else if (action === 'Pay with Local Methods (VN/ID)') {
+            trackEvent('upgrade_clicked_local', String(daysLeft));
+            vscode.env.openExternal(vscode.Uri.parse(XENDIT_CHECKOUT_URL));
         }
         return;
     }
@@ -93,10 +96,13 @@ export async function checkTrialReminder(context: vscode.ExtensionContext): Prom
     trackEvent('trial_expired_message_shown');
     const action = await vscode.window.showInformationMessage(
         'Your Freebird Pro trial has ended. Upgrade anytime to get unlimited multi-file edits, terminal commands, and checkpoints back.',
-        'Upgrade to Pro', 'Dismiss'
+        'Upgrade to Pro', 'Pay with Local Methods (VN/ID)', 'Dismiss'
     );
     if (action === 'Upgrade to Pro') {
         trackEvent('trial_expired_upgrade_clicked');
         vscode.env.openExternal(vscode.Uri.parse(UPGRADE_URL));
+    } else if (action === 'Pay with Local Methods (VN/ID)') {
+        trackEvent('upgrade_clicked_local');
+        vscode.env.openExternal(vscode.Uri.parse(XENDIT_CHECKOUT_URL));
     }
 }
