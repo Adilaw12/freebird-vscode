@@ -21,6 +21,9 @@ export interface ToolCall {
 export interface ToolResult {
     success: boolean;
     output: string;
+    /** Set by verify_diagram (and future visual-check tools) so the model's
+     *  next turn — and the chat UI — can actually see what got rendered. */
+    image?: { mimeType: string; base64: string };
 }
 
 // ── Native tool schemas (for Anthropic/OpenAI/DeepSeek/Qwen) ─────────────────
@@ -155,6 +158,18 @@ export const NATIVE_TOOL_SCHEMAS: ToolSchema[] = [
         }
     },
     {
+        name: 'verify_diagram',
+        description: 'Render a Mermaid diagram to a PNG via mermaid.ink and attach it so you can actually look at the result. Catches Mermaid syntax errors and layout problems (overlapping nodes, truncated labels, a confusing flow) that writing the HTML preview alone never surfaces. Call this right after create_diagram, using the same Mermaid source, before telling the user the diagram is ready — if the render fails or the image looks wrong, fix the Mermaid syntax and call create_diagram again rather than reporting success anyway. The diagram source is sent to mermaid.ink, a third-party rendering service — avoid this tool for diagrams containing sensitive proprietary details.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                mermaid: { type: 'string', description: 'Mermaid diagram definition to render (same syntax passed to create_diagram)' },
+                path: { type: 'string', description: 'Workspace-relative path of the diagram\'s HTML file, if this follows a create_diagram call — used only to label the result, not for rendering' }
+            },
+            required: ['mermaid']
+        }
+    },
+    {
         name: 'copy_file',
         description: 'Copy a file from one location to another within the workspace. Requires user approval if the destination already exists.',
         input_schema: {
@@ -212,6 +227,7 @@ AVAILABLE TOOLS:
 - run_command   {"action":"run_command","command":"npm test"}                                     run in terminal
 - download_file  {"action":"download_file","url":"https://example.com/file.zip","path":"files/file.zip"} download from web
 - create_diagram {"action":"create_diagram","title":"Auth Flow","mermaid":"graph TD; A-->B;"}     create & preview a Mermaid diagram
+- verify_diagram {"action":"verify_diagram","mermaid":"graph TD; A-->B;","path":"diagrams/auth-flow.html"}  render via mermaid.ink and check it before reporting success
 - copy_file      {"action":"copy_file","source":"src/old.ts","destination":"src/new.ts"}           copy a file
 - git_status     {"action":"git_status"}                                                          repo status
 - git_push       {"action":"git_push"}                                                            push to remote
@@ -224,6 +240,7 @@ GUIDELINES:
 - Use edit_file for targeted changes; write_file only for new files or complete rewrites
 - edit_file matches oldStr exactly when possible; if that fails it falls back to a whitespace-insensitive line match, so minor spacing differences are OK — but still copy oldStr from the file as closely as you can
 - After creating or editing an HTML file, call preview_html on it so the user can see the rendered page in a tab inside VS Code — don't tell them to install a separate live-server extension
+- After create_diagram, call verify_diagram with the same Mermaid source to render and check it before telling the user it's ready — if verify_diagram reports a failure, fix the syntax and call create_diagram again rather than reporting success anyway
 - All paths are relative to the workspace root
 - When the user asks you to build, create, make, scaffold, or set up something (e.g. "make a website", "create a script that..."), use write_file to create the actual files in their workspace — don't just print example code in chat. Only show inline snippets when they ask for an explanation, example, or something not meant to be saved.
 - When creating a website, write every file the HTML references (e.g. style.css, script.js, image placeholders) — never leave a <link> or <script> pointing at a file you didn't create
@@ -238,6 +255,7 @@ export const NATIVE_TOOL_GUIDELINES = `GUIDELINES:
 - Always read files before editing — never assume their contents.
 - Use search_code for exact strings/symbol names; use search_codebase_semantic for concepts or "where is X handled" when you don't know the exact wording.
 - Use edit_file for targeted changes; write_file only for new files or complete rewrites.
+- After create_diagram, always call verify_diagram with the same mermaid source before telling the user the diagram is ready. If it reports a render failure or the image looks wrong (overlapping nodes, truncated text, a confusing layout), fix the Mermaid syntax and call create_diagram again — don't just apologize in text.
 - All paths are relative to the workspace root.
 - When the user asks you to build/create something, use write_file to create actual files — don't just print code.
 - When creating a website, write every file the HTML references.
@@ -359,6 +377,7 @@ export async function executeToolCall(
             case 'run_command':    return await runCommandTool(tool, onApprovalNeeded, turnId);
             case 'download_file':  return await downloadFileTool(tool, onApprovalNeeded, turnId);
             case 'create_diagram': return await createDiagramTool(tool);
+            case 'verify_diagram': return await verifyDiagramTool(tool);
             case 'copy_file':      return await copyFileTool(tool, onApprovalNeeded, turnId);
             case 'git_status':     return { success: true, output: await git.getStatus() };
             case 'git_push':       return await gitPushTool(git, onApprovalNeeded, turnId);
@@ -963,6 +982,52 @@ ${mermaid}
         return { success: true, output: `Diagram saved to ${relPath} and opened in preview.` };
     } catch (err: any) {
         return { success: false, output: `Error creating diagram: ${err?.message ?? String(err)}` };
+    }
+}
+
+const MERMAID_INK_BASE = 'https://mermaid.ink/img/';
+const MAX_DIAGRAM_IMAGE_BYTES = 5 * 1024 * 1024;
+const DIAGRAM_RENDER_TIMEOUT_MS = 15_000; // no cold-Chromium tax to budget for — mermaid.ink should be fast; still bounded
+
+async function verifyDiagramTool(tool: ToolCall): Promise<ToolResult> {
+    const mermaid = String(tool.mermaid ?? '').trim();
+    if (!mermaid) return { success: false, output: 'verify_diagram requires "mermaid".' };
+    const relPath = String(tool.path ?? '').trim();
+
+    const encoded = Buffer.from(mermaid, 'utf8').toString('base64url');
+    const url = `${MERMAID_INK_BASE}${encoded}`;
+
+    try {
+        const response = await fetch(url, { signal: AbortSignal.timeout(DIAGRAM_RENDER_TIMEOUT_MS) });
+
+        if (!response.ok || !response.headers.get('content-type')?.startsWith('image/')) {
+            const detail = await response.text().catch(() => '');
+            return {
+                success: false,
+                output: `Diagram failed to render (mermaid.ink returned ${response.status}). This usually ` +
+                    `means a Mermaid syntax error.${detail ? ` Detail: ${detail.slice(0, 500)}` : ''} ` +
+                    `Fix the syntax and call create_diagram again.`
+            };
+        }
+
+        const buf = Buffer.from(await response.arrayBuffer());
+        if (buf.byteLength > MAX_DIAGRAM_IMAGE_BYTES) {
+            return { success: false, output: 'Rendered diagram image was unexpectedly large — skipping visual check.' };
+        }
+
+        return {
+            success: true,
+            output: `Diagram rendered successfully${relPath ? ` (${relPath})` : ''}. Look at the attached image: ` +
+                `check for overlapping nodes, truncated labels, or a confusing layout before telling the user it's ready.`,
+            image: { mimeType: 'image/png', base64: buf.toString('base64') }
+        };
+    } catch (err: any) {
+        // mermaid.ink down/rate-limited/slow — degrade, don't block the turn.
+        return {
+            success: false,
+            output: `Could not reach mermaid.ink to verify the diagram (${err?.message ?? String(err)}). ` +
+                `Proceeding without a visual check — the diagram file was still created.`
+        };
     }
 }
 

@@ -185,6 +185,11 @@ function convertToOpenAIMessages(messages: RichMessage[]): unknown[] {
             result.push(m);
         } else if (msg.role === 'tool_result') {
             for (const tr of msg.toolResults ?? []) {
+                // tr.image (e.g. verify_diagram's rendered PNG) is intentionally
+                // dropped here — OpenAI/DeepSeek/Qwen vision uses an `image_url`
+                // content-block shape, different from Anthropic's `source` shape
+                // this field was added for. Not wired up for v1; these providers
+                // still get the textual render-success/failure message below.
                 result.push({
                     role: 'tool',
                     tool_call_id: tr.toolCallId,

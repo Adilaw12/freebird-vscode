@@ -46,7 +46,7 @@ export type AgentEvent =
     | { type: 'text-chunk'; text: string }
     | { type: 'response-complete'; rawText: string }
     | { type: 'tool-start'; id: string; tool: ToolCall }
-    | { type: 'tool-result'; id: string; tool: ToolCall; success: boolean; output: string };
+    | { type: 'tool-result'; id: string; tool: ToolCall; success: boolean; output: string; image?: { mimeType: string; base64: string } };
 
 export interface AgentRunOptions {
     userMessage: string;
@@ -145,12 +145,13 @@ async function runNativeToolLoop(opts: AgentRunOptions, turnId: string): Promise
             const id = `${tc.name}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
             onEvent({ type: 'tool-start', id, tool: internalTool });
             const toolResult = await executeToolCall(internalTool, git, onApprovalNeeded, context, sessionId, turnId);
-            onEvent({ type: 'tool-result', id, tool: internalTool, success: toolResult.success, output: toolResult.output });
+            onEvent({ type: 'tool-result', id, tool: internalTool, success: toolResult.success, output: toolResult.output, image: toolResult.image });
 
             toolResults.push({
                 toolCallId: tc.id,
                 output: toolResult.output,
-                isError: !toolResult.success
+                isError: !toolResult.success,
+                image: toolResult.image
             });
 
             consecutiveToolFailures = toolResult.success ? 0 : consecutiveToolFailures + 1;
@@ -252,16 +253,22 @@ async function runTextParsedLoop(opts: AgentRunOptions, turnId: string): Promise
 
         const toolResultParts: string[] = [];
         let circuitBroken = false;
+        // Last image produced in this batch (e.g. verify_diagram's rendered
+        // PNG) — attached to the next turn only if this provider can use it
+        // (CloudProvider today; Ollama never sets supportsImageInput, so its
+        // payload shape is untouched and it keeps getting text-only results).
+        let diagramImage: { mimeType: string; base64: string } | undefined;
 
         for (const tool of toolCalls) {
             const id = `${tool.action}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
             onEvent({ type: 'tool-start', id, tool });
             const result = await executeToolCall(tool, git, onApprovalNeeded, context, sessionId, turnId);
-            onEvent({ type: 'tool-result', id, tool, success: result.success, output: result.output });
+            onEvent({ type: 'tool-result', id, tool, success: result.success, output: result.output, image: result.image });
             toolResultParts.push(
                 `Result of ${tool.action}:\n` +
                 (result.success ? result.output : `[ERROR] ${result.output}`)
             );
+            if (result.image) diagramImage = result.image;
 
             consecutiveToolFailures = result.success ? 0 : consecutiveToolFailures + 1;
             if (consecutiveToolFailures >= MAX_CONSECUTIVE_TOOL_FAILURES) {
@@ -272,7 +279,11 @@ async function runTextParsedLoop(opts: AgentRunOptions, turnId: string): Promise
 
         const toolResultMsg = toolResultParts.join('\n\n---\n\n');
         messages.push({ role: 'assistant', content: rawText });
-        messages.push({ role: 'user', content: toolResultMsg });
+        messages.push({
+            role: 'user',
+            content: toolResultMsg,
+            ...(diagramImage && provider.supportsImageInput && { image: diagramImage })
+        });
         newHistory.push({ role: 'user', content: toolResultMsg });
 
         if (circuitBroken) {

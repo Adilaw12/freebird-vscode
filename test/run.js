@@ -30,6 +30,8 @@ const suites = [
     require('./checkout-pricing.test.js'),
     require('./checkpoint.test.js'),
     require('./fetch-url.test.js'),
+    require('./verify-diagram.test.js'),
+    require('./message-content.test.js'),
     require('./backend-picker.test.js'),
     require('./prompt-templates.test.js'),
     require('./context-builder.test.js'),

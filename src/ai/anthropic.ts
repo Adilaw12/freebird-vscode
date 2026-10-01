@@ -182,10 +182,20 @@ function convertToAnthropicMessages(messages: RichMessage[]): unknown[] {
             }
             result.push({ role: 'assistant', content });
         } else if (msg.role === 'tool_result') {
+            // Image input is GA on the Messages API since Claude 3 under the
+            // standard anthropic-version header already in use below — no
+            // beta header needed. tool_result.content can be a plain string
+            // OR a content-block array; only switch to the array form when
+            // an image is actually attached (verify_diagram's rendered PNG).
             const content = (msg.toolResults ?? []).map(tr => ({
                 type: 'tool_result' as const,
                 tool_use_id: tr.toolCallId,
-                content: tr.output,
+                content: tr.image
+                    ? [
+                        { type: 'image', source: { type: 'base64', media_type: tr.image.mimeType, data: tr.image.base64 } },
+                        { type: 'text', text: tr.output }
+                    ]
+                    : tr.output,
                 ...(tr.isError && { is_error: true })
             }));
             result.push({ role: 'user', content });

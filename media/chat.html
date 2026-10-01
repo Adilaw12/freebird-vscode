@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline' {{CSP_SOURCE}};">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline' {{CSP_SOURCE}}; img-src data:;">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Freebird AI</title>
 <style>
@@ -355,6 +355,10 @@ em { font-style: italic; }
   opacity: 0.85; max-height: none;
 }
 .tool-related .tool-label { font-weight: 600; }
+.tool-image {
+  max-width: 220px; max-height: 160px; border-radius: 6px;
+  margin-top: 6px; border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.08));
+}
 
 /* ── approval cards ── */
 .approval-card {
@@ -1075,7 +1079,7 @@ function addToolStatus(id, state, label) {
   hdr.appendChild(ic); hdr.appendChild(lbl); card.appendChild(hdr); msgsEl.appendChild(card); scroll();
 }
 
-function updateToolStatus(id, state, output) {
+function updateToolStatus(id, state, output, image) {
   var card=document.getElementById('tool-'+id); if (!card) return;
   var wasRelated=card.classList.contains('tool-related');
   card.className='tool-card tool-'+state+(wasRelated?' tool-related':'');
@@ -1083,6 +1087,11 @@ function updateToolStatus(id, state, output) {
   if (ic) ic.innerHTML = state==='done' ? svgIcon('M2 8l3 3 6-6') : svgIcon('M3 3l6 6M9 3l-6 6');
   if (output) {
     var d=document.createElement('div'); d.className='tool-output'; d.textContent=output; card.appendChild(d);
+  }
+  if (image && image.base64) {
+    var img=document.createElement('img'); img.className='tool-image';
+    img.src='data:'+image.mimeType+';base64,'+image.base64;
+    card.appendChild(img);
   }
   scroll();
 }
@@ -1421,7 +1430,7 @@ window.addEventListener('message',function(e){
     case 'auth-required':    showAuthWall(); setBusy(false); break;
     case 'set-text':         setCurrentText(m.text); break;
     case 'tool-status':      addToolStatus(m.id,m.state,m.label); break;
-    case 'tool-update':      updateToolStatus(m.id,m.state,m.output); break;
+    case 'tool-update':      updateToolStatus(m.id,m.state,m.output,m.image); break;
     case 'approval-request': addApprovalCard(m.id,m.description,m.preview); break;
     case 'checkpoint-ready':    addCheckpointCard(m.id,m.files,m.unrevertable,m.isFirstEver); break;
     case 'multifile-cta':       addMultiFileCtaCard(m.fileCount); break;

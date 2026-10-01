@@ -1,6 +1,11 @@
 import * as vscode from 'vscode';
 import { AIProvider, CompletionOptions, Message, FIMProvider } from './provider';
 
+// Does not set supportsImageInput: Ollama's own multimodal convention is a
+// separate `images: string[]` field per message, not the Anthropic-shaped
+// `{mimeType, base64}` object Message.image carries — not wired up for v1,
+// so verify_diagram's rendered image is never attached here (loop.ts only
+// attaches it when provider.supportsImageInput is true).
 export class OllamaProvider implements AIProvider, FIMProvider {
     private get url() {
         return vscode.workspace.getConfiguration('freebird').get<string>('ollamaUrl', 'http://localhost:11434');

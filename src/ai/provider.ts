@@ -1,6 +1,9 @@
 export interface Message {
     role: 'user' | 'assistant';
     content: string;
+    /** Set when this message carries an image (e.g. verify_diagram's rendered
+     *  PNG) for a provider that supports it — see AIProvider.supportsImageInput. */
+    image?: { mimeType: string; base64: string };
 }
 
 export interface CompletionOptions {
@@ -40,6 +43,7 @@ export interface ToolResultEntry {
     toolCallId: string;
     output: string;
     isError?: boolean;
+    image?: { mimeType: string; base64: string };
 }
 
 export interface RichMessage {
@@ -59,6 +63,13 @@ export interface StreamToolsResult {
 export interface AIProvider {
     stream(messages: Message[], onChunk: (text: string) => void, opts?: CompletionOptions): Promise<void>;
     complete(messages: Message[], opts?: CompletionOptions): Promise<string>;
+
+    /** True when stream()/complete() know how to turn a Message.image into
+     *  this provider's own multimodal content-block shape. Duck-typed check,
+     *  same convention as isFIMProvider (src/inline/completionProvider.ts) —
+     *  only CloudProvider sets this today; Ollama's own image convention
+     *  (`images: string[]`) is a different shape and not wired up yet. */
+    readonly supportsImageInput?: boolean;
 
     readonly supportsNativeTools?: boolean;
     streamWithTools?(

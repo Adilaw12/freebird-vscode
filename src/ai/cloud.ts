@@ -38,6 +38,11 @@ export class CloudProvider implements AIProvider {
      *  decide whether to show the one-time Template Library upsell nudge. */
     templateBonusUsed = false;
 
+    // Pro/unmetered traffic always resolves to Claude Haiku 4.5/Sonnet 5 server-side
+    // (backend/api/chat.js) — both support Anthropic's image content-block shape,
+    // which is exactly what a Message.image gets converted into below.
+    readonly supportsImageInput = true;
+
     constructor(
         context: vscode.ExtensionContext,
         sessionId: string,
@@ -68,8 +73,23 @@ export class CloudProvider implements AIProvider {
 
         this.templateBonusUsed = false;
 
+        // Messages carrying an image (e.g. verify_diagram's rendered PNG) get
+        // converted to Anthropic's multimodal content-block shape; everything
+        // else stays a plain string. Safe to send unconditionally — chat.js
+        // only special-cases content when it's actually an array.
+        const wireMessages = messages.map(m => m.image
+            ? {
+                role: m.role,
+                content: [
+                    { type: 'image', source: { type: 'base64', media_type: m.image.mimeType, data: m.image.base64 } },
+                    { type: 'text', text: m.content }
+                ]
+            }
+            : { role: m.role, content: m.content }
+        );
+
         const body = {
-            messages,
+            messages: wireMessages,
             sessionId:  this.sessionId,
             authToken:  session?.sessionToken,
             licenseKey: licenseKey || undefined,

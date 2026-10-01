@@ -1,5 +1,11 @@
 # Changelog
 
+## \[0.13.6] — 2026-10-01
+
+### Added
+
+* **Agent mode now visually checks AI-generated Mermaid diagrams before reporting them done.** `create_diagram` previously wrote raw Mermaid syntax to an HTML file and opened a preview with no check — a syntax error or a badly overlapping layout shipped straight to you with nothing catching it. A new `verify_diagram` tool renders the diagram to a PNG via [mermaid.ink](https://mermaid.ink) and feeds the image back to the model so it can actually look at the result (and fix-and-retry on a broken one) before telling you it's ready; the rendered image now also shows as a thumbnail in the chat tool card. Diagram source is sent to mermaid.ink, a free third-party rendering service, to make this work — avoid asking for diagrams containing sensitive proprietary details until this has a self-hosted alternative. Covers the default Pro/cloud backend and BYOK Anthropic; BYOK OpenAI/DeepSeek/Qwen and local Ollama models still get the text-only result for now (different vision content-block shape, not wired up yet).
+
 ## \[0.13.5] — 2026-09-25
 
 ### Fixed

@@ -654,7 +654,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     type: 'tool-update',
                     id: event.id,
                     state: event.success ? 'done' : 'error',
-                    output: event.output.length > cap ? event.output.slice(0, cap) + '…' : event.output
+                    output: event.output.length > cap ? event.output.slice(0, cap) + '…' : event.output,
+                    image: event.image
                 });
                 break;
             }

@@ -23,6 +23,7 @@ import { fetchGeminiWithFallback, PRO_GEMINI_MODEL_CANDIDATES } from '../lib/gem
 import { fetchAnthropicWithFallback, anthropicConfigured, SONNET_MODEL_CANDIDATES } from '../lib/anthropicModel.js';
 import { fetchCerebrasWithFallback, cerebrasConfigured } from '../lib/cerebrasModel.js';
 import { quotaKeysFor, reserveQuota, refundQuota, reserveSingleCounter } from '../lib/quota.js';
+import { textOnlyContent } from '../lib/messageContent.js';
 
 const redis = Redis.fromEnv();
 
@@ -247,17 +248,19 @@ export default async function handler(req, res) {
         if (msg.role === 'system') {
             systemParts.push(msg.content);
         } else {
+            const textOnly = textOnlyContent(msg.content);
+
             geminiContents.push({
                 role: msg.role === 'assistant' ? 'model' : 'user',
-                parts: [{ text: msg.content }]
+                parts: [{ text: textOnly }]
             });
             anthropicMessages.push({
                 role: msg.role === 'assistant' ? 'assistant' : 'user',
-                content: msg.content
+                content: msg.content // string or content-block array — passed through unchanged
             });
             cerebrasMessages.push({
                 role: msg.role === 'assistant' ? 'assistant' : 'user',
-                content: msg.content
+                content: textOnly
             });
         }
     }
