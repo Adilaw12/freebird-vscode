@@ -8,6 +8,19 @@
 // (well under Cerebras's 8,192-token context limit). NOT used for full chat
 // or Pro/unmetered traffic (which already gets Claude Haiku 4.5).
 //
+// Extending this to Pro was tested and rejected (2026-10-01): a live
+// side-by-side of gpt-oss-120b vs Haiku 4.5 on 5 realistic completion
+// prompts (same request shapes as api/chat.js sends) found Cerebras
+// returned a completely EMPTY completion on one prompt — reproducing live,
+// even at reasoning_effort:'low', the exact reasoning-token-budget risk
+// described below — and hallucinated a nonexistent function with a
+// side-effect bug on another. Haiku had zero outright failures across all
+// 5. This was never a speed-vs-quality tradeoff to accept for Pro — gpt-oss-120b's
+// speed is irrelevant if the completions themselves are wrong. Revisit only
+// once Cerebras serves a frontier-tier model whose OUTPUT QUALITY (not
+// inference speed) is verified to match Haiku's via this same comparison —
+// a faster model on this hardware is not sufficient on its own.
+//
 // Cost note: Cerebras discontinued its permanent free tier on 2026-08-17 —
 // this is now a deliberate, modest paid cost (gpt-oss-120b: $0.35/M input,
 // $0.75/M output — roughly $0.0007/completion at this feature's typical
