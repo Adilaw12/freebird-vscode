@@ -302,11 +302,19 @@ export default async function handler(req, res) {
     // streamed as separate delta.reasoning tokens BEFORE any delta.content.
     // At this feature's tight maxTokens (128), the default reasoning depth
     // can consume the entire budget and return an empty completion with
-    // finish_reason:"length" — confirmed happening at 30 tokens in testing.
-    // 'none' is rejected by this model (only low/medium/high accepted);
-    // 'low' still reasons some but reliably leaves room for real content.
+    // finish_reason:"length" — confirmed happening at 30 tokens in testing,
+    // and confirmed AGAIN at production scale on 2026-10-01: 1,314 Cerebras
+    // completion calls that day, only 226 tab_completion_shown (~17%
+    // shown rate) — the dominant cause isn't cancellation, it's exactly
+    // this reasoning-eats-the-budget failure. 'none' is rejected by this
+    // model (only low/medium/high accepted); 'low' still reasons some but
+    // needs real headroom past the shared 128 completion budget to
+    // reliably leave room for actual content afterward — given ONLY to
+    // Cerebras here, not to the Gemini fallback or Haiku (neither has this
+    // failure mode, no reason to loosen their budgets too).
+    const CEREBRAS_COMPLETION_MAX_TOKENS = 320;
     const cerebrasBody = {
-        max_tokens: maxTokens,
+        max_tokens: isCompletion ? CEREBRAS_COMPLETION_MAX_TOKENS : maxTokens,
         temperature: 0.2,
         stream: true,
         reasoning_effort: 'low',
