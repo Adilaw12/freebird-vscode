@@ -69,6 +69,26 @@ body {
 }
 .banner-close:hover { opacity: 0.7; }
 
+/* ── Value Visibility: quiet, persistent reminder of what Pro unlocks —
+   lives inside the (dismissible) upgrade banner rather than its own
+   interruption, since a free user already using the product daily
+   doesn't need a second nag surface ── */
+.locked-features { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+.locked-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 0.78em; opacity: 0.75; cursor: pointer;
+  background: none; border: 1px solid rgba(217,119,87,0.25); border-radius: 10px;
+  padding: 2px 8px; color: var(--vscode-editor-foreground);
+  transition: opacity 0.2s, border-color 0.2s;
+}
+.locked-badge:hover { opacity: 1; border-color: rgba(217,119,87,0.5); }
+
+/* ── Pro usage analytics: small retention-facing stats line, Pro only ── */
+#pro-stats {
+  display: none; padding: 6px 16px; font-size: 0.78em; opacity: 0.65;
+  flex-shrink: 0; border-bottom: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.06));
+}
+
 /* ── trial-ending banner — deliberately not auto-hidden by isPro like
    #upgrade-banner, since the trial's last day/expiry is still isPro:true
    or was just isPro:true a moment ago, and this moment matters more than
@@ -714,7 +734,13 @@ em { font-style: italic; }
 
 <!-- Upgrade banner -->
 <div id="upgrade-banner">
-  <span>10 free cloud edits/day &bull; free BYOK &amp; local Ollama &bull; Pro = Agent mode + unlimited</span>
+  <div>
+    <span>10 free cloud edits/day &bull; free BYOK &amp; local Ollama &bull; Pro = Agent mode + unlimited</span>
+    <div class="locked-features">
+      <span class="locked-badge" title="Multi-file, tool-driven editing" onclick="vscode.postMessage({type:'upgrade'})">&#x1F512; Smart Agent</span>
+      <span class="locked-badge" title="No daily cap on cloud edits" onclick="vscode.postMessage({type:'upgrade'})">&#x1F512; Unlimited edits</span>
+    </div>
+  </div>
   <div class="banner-links">
     <button class="link-btn" onclick="vscode.postMessage({type:'upgrade'})">Upgrade to Pro</button>
     <button class="link-btn" onclick="vscode.postMessage({type:'upgrade-local'})" title="E-wallets for Vietnam/Indonesia — Stripe doesn't support these">Pay with Local Methods (VN/ID)</button>
@@ -722,6 +748,9 @@ em { font-style: italic; }
     <button class="banner-close" onclick="document.getElementById('upgrade-banner').style.display='none'" title="Dismiss">&#x2715;</button>
   </div>
 </div>
+
+<!-- Pro usage analytics — quiet retention signal, Pro only -->
+<div id="pro-stats"></div>
 
 <!-- Trial-ending banner — persistent (no close button) for the trial's last day / just-expired -->
 <div id="trial-banner">
@@ -1318,6 +1347,16 @@ function showUpgradeNudge(variant) {
   scroll();
 }
 
+function showUsageStats(edits, agentRuns, secondsSaved) {
+  var el = document.getElementById('pro-stats');
+  if (!el) return;
+  var minutes = Math.round(secondsSaved / 60);
+  var timeText = minutes < 1 ? '<1 min' : (minutes + ' min');
+  el.textContent = edits + ' edit' + (edits === 1 ? '' : 's') + ' · ~' + timeText + ' saved' +
+    (agentRuns ? ' · ' + agentRuns + ' agent run' + (agentRuns === 1 ? '' : 's') : '');
+  el.style.display = edits > 0 ? 'block' : 'none';
+}
+
 function showOllamaFallback() {
   var h=document.createElement('div'); h.className='status-hint ollama-mode';
   h.innerHTML='Ollama wasn\'t reachable — answered via Freebird Cloud instead (uses your daily free edits). &nbsp;' +
@@ -1442,6 +1481,7 @@ window.addEventListener('message',function(e){
     case 'upgrade-nudge':    showUpgradeNudge(m.variant); break;
     case 'cleared':          msgsEl.innerHTML=''; transcript=[]; currentAssistantText=''; addDivider('conversation cleared'); break;
     case 'workspace-files':  workspaceFiles=m.files||[]; break;
+    case 'usage-stats':      showUsageStats(m.edits, m.agentRuns, m.secondsSaved); break;
     case 'license-status': {
       var banner=document.getElementById('upgrade-banner');
       var badge=document.getElementById('pro-badge');
@@ -1451,6 +1491,8 @@ window.addEventListener('message',function(e){
       } else {
         if (banner) banner.style.display='flex';
         if (badge)  badge.style.display='none';
+        var statsEl=document.getElementById('pro-stats');
+        if (statsEl) statsEl.style.display='none';
       }
       var trialBanner=document.getElementById('trial-banner');
       var trialBannerText=document.getElementById('trial-banner-text');

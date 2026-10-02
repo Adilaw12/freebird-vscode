@@ -11,6 +11,7 @@ import { runAgentLoop, AgentEvent, stripToolBlocks } from '../agent/loop';
 import { buildFileContext, resolveMentions, listWorkspaceFiles } from './contextBuilder';
 import { getLicenseStatus, UPGRADE_URL, TEMPLATES_UPGRADE_URL, XENDIT_CHECKOUT_URL } from '../license/validator';
 import { getCloudEditsRemaining, DAILY_CLOUD_LIMIT } from '../license/usage';
+import { recordEditUsed, recordAgentRun, getUsageStats } from '../license/stats';
 import { readProjectMemory, clearProjectMemory, MEMORY_RELATIVE_PATH } from '../agent/memory';
 import { readProjectRules, RULES_RELATIVE_PATH } from '../agent/rules';
 import { finalizeTurn, restoreCheckpoint, checkpointsRootFor } from '../agent/checkpoint';
@@ -206,6 +207,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             email: status.email,
             trialBannerMessage: trialBanner?.message ?? null
         });
+        if (status.isPro) {
+            this.post({ type: 'usage-stats', ...getUsageStats(this.context) });
+        }
     }
 
     /** One-time explainer, shown before the very first Agent-mode turn a user ever runs. */
@@ -370,7 +374,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         if (license.isPro) {
             trackEvent('pro_message');
+            recordEditUsed(this.context);
+            this.toolCallsThisRound = 0;
             await this.runProChat(cleanText, mentionContext);
+            // "Refactor" for the usage-analytics display is defined as an
+            // Agent-mode turn that made at least one tool call — distinguishes
+            // real multi-step work from a plain one-shot chat reply.
+            if (this.toolCallsThisRound > 0) {
+                recordAgentRun(this.context);
+            }
+            this.post({ type: 'usage-stats', ...getUsageStats(this.context) });
 
         } else {
             // Contextual Pro CTA: tied to the specific thing they just tried
