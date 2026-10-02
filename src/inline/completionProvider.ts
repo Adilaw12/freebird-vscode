@@ -111,11 +111,28 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
             return [];
         }
 
-        if (token.isCancellationRequested) return [];
+        // Distinguishes WHY a completion never reaches the user — previously
+        // all three outcomes below looked identical from telemetry alone
+        // (no event fired either way), which made a high model_used-vs-
+        // tab_completion_shown gap impossible to diagnose: was the backend
+        // returning empty/redundant text, or was the result just arriving
+        // after the user had already typed past it and VS Code cancelled?
+        // Those have very different fixes (a bad maxTokens/reasoning_effort
+        // tuning vs. nothing actually wrong), so they need separate counts.
+        if (token.isCancellationRequested) {
+            trackEvent('tab_completion_cancelled');
+            return [];
+        }
 
         const text = stripFences(raw).replace(/\s+$/, '');
-        if (!text.trim()) return [];
-        if (suffix.startsWith(text)) return [];
+        if (!text.trim()) {
+            trackEvent('tab_completion_empty');
+            return [];
+        }
+        if (suffix.startsWith(text)) {
+            trackEvent('tab_completion_redundant');
+            return [];
+        }
 
         // This entire feature previously had zero telemetry — a completely
         // silent, ambient capability running for every user on every keystroke
