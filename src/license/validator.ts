@@ -145,6 +145,20 @@ export function clearLicenseCache(context: vscode.ExtensionContext): void {
  * is called at activation specifically so this cache is populated well before
  * any BYOK call would need it.
  */
+/**
+ * Last known-good Pro status from the persisted cache, read synchronously with
+ * NO freshness check and NO network. Only for painting the UI instantly at
+ * window open (Pro badge, status bar) so it doesn't sit in an unlicensed-looking
+ * state for the seconds the real validation takes — the real result always
+ * follows and replaces it. Never use this to gate a feature.
+ */
+export function getPersistedLicenseHint(context: vscode.ExtensionContext): LicenseStatus | undefined {
+    const key = vscode.workspace.getConfiguration('freebird').get<string>('licenseKey', '').trim().toUpperCase();
+    if (!key) return undefined;
+    const persisted = context.globalState.get<CacheEntry>('licenseCache');
+    return persisted && persisted.key === key && persisted.status.isPro === true ? persisted.status : undefined;
+}
+
 export function getCachedLicenseStatus(): LicenseStatus {
     if (_memCache && Date.now() - _memCache.ts < CACHE_TTL_MS) {
         return _memCache.status;

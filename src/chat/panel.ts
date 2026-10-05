@@ -9,7 +9,8 @@ import { GitService } from '../git/service';
 import { Message } from '../ai/provider';
 import { runAgentLoop, AgentEvent, stripToolBlocks } from '../agent/loop';
 import { buildFileContext, resolveMentions, listWorkspaceFiles } from './contextBuilder';
-import { getLicenseStatus, UPGRADE_URL, TEMPLATES_UPGRADE_URL, XENDIT_CHECKOUT_URL } from '../license/validator';
+import { getLicenseStatus, getPersistedLicenseHint, UPGRADE_URL, TEMPLATES_UPGRADE_URL, XENDIT_CHECKOUT_URL } from '../license/validator';
+import { getTemplateWelcomeEndsAt } from '../agent/templateCatalog';
 import { getCloudEditsRemaining, DAILY_CLOUD_LIMIT } from '../license/usage';
 import { recordEditUsed, recordAgentRun, getUsageStats } from '../license/stats';
 import {
@@ -207,7 +208,25 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         });
     }
 
+    /** What the welcome screen offers a free user right now: free Agent runs and the template window. */
+    private welcomeOffers(): { agentRunsLeft: number; templateDaysLeft: number } {
+        const byok = BYOK_BACKENDS.has(vscode.workspace.getConfiguration('freebird').get<string>('backend', 'cloud'));
+        const endsAt = getTemplateWelcomeEndsAt(this.context);
+        return {
+            agentRunsLeft: getAgentTrialRunsLeft(this.context, byok),
+            templateDaysLeft: endsAt === null ? 0 : Math.max(1, Math.ceil((endsAt - Date.now()) / 86_400_000))
+        };
+    }
+
     async showLicenseStatus() {
+        // Paint the last known-good state immediately. The real check below can take
+        // seconds (network, 6s timeout), and until it returned the panel looked
+        // unlicensed on every window open — which reads as "I have to activate again".
+        const hint = getPersistedLicenseHint(this.context);
+        if (hint) {
+            this.post({ type: 'license-status', isPro: true, plan: hint.plan, email: hint.email, trialBannerMessage: null, ...this.welcomeOffers() });
+        }
+
         const status = await getLicenseStatus(this.context);
         const licenseKey = vscode.workspace.getConfiguration('freebird').get<string>('licenseKey', '').trim().toUpperCase();
         const trialBanner = getTrialBannerState(this.context, status, licenseKey);
@@ -216,7 +235,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             isPro: status.isPro,
             plan: status.plan,
             email: status.email,
-            trialBannerMessage: trialBanner?.message ?? null
+            trialBannerMessage: trialBanner?.message ?? null,
+            ...this.welcomeOffers()
         });
         if (status.isPro) {
             this.post({ type: 'usage-stats', ...getUsageStats(this.context) });

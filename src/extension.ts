@@ -4,7 +4,7 @@ import { GitService } from './git/service';
 import { registerInlineEdit } from './inline/editor';
 import { registerTabCompletion } from './inline/completionProvider';
 import { registerShareSelection } from './share/share';
-import { getLicenseStatus, warmLicenseCache, activateLicense, clearLicenseCache, startTrial, UPGRADE_URL, TEMPLATES_UPGRADE_URL, XENDIT_CHECKOUT_URL, API_BASE } from './license/validator';
+import { getLicenseStatus, getPersistedLicenseHint, warmLicenseCache, activateLicense, clearLicenseCache, startTrial, UPGRADE_URL, TEMPLATES_UPGRADE_URL, XENDIT_CHECKOUT_URL, API_BASE } from './license/validator';
 import { getCloudEditsRemaining } from './license/usage';
 import { signInWithGitHub, getStoredSession, clearSession } from './auth/github';
 import { buildIndex, updateFileInIndex, removeFileFromIndex, getIndexStats } from './index/indexer';
@@ -148,6 +148,12 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(statusBar);
 
     async function refreshStatusBar() {
+        // Show the last known-good Pro state right away; the real check follows.
+        const hint = getPersistedLicenseHint(context);
+        if (hint) {
+            const hintLabel = hint.plan === 'enterprise' ? 'Enterprise' : hint.plan === 'team' ? 'Team' : hint.plan === 'trial' ? 'Trial' : 'Pro';
+            statusBar.text = `$(send) Freebird AI ${hintLabel}`;
+        }
         const s = await getLicenseStatus(context);
         const planLabel = s.plan === 'enterprise' ? 'Enterprise' : s.plan === 'team' ? 'Team' : s.plan === 'trial' ? 'Trial' : 'Pro';
         if (s.isPro) {

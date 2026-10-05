@@ -117,14 +117,32 @@ body {
   display: flex; flex-direction: column; align-items: center; gap: 0;
 }
 .welcome-logo {
-  width: 48px; height: 48px; margin-bottom: 20px; opacity: 0.7;
+  width: 52px; height: 52px; margin-bottom: 18px; color: #d97757;
 }
 .welcome-title {
   font-size: 1.3em; font-weight: 600; letter-spacing: -0.02em;
   color: var(--vscode-editor-foreground); margin-bottom: 6px;
 }
 .welcome-sub {
-  font-size: 0.84em; opacity: 0.4; margin-bottom: 28px; font-weight: 400;
+  font-size: 0.9em; opacity: 0.85; margin-bottom: 20px; font-weight: 400; line-height: 1.5;
+}
+.welcome-offers { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 340px; margin-bottom: 22px; }
+.welcome-offer {
+  display: flex; flex-direction: column; gap: 2px; align-items: flex-start; text-align: left;
+  width: 100%; padding: 11px 14px; border-radius: 10px; cursor: pointer;
+  background: var(--vscode-editorWidget-background, rgba(255,255,255,0.03));
+  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.12));
+  color: var(--vscode-editor-foreground); font-family: inherit;
+  transition: border-color 0.15s, background 0.15s;
+}
+.welcome-offer:hover { border-color: rgba(217,119,87,0.6); background: rgba(217,119,87,0.08); }
+.welcome-offer.primary { background: rgba(217,119,87,0.14); border-color: rgba(217,119,87,0.55); }
+.welcome-offer.primary:hover { background: rgba(217,119,87,0.22); }
+.offer-title { font-size: 0.86em; font-weight: 600; }
+.offer-sub { font-size: 0.76em; opacity: 0.8; line-height: 1.4; }
+.welcome-pro {
+  margin-bottom: 20px; padding: 8px 14px; border-radius: 8px; font-size: 0.8em;
+  background: rgba(217,119,87,0.12); border: 1px solid rgba(217,119,87,0.3);
 }
 .welcome-grid {
   display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
@@ -141,8 +159,8 @@ body {
   border-color: rgba(255,255,255,0.12);
 }
 .welcome-card-icon {
-  width: 15px; height: 15px; margin-bottom: 8px; opacity: 0.5;
-  stroke: var(--vscode-editor-foreground); fill: none; stroke-width: 1.8;
+  width: 16px; height: 16px; margin-bottom: 8px; opacity: 1;
+  stroke: #d97757; fill: none; stroke-width: 1.8;
   stroke-linecap: round; stroke-linejoin: round; display: block;
 }
 .welcome-card-label {
@@ -150,10 +168,10 @@ body {
   color: var(--vscode-editor-foreground);
 }
 .welcome-card-desc {
-  font-size: 0.72em; opacity: 0.4; line-height: 1.45;
+  font-size: 0.74em; opacity: 0.8; line-height: 1.45;
 }
 .welcome-hint {
-  margin-top: 24px; font-size: 0.74em; opacity: 0.25;
+  margin-top: 22px; font-size: 0.76em; opacity: 0.65;
   display: flex; align-items: center; gap: 6px;
 }
 
@@ -163,7 +181,7 @@ body {
   display: flex; flex-direction: column; gap: 6px;
 }
 .welcome-prompts-label {
-  font-size: 0.70em; opacity: 0.3; text-align: left;
+  font-size: 0.72em; opacity: 0.7; text-align: left;
   margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.06em;
 }
 .welcome-prompt {
@@ -179,11 +197,11 @@ body {
   background: rgba(217,119,87,0.04);
 }
 .welcome-prompt-icon {
-  font-size: 13px; flex-shrink: 0; opacity: 0.6;
+  font-size: 13px; flex-shrink: 0; opacity: 1;
 }
 .welcome-prompt-text {
-  font-size: 0.78em; color: var(--vscode-editor-foreground);
-  opacity: 0.65; line-height: 1.3;
+  font-size: 0.8em; color: var(--vscode-editor-foreground);
+  opacity: 0.95; line-height: 1.3;
 }
 
 /* ── usage stats bar ── */
@@ -769,8 +787,20 @@ em { font-style: italic; }
       <polygon points="11,17 42,26 11,35 18,26" fill="currentColor" opacity="0.8"/>
       <polygon points="20,22 42,26 20,30 25,26" fill="currentColor" opacity="0.3"/>
     </svg>
-    <div class="welcome-title">Freebird AI</div>
-    <div class="welcome-sub">What can I help you build?</div>
+    <div class="welcome-title">Welcome to Freebird</div>
+    <div class="welcome-sub">Ask a question about your code, or let me make the change for you.</div>
+
+    <div class="welcome-pro" id="welcome-pro" style="display:none"></div>
+    <div class="welcome-offers" id="welcome-offers" style="display:none">
+      <button class="welcome-offer primary" id="offer-agent">
+        <span class="offer-title" id="offer-agent-title">Try Agent mode free</span>
+        <span class="offer-sub" id="offer-agent-sub">Edits across your files, with one-click undo</span>
+      </button>
+      <button class="welcome-offer" id="offer-templates" onclick="vscode.postMessage({type:'browse-templates'})">
+        <span class="offer-title">Every prompt template, unlocked</span>
+        <span class="offer-sub" id="offer-templates-sub">Audits, reviews, migrations and more</span>
+      </button>
+    </div>
     <div class="welcome-grid">
       <div class="welcome-card">
         <svg class="welcome-card-icon" viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="10" rx="1.5"/><path d="M5 6h6M5 9h4"/></svg>
@@ -1358,6 +1388,41 @@ function showAgentTrialNudge(runsLeft) {
   scroll();
 }
 
+// Welcome screen: lead with what the user can do right now. Free users see their
+// free Agent runs and the template window; Pro users just get a short confirmation.
+function updateWelcomeOffers(m) {
+  var offers=document.getElementById('welcome-offers');
+  var proLine=document.getElementById('welcome-pro');
+  if (!offers || !proLine) return;
+  if (m.isPro) {
+    offers.style.display='none';
+    var plan = m.plan === 'enterprise' ? 'Enterprise' : m.plan === 'team' ? 'Team' : m.plan === 'trial' ? 'your Pro trial' : 'Pro';
+    proLine.textContent = 'You\'re on ' + plan + ' \u2014 Agent mode runs on every message.';
+    proLine.style.display='block';
+    return;
+  }
+  proLine.style.display='none';
+  offers.style.display='flex';
+
+  var agentBtn=document.getElementById('offer-agent');
+  var agentTitle=document.getElementById('offer-agent-title');
+  var agentSub=document.getElementById('offer-agent-sub');
+  if (m.agentRunsLeft > 0) {
+    agentTitle.textContent='Try Agent mode free';
+    agentSub.textContent=m.agentRunsLeft+' free run'+(m.agentRunsLeft===1?'':'s')+' \u2014 edits across your files, with one-click undo';
+    agentBtn.onclick=function(){ populateInput('/agent '); };
+  } else {
+    agentTitle.textContent='Try Pro free for 7 days';
+    agentSub.textContent='Agent mode on every message, no card needed';
+    agentBtn.onclick=function(){ vscode.postMessage({type:'start-trial'}); };
+  }
+
+  var tplSub=document.getElementById('offer-templates-sub');
+  tplSub.textContent = m.templateDaysLeft > 0
+    ? 'All unlocked \u2014 '+m.templateDaysLeft+' day'+(m.templateDaysLeft===1?'':'s')+' left of your free week'
+    : 'Browse the free templates and the full library';
+}
+
 function showUpgradeNudge(variant) {
   var msg = NUDGE_MESSAGES[variant];
   if (!msg) return;
@@ -1520,6 +1585,7 @@ window.addEventListener('message',function(e){
         var statsEl=document.getElementById('pro-stats');
         if (statsEl) statsEl.style.display='none';
       }
+      updateWelcomeOffers(m);
       var trialBanner=document.getElementById('trial-banner');
       var trialBannerText=document.getElementById('trial-banner-text');
       if (trialBanner) {
