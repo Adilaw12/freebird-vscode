@@ -13,8 +13,10 @@ import { previewHtmlFile } from './agent/preview';
 import { checkOllamaSetup } from './ai/ollamaSetup';
 import { initTelemetry, disposeTelemetry, trackEvent, getMachineId } from './telemetry';
 import { buildBackendPickerItems } from './license/backendPicker';
-import { getMergedTemplates, clearTemplateCatalogCache, isTemplateLibraryUnlocked } from './agent/templateCatalog';
+import { getMergedTemplates, clearTemplateCatalogCache, isTemplateLibraryUnlocked, getTemplateWelcomeEndsAt } from './agent/templateCatalog';
 import { checkAnnouncement } from './announcement';
+import { maybeShowWhatsNew, showWhatsNew } from './whatsNew';
+import { initApiKeys, setApiKey, clearApiKey, hasApiKey, isKeyProvider, KEY_PROVIDERS, KeyProvider } from './ai/keys';
 import { checkTrialReminder } from './license/trialReminder';
 
 // Shared input-box → withProgress → validate → success/buy/retry flow used by
@@ -74,7 +76,30 @@ async function runLicenseActivationFlow(opts: {
     );
 }
 
-export function activate(context: vscode.ExtensionContext) {
+/** Asks for a provider's API key and stores it in secure storage (never in settings). */
+async function promptForApiKey(provider: KeyProvider, displayName: string): Promise<void> {
+    const existing = hasApiKey(provider);
+    const key = await vscode.window.showInputBox({
+        prompt: existing
+            ? `Enter a new ${displayName} API key (leave empty to keep the saved one)`
+            : `Enter your ${displayName} API key`,
+        password: true,
+        placeHolder: 'sk-...',
+        ignoreFocusOut: true
+    });
+    if (key && key.trim()) await setApiKey(provider, key);
+}
+
+const KEY_PROVIDER_LABELS: Record<KeyProvider, string> = {
+    anthropic: 'Anthropic Claude', openai: 'OpenAI', deepseek: 'DeepSeek',
+    qwen: 'Qwen', kimi: 'Kimi', custom: 'Custom Provider'
+};
+
+export async function activate(context: vscode.ExtensionContext) {
+    // Before anything that can call a provider: load stored API keys into memory
+    // and migrate a key still sitting in the old plaintext setting.
+    await initApiKeys(context);
+
     const git = new GitService();
 
     registerInlineEdit(context);
@@ -140,6 +165,14 @@ export function activate(context: vscode.ExtensionContext) {
         if (ChatViewProvider.current) ChatViewProvider.current.showLicenseStatus();
     }
     refreshStatusBar();
+
+    // ── What's New page after a minor/major update ──────────────────────────
+    // Must precede the walkthrough block below: that block sets the flag we use
+    // to tell an existing user (show notes) from a fresh install (don't).
+    maybeShowWhatsNew(context);
+    context.subscriptions.push(
+        vscode.commands.registerCommand('freebird.showWhatsNew', () => showWhatsNew(context))
+    );
 
     // ── First-run onboarding walkthrough ────────────────────────────────────
     // Opens once per install, guiding: choose a backend → sign in/try an edit
@@ -512,14 +545,8 @@ export function activate(context: vscode.ExtensionContext) {
                 if (model) await vscode.workspace.getConfiguration('freebird').update('model', model.trim(), true);
             }
 
-            const needsKey = !['cloud', 'ollama'].includes(backend.value);
-            if (needsKey) {
-                const key = await vscode.window.showInputBox({
-                    prompt: `Enter your ${backend.name} API key`,
-                    password: true,
-                    placeHolder: 'sk-...'
-                });
-                if (key) await vscode.workspace.getConfiguration('freebird').update('apiKey', key, true);
+            if (isKeyProvider(backend.value)) {
+                await promptForApiKey(backend.value, backend.name);
             }
 
             trackEvent('backend_configured');
@@ -528,25 +555,61 @@ export function activate(context: vscode.ExtensionContext) {
             refreshStatusBar();
         }),
 
+        vscode.commands.registerCommand('freebird.setApiKey', async () => {
+            const current = vscode.workspace.getConfiguration('freebird').get<string>('backend', 'cloud');
+            const picked = await vscode.window.showQuickPick(
+                KEY_PROVIDERS.map(p => ({
+                    label: KEY_PROVIDER_LABELS[p],
+                    description: hasApiKey(p) ? 'key saved' : '',
+                    detail: p === current ? 'Current backend' : undefined,
+                    provider: p
+                })).sort((a, b) => Number(b.provider === current) - Number(a.provider === current)),
+                { placeHolder: 'Which provider is this API key for?', title: 'Freebird: Set API Key' }
+            );
+            if (!picked) return;
+            await promptForApiKey(picked.provider, picked.label);
+        }),
+
+        vscode.commands.registerCommand('freebird.clearApiKeys', async () => {
+            const confirm = await vscode.window.showWarningMessage(
+                'Remove every API key Freebird has saved in secure storage?', { modal: true }, 'Remove keys'
+            );
+            if (confirm !== 'Remove keys') return;
+            for (const p of KEY_PROVIDERS) await clearApiKey(p);
+            vscode.window.showInformationMessage('Freebird removed its saved API keys.');
+        }),
+
         vscode.commands.registerCommand('freebird.usePromptTemplate', async () => {
             const templates = await getMergedTemplates(context);
+            const welcomeEndsAt = getTemplateWelcomeEndsAt(context);
+            const daysLeft = welcomeEndsAt === null ? 0 : Math.max(1, Math.ceil((welcomeEndsAt - Date.now()) / 86_400_000));
             const chosen = await vscode.window.showQuickPick(
                 templates.map(t => ({
                     label: t.locked ? `$(lock) ${t.label}` : t.label,
                     description: t.locked ? `${t.description} — part of the paid Template Library` : t.description,
                     template: t
                 })),
-                { placeHolder: 'Select a prompt template', title: 'Freebird: Use Prompt Template' }
+                {
+                    placeHolder: daysLeft > 0
+                        ? `All templates are free for ${daysLeft} more day${daysLeft === 1 ? '' : 's'} — select one`
+                        : 'Select a prompt template',
+                    title: 'Freebird: Use Prompt Template'
+                }
             );
             if (!chosen) return;
 
             if (chosen.template.locked) {
                 trackEvent('template_locked_clicked', chosen.template.id);
+                // The free week is over (or never applied): lead with Pro, which
+                // bundles the whole library plus Agent mode, ahead of the $3 add-on.
                 const action = await vscode.window.showInformationMessage(
-                    `"${chosen.template.label}" is part of the paid Template Library.`,
-                    'Buy Template Library', 'Activate Existing Key', 'Cancel'
+                    `"${chosen.template.label}" is part of the paid Template Library — included with Pro, free to try for 7 days.`,
+                    'Try Pro free for 7 days', 'Buy Template Library', 'Activate Existing Key', 'Cancel'
                 );
-                if (action === 'Buy Template Library') {
+                if (action === 'Try Pro free for 7 days') {
+                    trackEvent('template_locked_trial_clicked', chosen.template.id);
+                    vscode.commands.executeCommand('freebird.startTrial');
+                } else if (action === 'Buy Template Library') {
                     if (TEMPLATES_UPGRADE_URL) {
                         vscode.env.openExternal(vscode.Uri.parse(TEMPLATES_UPGRADE_URL));
                     } else {

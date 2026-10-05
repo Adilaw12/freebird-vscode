@@ -39,7 +39,12 @@ const suites = [
     require('./auth-token.test.js'),
     require('./memory.test.js'),
     require('./rules.test.js'),
-    require('./template-access.test.js')
+    require('./template-access.test.js'),
+    require('./sse-buffer.test.js'),
+    require('./agent-trial.test.js'),
+    require('./template-welcome.test.js'),
+    require('./api-keys.test.js'),
+    require('./usage-stats.test.js')
 ];
 
 (async () => {

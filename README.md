@@ -32,7 +32,7 @@ Freebird never blocks you — it picks up where other tools stop.
 |---|:---:|:---:|:---:|:---:|
 | Price | $10/mo | $20/mo | **Free** | **$9.90/mo** |
 | Setup required | No | Yes | **No** | No |
-| Multi-file agent edits + terminal | Limited | ✅ | ❌ | ✅ |
+| Multi-file agent edits + terminal | Limited | ✅ | 3 free runs (5 on BYOK), then Pro | ✅ |
 | Semantic codebase search (finds code by meaning) | Limited | ✅ | ❌ | ✅ |
 | Checkpoint + one-click undo, every agent turn | ❌ | Limited | ❌ | ✅ |
 | Local AI (Ollama) | ❌ | ❌ | ✅ | ✅ |
@@ -106,6 +106,8 @@ $25/month for up to 5 seats ($5/seat — cheaper per-seat than an individual Pro
 
 33 expert-crafted prompt templates on top of the 3 free ones — each built the same way (a role, a prioritized checklist, "cite the exact file and line," no theoretical padding) and covering real, recurring dev work: migration & modernization (framework migrations, dependency upgrades, state management, CSS), review & quality (senior-engineer-style review, DB migration safety, performance, dead code), compliance & accessibility (WCAG, license compliance, PII, i18n), onboarding & docs (PR descriptions, changelogs, API docs), infrastructure & DevOps (CI/CD, Dockerfiles, IaC), team & process, framework specialists (React, SQL, Python typing, GraphQL), release & ops, and testing deep-dives.
 
+**Every template is free for your first 7 days** — the whole library unlocks automatically, no key and no card, and locks again after day 7 (the 3 free templates always stay free).
+
 **Included free** if you're on Pro, Enterprise, or Team — no separate purchase. Otherwise it's a low-cost standalone subscription, cheaper than a full Pro upgrade, for anyone who wants the template library without everything else Pro includes. Browse the whole catalog (locked items are visible, not hidden) from the 📚 icon in the chat panel's top bar, the "Browse prompt templates" welcome-screen prompt, or **Freebird: Use Prompt Template** in the command palette. Already have a key? **Freebird: Activate Template Library License**.
 
 ---
@@ -150,6 +152,9 @@ Ghost-text suggestions as you type, on every tier — accept with `Tab`. Runs th
 
 ### Bring Your Own Keys — Unthrottled, free
 Plug in your own **Anthropic Claude**, **OpenAI**, **DeepSeek**, **Qwen**, or **Kimi K3** API key — or point Freebird at any OpenAI-compatible **Custom Provider** (OpenRouter, Together, self-hosted, etc.). Direct-to-LLM speed, total data privacy, no middleman quotas — free for everyone, since the calls never touch Freebird's servers. DeepSeek in particular is worth a look even if cost isn't a concern: it scores higher than GPT-4o on coding benchmarks and runs about $0.20/million tokens.
+
+### Try Agent Mode Free
+Free users get **3 free Agent-mode runs** (5 if you're on your own API key) — no trial to start, no card. Type `/agent <what you want done>`, or use the **Run as agent** button that appears when you reference several files at once. Every run gets a checkpoint, so you can undo the whole thing in one click. After that, Agent mode is part of Pro, which you can try free for 7 days.
 
 ### Full Agent Mode With Zero Cloud Calls (Pro)
 Agent mode isn't locked to Freebird's cloud — it routes through whatever backend you've configured, same as everything else. Set the backend to **Ollama** and get the full Pro feature set (multi-file edits, terminal commands, checkpoints, project memory) with every request staying on your machine. Built for teams whose policy forbids cloud AI, or freelancers working under an NDA that does the same — the model runs locally, so there's nothing to disclose.
@@ -265,6 +270,9 @@ Point Freebird at any OpenAI-compatible API — OpenRouter, Together, Groq, Fire
 | Freebird: Edit with AI | `Ctrl+Alt+K` | Inline rewrite selected code |
 | Freebird: AI Commit | — | Generate a commit message |
 | Freebird: Configure AI Backend | — | Switch between Gemini / Ollama / Claude / OpenAI / DeepSeek / Qwen |
+| Freebird: Set API Key | — | Save an API key for a BYOK provider in secure storage |
+| Freebird: Clear Saved API Keys | — | Remove every saved API key |
+| Freebird: What's New | — | Open the release notes for this version |
 | Freebird: Activate Pro License | — | Enter your Pro license key |
 | Freebird: Share Selection | — | Share the selected code as a read-only link (Pro) |
 | Freebird: Use Prompt Template | — | Browse the free + paid Template Library |
@@ -305,7 +313,8 @@ Nothing is modified silently. You stay in full control.
 | Setting | Default | Description |
 |---|---|---|
 | `freebird.backend` | `cloud` | AI backend: `cloud`, `ollama`, `anthropic`, `openai`, `deepseek`, `qwen` |
-| `freebird.apiKey` | *(empty)* | API key for BYOK backends |
+| `freebird.apiKey` | *(empty)* | **Deprecated.** API keys are now kept in VS Code's secure storage, one per provider — use **Freebird: Set API Key**. A key left here is migrated automatically. |
+| `freebird.showWhatsNew` | `true` | Show the What's New page after a minor or major update |
 | `freebird.model` | *(auto)* | Override the default model |
 | `freebird.ollamaUrl` | `http://localhost:11434` | Ollama server URL |
 | `freebird.licenseKey` | *(empty)* | Pro license key |

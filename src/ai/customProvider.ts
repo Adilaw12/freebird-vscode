@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { OpenAIProvider } from './openai';
+import { KeyProvider } from './keys';
 
 /**
  * Points at any OpenAI-compatible chat completions API (OpenRouter, Together,
@@ -10,6 +11,7 @@ import { OpenAIProvider } from './openai';
  */
 export class CustomProvider extends OpenAIProvider {
     protected get providerName() { return 'Custom Provider'; }
+    protected get keyProvider(): KeyProvider { return 'custom'; }
 
     protected get baseUrl() {
         const url = vscode.workspace.getConfiguration('freebird').get<string>('customBaseUrl', '').trim();

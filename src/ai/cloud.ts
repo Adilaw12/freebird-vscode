@@ -101,7 +101,8 @@ export class CloudProvider implements AIProvider {
             templateLicenseKey: templateLicenseKey || undefined,
             maxTokens:  opts?.maxTokens ?? 2048,
             isTabCompletion: opts?.isTabCompletion,
-            premium: opts?.premium
+            premium: opts?.premium,
+            agentTrial: opts?.agentTrial
         };
 
         const res = await fetch(endpoint, {
@@ -148,7 +149,9 @@ export class CloudProvider implements AIProvider {
                 throw err;
             }
 
-            const err  = new Error('Rate limited') as any;
+            // e.g. AGENT_TRIAL_EXHAUSTED / AGENT_TRIAL_RATE_LIMITED — the server's
+            // own message is the useful one to show.
+            const err  = new Error((errorBody.error as string) || 'Rate limited') as any;
             err.code   = code;
             throw err;
         }

@@ -1,4 +1,4 @@
-# Pro — $6/month
+# Pro — $9.90/month
 
 - Full multi-file agent mode — reads your codebase (semantic search + git-aware), edits across files, runs terminal commands
 - **Every agent turn gets a checkpoint** — one click to undo the whole turn if something goes wrong

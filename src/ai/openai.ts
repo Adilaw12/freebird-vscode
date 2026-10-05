@@ -1,13 +1,18 @@
 import * as vscode from 'vscode';
 import { AIProvider, CompletionOptions, Message, ToolSchema, RichMessage, StreamToolsResult, NativeToolCall } from './provider';
+import { sseData } from './sse';
+import { getApiKey, KeyProvider } from './keys';
 
 export class OpenAIProvider implements AIProvider {
     readonly supportsNativeTools = true;
 
     protected get baseUrl() { return 'https://api.openai.com/v1'; }
 
+    /** Which provider's stored key to use; subclasses override. */
+    protected get keyProvider(): KeyProvider { return 'openai'; }
+
     protected get apiKey() {
-        return vscode.workspace.getConfiguration('freebird').get<string>('apiKey', '');
+        return getApiKey(this.keyProvider);
     }
 
     protected get model() {
@@ -18,7 +23,7 @@ export class OpenAIProvider implements AIProvider {
 
     async stream(messages: Message[], onChunk: (text: string) => void, opts?: CompletionOptions): Promise<void> {
         if (!this.apiKey) {
-            throw new Error(`No ${this.providerName} API key set. Go to Settings → Freebird → API Key.`);
+            throw new Error(`No ${this.providerName} API key set. Run "Freebird: Configure AI Backend" (or "Freebird: Set API Key") to add one.`);
         }
 
         const response = await fetch(`${this.baseUrl}/chat/completions`, {
@@ -51,7 +56,7 @@ export class OpenAIProvider implements AIProvider {
         opts?: CompletionOptions
     ): Promise<StreamToolsResult> {
         if (!this.apiKey) {
-            throw new Error(`No ${this.providerName} API key set. Go to Settings → Freebird → API Key.`);
+            throw new Error(`No ${this.providerName} API key set. Run "Freebird: Configure AI Backend" (or "Freebird: Set API Key") to add one.`);
         }
 
         const openaiMessages = convertToOpenAIMessages(messages);
@@ -88,40 +93,31 @@ export class OpenAIProvider implements AIProvider {
         let text = '';
         const toolCallMap = new Map<number, { id: string; name: string; args: string }>();
 
-        const reader = response.body!.getReader();
-        const decoder = new TextDecoder();
+        for await (const data of sseData(response)) {
+            if (data === '[DONE]') break;
+            try {
+                const parsed = JSON.parse(data);
+                const delta = parsed.choices?.[0]?.delta;
+                if (!delta) continue;
 
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            for (const line of decoder.decode(value).split('\n')) {
-                if (!line.startsWith('data: ')) continue;
-                const data = line.slice(6).trim();
-                if (data === '[DONE]') break;
-                try {
-                    const parsed = JSON.parse(data);
-                    const delta = parsed.choices?.[0]?.delta;
-                    if (!delta) continue;
+                if (delta.content) {
+                    text += delta.content;
+                    onChunk(delta.content);
+                }
 
-                    if (delta.content) {
-                        text += delta.content;
-                        onChunk(delta.content);
-                    }
-
-                    if (delta.tool_calls) {
-                        for (const tc of delta.tool_calls) {
-                            const idx = tc.index ?? 0;
-                            if (!toolCallMap.has(idx)) {
-                                toolCallMap.set(idx, { id: tc.id ?? '', name: tc.function?.name ?? '', args: '' });
-                            }
-                            const entry = toolCallMap.get(idx)!;
-                            if (tc.id) entry.id = tc.id;
-                            if (tc.function?.name) entry.name = tc.function.name;
-                            if (tc.function?.arguments) entry.args += tc.function.arguments;
+                if (delta.tool_calls) {
+                    for (const tc of delta.tool_calls) {
+                        const idx = tc.index ?? 0;
+                        if (!toolCallMap.has(idx)) {
+                            toolCallMap.set(idx, { id: tc.id ?? '', name: tc.function?.name ?? '', args: '' });
                         }
+                        const entry = toolCallMap.get(idx)!;
+                        if (tc.id) entry.id = tc.id;
+                        if (tc.function?.name) entry.name = tc.function.name;
+                        if (tc.function?.arguments) entry.args += tc.function.arguments;
                     }
-                } catch { /* skip */ }
-            }
+                }
+            } catch { /* skip */ }
         }
 
         const toolCalls: NativeToolCall[] = [];
@@ -146,22 +142,13 @@ export class OpenAIProvider implements AIProvider {
 // ── Shared helpers for OpenAI-compatible providers ──────────────────────────
 
 export async function readOpenAIStream(response: Response, onChunk: (text: string) => void): Promise<void> {
-    const reader = response.body!.getReader();
-    const decoder = new TextDecoder();
-
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        for (const line of decoder.decode(value).split('\n')) {
-            if (!line.startsWith('data: ')) continue;
-            const data = line.slice(6).trim();
-            if (data === '[DONE]') return;
-            try {
-                const parsed = JSON.parse(data);
-                const text = parsed.choices?.[0]?.delta?.content;
-                if (text) onChunk(text);
-            } catch { /* skip */ }
-        }
+    for await (const data of sseData(response)) {
+        if (data === '[DONE]') return;
+        try {
+            const parsed = JSON.parse(data);
+            const text = parsed.choices?.[0]?.delta?.content;
+            if (text) onChunk(text);
+        } catch { /* skip */ }
     }
 }
 

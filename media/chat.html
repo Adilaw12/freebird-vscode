@@ -1175,13 +1175,21 @@ function addCheckpointCard(id, files, unrevertable, isFirstEver) {
   msgsEl.appendChild(card); scroll();
 }
 
-function addMultiFileCtaCard(fileCount) {
+function addMultiFileCtaCard(fileCount, agentRunsLeft) {
   var card=document.createElement('div'); card.className='multifile-cta-card';
   var text=document.createElement('span'); text.className='multifile-cta-text';
-  text.textContent='Editing across '+fileCount+' files at once? That\'s Agent mode — Pro only, with checkpoints to keep it safe. Free for 7 days, no card.';
-  var btn=document.createElement('button'); btn.className='multifile-cta-btn'; btn.textContent='Try Pro free for 7 days';
-  btn.onclick=function(){ vscode.postMessage({type:'start-trial'}); };
-  card.appendChild(text); card.appendChild(btn);
+  if (agentRunsLeft > 0) {
+    // A free taste first: replay this same request as an Agent-mode run.
+    text.textContent='Editing across '+fileCount+' files at once? That\'s Agent mode. Run this request as an agent now — '+agentRunsLeft+' free run'+(agentRunsLeft===1?'':'s')+' left, with a checkpoint to undo it.';
+    var run=document.createElement('button'); run.className='multifile-cta-btn'; run.textContent='Run as agent (free)';
+    run.onclick=function(){ vscode.postMessage({type:'run-agent-trial'}); card.remove(); };
+    card.appendChild(text); card.appendChild(run);
+  } else {
+    text.textContent='Editing across '+fileCount+' files at once? That\'s Agent mode — Pro only, with checkpoints to keep it safe. Free for 7 days, no card.';
+    var btn=document.createElement('button'); btn.className='multifile-cta-btn'; btn.textContent='Try Pro free for 7 days';
+    btn.onclick=function(){ vscode.postMessage({type:'start-trial'}); };
+    card.appendChild(text); card.appendChild(btn);
+  }
   msgsEl.appendChild(card); scroll();
 }
 
@@ -1278,7 +1286,7 @@ function showQuotaWall() {
       + '<svg width="16" height="16" viewBox="0 0 16 16" style="stroke:#d97757;fill:none;stroke-width:1.8;stroke-linecap:round;flex-shrink:0"><polygon points="8,2 15,13 1,13"/><line x1="8" y1="6" x2="8" y2="9"/><circle cx="8" cy="11" r="0.5" fill="#d97757"/></svg>'
       + '<span class="quota-wall-title">You\'ve flown ' + DAILY_LIMIT + ' miles today! ✈️</span>'
     + '</div>'
-    + '<div class="quota-wall-subtitle">Pro unlocks Agent mode and unlimited cloud edits for $6/month — on Freebird Cloud or your own model.</div>'
+    + '<div class="quota-wall-subtitle">Pro unlocks Agent mode and unlimited cloud edits for $9.90/month — on Freebird Cloud or your own model.</div>'
     + '<div class="quota-wall-stats">'
       + '<div class="quota-wall-stat"><span class="quota-wall-stat-value">' + _sessionEdits + '</span><span class="quota-wall-stat-label">edits used</span></div>'
       + '<div class="quota-wall-stat"><span class="quota-wall-stat-value">' + _sessionMessages + '</span><span class="quota-wall-stat-label">messages</span></div>'
@@ -1291,7 +1299,7 @@ function showQuotaWall() {
     + '</div>'
     + '<div class="quota-wall-actions">'
       + '<button class="quota-wall-btn-primary" onclick="vscode.postMessage({type:\'start-trial\'})">Try Pro free for 7 days — no card →</button>'
-      + '<button class="quota-wall-btn-secondary" onclick="vscode.postMessage({type:\'upgrade\'})">Upgrade now — $6/month</button>'
+      + '<button class="quota-wall-btn-secondary" onclick="vscode.postMessage({type:\'upgrade\'})">Upgrade now — $9.90/month</button>'
       + '<button class="quota-wall-btn-secondary" onclick="vscode.postMessage({type:\'upgrade-local\'})" title="E-wallets for Vietnam/Indonesia — Stripe doesn\'t support these">Pay with Local Methods (VN/ID)</button>'
       + '<button class="quota-wall-btn-secondary" onclick="vscode.postMessage({type:\'install-ollama\'})">Use a local model instead</button>'
     + '</div>'
@@ -1332,6 +1340,23 @@ var NUDGE_MESSAGES = {
     postType: 'upgrade-templates'
   }
 };
+
+// Shown after a free Agent-mode run (runsLeft > 0) and when the allowance is
+// gone (runsLeft === 0). Same card as the other upgrade nudges, but the copy
+// depends on the count, so it can't live in the static NUDGE_MESSAGES table.
+function showAgentTrialNudge(runsLeft) {
+  var text = runsLeft > 0
+    ? 'That was a free Agent run — <strong>' + runsLeft + ' left</strong>. Pro makes it unlimited; try it free for 7 days.'
+    : 'That was your last free Agent run. <strong>Keep going with Pro</strong> — free for 7 days, no card.';
+  var nudge = document.createElement('div');
+  nudge.className = 'upgrade-nudge';
+  nudge.innerHTML =
+    '<span class="nudge-text">' + text + '</span>' +
+    '<button onclick="vscode.postMessage({type:\'start-trial\'})">Try Pro free</button>' +
+    '<button class="nudge-dismiss" onclick="this.parentElement.remove()" title="Dismiss">✕</button>';
+  msgsEl.appendChild(nudge);
+  scroll();
+}
 
 function showUpgradeNudge(variant) {
   var msg = NUDGE_MESSAGES[variant];
@@ -1472,7 +1497,8 @@ window.addEventListener('message',function(e){
     case 'tool-update':      updateToolStatus(m.id,m.state,m.output,m.image); break;
     case 'approval-request': addApprovalCard(m.id,m.description,m.preview); break;
     case 'checkpoint-ready':    addCheckpointCard(m.id,m.files,m.unrevertable,m.isFirstEver); break;
-    case 'multifile-cta':       addMultiFileCtaCard(m.fileCount); break;
+    case 'multifile-cta':       addMultiFileCtaCard(m.fileCount, m.agentRunsLeft); break;
+    case 'agent-trial-nudge':   showAgentTrialNudge(m.runsLeft); break;
     case 'populate-input':      populateInput(m.text); break;
     case 'checkpoint-restored': updateCheckpointCard(m.id,m.restored,m.deleted,m.errors); break;
     case 'assistant-end':    endMsg(); break;

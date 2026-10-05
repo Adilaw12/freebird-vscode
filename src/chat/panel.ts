@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import { getProvider } from '../ai';
+import { getProvider, BYOK_BACKENDS } from '../ai';
 import { CloudProvider, getPremiumAllowance } from '../ai/cloud';
 import { OllamaProvider } from '../ai/ollama';
 import { GitService } from '../git/service';
@@ -12,6 +12,9 @@ import { buildFileContext, resolveMentions, listWorkspaceFiles } from './context
 import { getLicenseStatus, UPGRADE_URL, TEMPLATES_UPGRADE_URL, XENDIT_CHECKOUT_URL } from '../license/validator';
 import { getCloudEditsRemaining, DAILY_CLOUD_LIMIT } from '../license/usage';
 import { recordEditUsed, recordAgentRun, getUsageStats } from '../license/stats';
+import {
+    getAgentTrialRunsLeft, recordAgentTrialRun, markAgentTrialExhausted, AGENT_TRIAL_MAX_ITERATIONS
+} from '../license/agentTrial';
 import { readProjectMemory, clearProjectMemory, MEMORY_RELATIVE_PATH } from '../agent/memory';
 import { readProjectRules, RULES_RELATIVE_PATH } from '../agent/rules';
 import { finalizeTurn, restoreCheckpoint, checkpointsRootFor } from '../agent/checkpoint';
@@ -87,6 +90,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     private toolCallsThisRound = 0;
     private currentTurnId = '';
     private multiFileCtaShownThisSession = false;
+    /** The last free-tier request, kept so the multi-file CTA's "run it as an agent" button can replay it. */
+    private lastFreeRequest: { text: string; mentionContext: string } | undefined;
     // Set by useTemplate() right before populating the input with one of the
     // 3 free built-in templates; consumed (read-and-cleared) by the very next
     // handleMessage() call so it can't leak into a later, unrelated message.
@@ -182,6 +187,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     break;
                 case 'restore-checkpoint':
                     await this.handleRestoreCheckpoint(msg.id, msg.files as string[] | undefined);
+                    break;
+                case 'run-agent-trial':
+                    trackEvent('agent_trial_cta_clicked');
+                    if (this.lastFreeRequest) {
+                        await this.runAgentTrial(this.lastFreeRequest.text, this.lastFreeRequest.mentionContext);
+                    }
                     break;
                 case 'browse-templates':
                     trackEvent('templates_button_clicked');
@@ -326,6 +337,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 '`/rules` — show your project conventions from .freebird/rules.md',
                 '`/memory` — show what Freebird remembers about this project',
                 '`/forget` — clear project memory',
+                '`/agent <request>` — run a task in Agent mode (free users get a few free runs)',
                 '`/clear` — clear conversation history',
                 '`/help` — show this message',
                 '',
@@ -342,8 +354,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 helpLines.push(
                     '**Free plan:**',
                     `${getCloudEditsRemaining(this.context)}/${DAILY_CLOUD_LIMIT} cloud edits left today (Gemini Flash) — resets daily.`,
-                    `After cloud edits: falls back to local Ollama if available.`,
-                    `[Upgrade to Pro](${UPGRADE_URL}) for unlimited cloud edits + BYOK, or ` +
+                    `After cloud edits: falls back to local Ollama if available. Your own API key (BYOK) is always free and unmetered.`,
+                    `Free Agent-mode runs left: ${getAgentTrialRunsLeft(this.context, BYOK_BACKENDS.has(vscode.workspace.getConfiguration('freebird').get<string>('backend', 'cloud')))} — try one with \`/agent <request>\`.`,
+                    `[Upgrade to Pro](${UPGRADE_URL}) for unlimited cloud edits and unlimited Agent mode, or ` +
                     `[pay with local methods](${XENDIT_CHECKOUT_URL}) (Vietnam/Indonesia e-wallets).`,
                     ''
                 );
@@ -372,11 +385,31 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const license = await getLicenseStatus(this.context);
         this.sessionMessageCount++;
 
+        // "/agent <request>" — explicit Agent-mode request. Pro users already
+        // get the agent loop on every message, so for them it just strips the
+        // prefix; free users spend one of their free runs.
+        const agentCmd = /^\/agent\b\s*/i;
+        let requestText = cleanText;
+        let explicitAgent = false;
+        if (agentCmd.test(cleanText)) {
+            explicitAgent = true;
+            requestText = cleanText.replace(agentCmd, '').trim();
+            if (!requestText) {
+                this.post({ type: 'assistant-start' });
+                this.post({ type: 'set-text', text: 'Usage: `/agent <what you want done>` — e.g. `/agent add input validation to @src/api/users.ts`.' });
+                this.post({ type: 'assistant-end' });
+                return;
+            }
+        }
+
         if (license.isPro) {
             trackEvent('pro_message');
+            if (BYOK_BACKENDS.has(vscode.workspace.getConfiguration('freebird').get<string>('backend', 'cloud'))) {
+                trackEvent('byok_message', vscode.workspace.getConfiguration('freebird').get<string>('backend', 'cloud'));
+            }
             recordEditUsed(this.context);
             this.toolCallsThisRound = 0;
-            await this.runProChat(cleanText, mentionContext);
+            await this.runProChat(requestText, mentionContext);
             // "Refactor" for the usage-analytics display is defined as an
             // Agent-mode turn that made at least one tool call — distinguishes
             // real multi-step work from a plain one-shot chat reply.
@@ -390,10 +423,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             // (referencing 2+ files at once — real multi-file editing intent)
             // rather than a generic "Upgrade to Pro" shown out of context.
             // Once per session so it doesn't repeat on every message.
+            if (explicitAgent) {
+                await this.runAgentTrial(requestText, mentionContext);
+                return;
+            }
+            this.lastFreeRequest = { text: cleanText, mentionContext };
             if (resolvedCount >= 2 && !this.multiFileCtaShownThisSession) {
                 this.multiFileCtaShownThisSession = true;
                 trackEvent('multifile_cta_shown');
-                this.post({ type: 'multifile-cta', fileCount: resolvedCount });
+                const byokNow = BYOK_BACKENDS.has(vscode.workspace.getConfiguration('freebird').get<string>('backend', 'cloud'));
+                this.post({
+                    type: 'multifile-cta',
+                    fileCount: resolvedCount,
+                    agentRunsLeft: getAgentTrialRunsLeft(this.context, byokNow)
+                });
             }
             // Free tier — route by the backend the user actually configured.
             // Quota is enforced by the SERVER only (backend/api/chat.js,
@@ -404,8 +447,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             const backend = vscode.workspace
                 .getConfiguration('freebird')
                 .get<string>('backend', 'cloud');
-            const mode: 'cloud' | 'ollama-then-cloud' =
-                backend === 'ollama' ? 'ollama-then-cloud' : 'cloud';
+            // A configured BYOK backend is honoured for chat too: the call goes
+            // straight to the user's own provider, so it is unmetered and must
+            // never be counted against (or blocked by) the shared cloud quota.
+            const mode: 'cloud' | 'ollama-then-cloud' | 'byok' =
+                BYOK_BACKENDS.has(backend) ? 'byok'
+                : backend === 'ollama' ? 'ollama-then-cloud'
+                : 'cloud';
+            if (mode === 'byok') trackEvent('byok_message', backend);
 
             this.toolCallsThisRound = 0;
             const served = await this.runFreeChat(cleanText, mentionContext, mode, templateId);
@@ -429,7 +478,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     // ── Pro: full agentic loop ────────────────────────────────────────────────
 
-    private async runProChat(text: string, mentionContext: string) {
+    private async runProChat(text: string, mentionContext: string, trial?: { byok: boolean }) {
         const fileCtx = buildFileContext();
         const contextPrefix = [mentionContext, fileCtx].filter(Boolean).join('\n');
         const fullText = contextPrefix ? `${contextPrefix}\n\n${text}` : text;
@@ -444,6 +493,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 git: this.git,
                 context: this.context,
                 sessionId: getMachineId(),
+                // Free trial runs bill the capped server-side trial budget (cloud
+                // only — BYOK runs are on the user's own key) and stop earlier.
+                ...(trial && { agentTrial: !trial.byok, maxIterations: AGENT_TRIAL_MAX_ITERATIONS }),
                 onEvent: (event: AgentEvent) => this.handleAgentEvent(event),
                 onApprovalNeeded: (id, description, preview) =>
                     new Promise<boolean>(resolve => {
@@ -466,6 +518,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 });
             }
         } catch (err: any) {
+            if (trial && err?.code === 'AGENT_TRIAL_EXHAUSTED') {
+                // The server's budget is the source of truth (a reinstall or second
+                // device won't have the local count) — sync and stop offering runs.
+                await markAgentTrialExhausted(this.context);
+                this.showAgentTrialExhausted();
+                return;
+            }
             trackEvent('api_error', err?.code || 'unknown');
             this.post({ type: 'assistant-start' });
             this.post({
@@ -474,6 +533,40 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             });
         }
         this.post({ type: 'assistant-end' });
+    }
+
+    // ── Free-tier Agent-mode runs ─────────────────────────────────────────────
+
+    /** Runs one free Agent-mode task for a free-tier user, within the free-run allowance. */
+    private async runAgentTrial(text: string, mentionContext: string): Promise<void> {
+        const byok = BYOK_BACKENDS.has(vscode.workspace.getConfiguration('freebird').get<string>('backend', 'cloud'));
+        if (getAgentTrialRunsLeft(this.context, byok) <= 0) {
+            this.showAgentTrialExhausted();
+            return;
+        }
+
+        trackEvent('agent_trial_started', byok ? 'byok' : 'cloud');
+        this.toolCallsThisRound = 0;
+        await this.runProChat(text, mentionContext, { byok });
+
+        // A run counts only if it actually used tools — a plain answer with no
+        // tool calls isn't what the allowance is for, so it isn't charged.
+        if (this.toolCallsThisRound > 0) {
+            await recordAgentTrialRun(this.context);
+            trackEvent('agent_trial_completed', byok ? 'byok' : 'cloud');
+            this.post({ type: 'agent-trial-nudge', runsLeft: getAgentTrialRunsLeft(this.context, byok) });
+        }
+    }
+
+    private showAgentTrialExhausted(): void {
+        trackEvent('agent_trial_exhausted_shown');
+        this.post({ type: 'assistant-start' });
+        this.post({
+            type: 'set-text',
+            text: "You've used your free Agent-mode runs. Agent mode — multi-file edits, terminal, and a checkpoint to undo every turn — is part of Pro. You can try it free for 7 days, no card."
+        });
+        this.post({ type: 'assistant-end' });
+        this.post({ type: 'agent-trial-nudge', runsLeft: 0 });
     }
 
     // ── Free tier: cloud (Gemini Flash) with Ollama fallback ─────────────────
@@ -488,7 +581,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     private async runFreeChat(
         text: string,
         mentionContext: string,
-        mode: 'cloud' | 'ollama-then-cloud',
+        mode: 'cloud' | 'ollama-then-cloud' | 'byok',
         templateId?: string
     ): Promise<boolean> {
         const fileContext  = buildFileContext();
@@ -550,6 +643,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     }, { templateId });
                     this.postModelTag();
                 }
+            } else if (mode === 'byok') {
+                // The user's own key, called directly — no Freebird quota involved.
+                await getProvider(this.context, getMachineId()).stream(messages, chunk => {
+                    response += chunk;
+                    this.post({ type: 'set-text', text: response });
+                });
             } else {
                 // mode = 'cloud' — use CloudProvider with normal quota
                 cloudProvider = new CloudProvider(this.context, getMachineId());

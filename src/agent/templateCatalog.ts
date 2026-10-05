@@ -10,6 +10,7 @@
 import * as vscode from 'vscode';
 import { API_BASE } from '../license/validator';
 import { PROMPT_TEMPLATES, PromptTemplate } from './promptTemplates';
+import { getMachineId } from '../telemetry';
 
 export interface CatalogEntry {
     id: string;
@@ -79,9 +80,31 @@ interface CacheEntry {
     templates: CatalogEntry[];
     ts: number;
     everFetched: boolean;
+    /** Epoch ms the 7-day all-templates-free window ends, if the server said one is running. */
+    welcomeEndsAt?: number | null;
 }
 
-let _memCache: { templates: CatalogEntry[]; ts: number } | null = null;
+let _memCache: { templates: CatalogEntry[]; ts: number; welcomeEndsAt?: number | null } | null = null;
+
+const FIRST_SEEN_KEY = 'freebird.firstSeenAt';
+
+/** When this install first ran a version that has the welcome window. Existing
+ *  users get "now" on first activation of that version, so everyone — not just
+ *  brand-new installs — gets the full 7 days. Sent to the server, which anchors
+ *  the real window to the first time it sees this device and only ever uses
+ *  this value to shorten it. */
+function getFirstSeenAt(context: vscode.ExtensionContext): number {
+    const existing = context.globalState.get<number>(FIRST_SEEN_KEY);
+    if (existing) return existing;
+    const now = Date.now();
+    void context.globalState.update(FIRST_SEEN_KEY, now);
+    return now;
+}
+
+/** A cached/served catalog whose welcome window has closed must not keep its unlocked prompts. */
+function welcomeExpired(welcomeEndsAt: number | null | undefined): boolean {
+    return typeof welcomeEndsAt === 'number' && Date.now() >= welcomeEndsAt;
+}
 
 async function fetchCatalog(context: vscode.ExtensionContext): Promise<CatalogEntry[]> {
     const cfg = vscode.workspace.getConfiguration('freebird');
@@ -90,11 +113,11 @@ async function fetchCatalog(context: vscode.ExtensionContext): Promise<CatalogEn
 
     const persisted = context.globalState.get<CacheEntry>('templateCatalogCache');
 
-    if (_memCache && Date.now() - _memCache.ts < CACHE_TTL_MS) {
+    if (_memCache && Date.now() - _memCache.ts < CACHE_TTL_MS && !welcomeExpired(_memCache.welcomeEndsAt)) {
         return _memCache.templates;
     }
-    if (persisted && Date.now() - persisted.ts < CACHE_TTL_MS) {
-        _memCache = { templates: persisted.templates, ts: persisted.ts };
+    if (persisted && Date.now() - persisted.ts < CACHE_TTL_MS && !welcomeExpired(persisted.welcomeEndsAt)) {
+        _memCache = { templates: persisted.templates, ts: persisted.ts, welcomeEndsAt: persisted.welcomeEndsAt };
         return persisted.templates;
     }
 
@@ -102,18 +125,24 @@ async function fetchCatalog(context: vscode.ExtensionContext): Promise<CatalogEn
         const res = await fetch(`${API_BASE}/api/templates`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ licenseKey, templateLicenseKey }),
+            body: JSON.stringify({
+                licenseKey,
+                templateLicenseKey,
+                machineId: getMachineId(),
+                installedAt: getFirstSeenAt(context)
+            }),
             signal: AbortSignal.timeout(6000)
         });
 
         if (!res.ok) return fallbackToCache(persisted);
 
-        const data = await res.json() as { templates: CatalogEntry[] };
+        const data = await res.json() as { templates: CatalogEntry[]; welcomeEndsAt?: number | null };
         const templates = data.templates ?? [];
+        const welcomeEndsAt = typeof data.welcomeEndsAt === 'number' ? data.welcomeEndsAt : null;
 
-        const entry: CacheEntry = { templates, ts: Date.now(), everFetched: true };
+        const entry: CacheEntry = { templates, ts: Date.now(), everFetched: true, welcomeEndsAt };
         await context.globalState.update('templateCatalogCache', entry);
-        _memCache = { templates, ts: Date.now() };
+        _memCache = { templates, ts: Date.now(), welcomeEndsAt };
         return templates;
 
     } catch {
@@ -122,8 +151,11 @@ async function fetchCatalog(context: vscode.ExtensionContext): Promise<CatalogEn
 }
 
 function fallbackToCache(cached: CacheEntry | null | undefined): CatalogEntry[] {
-    if (cached && cached.everFetched && Date.now() - cached.ts < OFFLINE_TTL_MS) {
-        _memCache = { templates: cached.templates, ts: cached.ts };
+    // Offline: the cached catalog is fine UNLESS it was unlocked only by the
+    // welcome window and that window has since closed — then the unlocked
+    // prompts must not outlive it, so fall through to the locked manifest.
+    if (cached && cached.everFetched && Date.now() - cached.ts < OFFLINE_TTL_MS && !welcomeExpired(cached.welcomeEndsAt)) {
+        _memCache = { templates: cached.templates, ts: cached.ts, welcomeEndsAt: cached.welcomeEndsAt };
         return cached.templates;
     }
     return OFFLINE_MANIFEST.map(m => ({ ...m }));
@@ -141,6 +173,16 @@ export function clearTemplateCatalogCache(context: vscode.ExtensionContext): voi
  * whole catalog (see api/templates.js), so "any unlocked" and "all unlocked"
  * are equivalent as long as the catalog is non-empty.
  */
+/**
+ * Epoch ms when the free 7-day all-templates window ends, or null if none is
+ * running (it never started, it ended, or the user is entitled anyway). Reads
+ * the cache fetchCatalog just populated, so call it after getMergedTemplates.
+ */
+export function getTemplateWelcomeEndsAt(context: vscode.ExtensionContext): number | null {
+    const ends = _memCache?.welcomeEndsAt ?? context.globalState.get<CacheEntry>('templateCatalogCache')?.welcomeEndsAt;
+    return typeof ends === 'number' && ends > Date.now() ? ends : null;
+}
+
 export async function isTemplateLibraryUnlocked(context: vscode.ExtensionContext): Promise<boolean> {
     const paid = await fetchCatalog(context);
     return paid.some(t => !t.locked);

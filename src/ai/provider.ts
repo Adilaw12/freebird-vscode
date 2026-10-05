@@ -19,6 +19,10 @@ export interface CompletionOptions {
     /** Set only by the Agent-mode loop — asks the backend to serve this request
      *  from the licence's monthly Claude Sonnet allowance (see api/chat.js). */
     premium?: boolean;
+    /** Set only for a free-tier user's free Agent-mode run — asks the backend to
+     *  serve it from the capped per-identity trial budget instead of the daily
+     *  chat quota (see api/chat.js, src/license/agentTrial.ts). */
+    agentTrial?: boolean;
 }
 
 // ── Native tool calling ──────────────────────────────────────────────────────

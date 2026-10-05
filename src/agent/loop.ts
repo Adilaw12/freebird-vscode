@@ -57,6 +57,10 @@ export interface AgentRunOptions {
     sessionId: string;
     onEvent: (event: AgentEvent) => void;
     onApprovalNeeded: (id: string, description: string, preview: string) => Promise<boolean>;
+    /** Free-tier Agent-mode trial run: tells CloudProvider to bill the capped trial budget. */
+    agentTrial?: boolean;
+    /** Overrides MAX_ITERATIONS — free trial runs are capped lower to bound cost. */
+    maxIterations?: number;
 }
 
 export async function runAgentLoop(opts: AgentRunOptions): Promise<Message[]> {
@@ -116,7 +120,7 @@ async function runNativeToolLoop(opts: AgentRunOptions, turnId: string): Promise
 
     let consecutiveToolFailures = 0;
 
-    for (let i = 0; i < MAX_ITERATIONS; i++) {
+    for (let i = 0; i < (opts.maxIterations ?? MAX_ITERATIONS); i++) {
         onEvent({ type: 'iteration-start' });
 
         const result = await provider.streamWithTools!(
@@ -233,7 +237,7 @@ async function runTextParsedLoop(opts: AgentRunOptions, turnId: string): Promise
 
     let consecutiveToolFailures = 0;
 
-    for (let i = 0; i < MAX_ITERATIONS; i++) {
+    for (let i = 0; i < (opts.maxIterations ?? MAX_ITERATIONS); i++) {
         let rawText = '';
 
         onEvent({ type: 'iteration-start' });
@@ -243,7 +247,7 @@ async function runTextParsedLoop(opts: AgentRunOptions, turnId: string): Promise
         await provider.stream(messages, chunk => {
             rawText += chunk;
             onEvent({ type: 'text-chunk', text: chunk });
-        }, { premium: true });
+        }, { premium: true, agentTrial: opts.agentTrial });
 
         onEvent({ type: 'response-complete', rawText });
         newHistory.push({ role: 'assistant', content: rawText });

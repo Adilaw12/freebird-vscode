@@ -20,6 +20,7 @@ class MockPipeline {
     decr(key)          { this.ops.push({ type: 'decr', key }); return this; }
     expire(key, ttl)   { this.ops.push({ type: 'expire', key, ttl }); return this; }
     sadd(key, member)  { this.ops.push({ type: 'sadd', key, member }); return this; }
+    hincrby(key, field, n) { this.ops.push({ type: 'hincrby', key, field, n }); return this; }
 
     async exec() {
         const results = [];
@@ -34,6 +35,11 @@ class MockPipeline {
                 const current = (this.store.counters.get(op.key) ?? 0) - 1;
                 this.store.counters.set(op.key, current);
                 results.push(current);
+            } else if (op.type === 'hincrby') {
+                const hash = this.store.hashes.get(op.key) ?? {};
+                hash[op.field] = (hash[op.field] ?? 0) + op.n;
+                this.store.hashes.set(op.key, hash);
+                results.push(hash[op.field]);
             } else if (op.type === 'expire') {
                 results.push(1);
             } else if (op.type === 'sadd') {
@@ -53,6 +59,11 @@ class MockRedis {
         this.counters = new Map();
         this.sets = new Map();
         this.strings = new Map();
+        this.hashes = new Map();
+    }
+
+    async hgetall(key) {
+        return this.hashes.get(key) ?? null;
     }
 
     static fromEnv() {

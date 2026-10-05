@@ -33,6 +33,8 @@ module.exports = {
     __getCalls() { return calls; },
     __resetCalls() { calls.showWarningMessage = []; calls.showInformationMessage = []; },
 
+    ConfigurationTarget: { Global: 1, Workspace: 2, WorkspaceFolder: 3 },
+
     workspace: {
         getConfiguration,
         workspaceFolders: undefined,

@@ -1,5 +1,27 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+* **Free Agent-mode runs.** Free-tier users now get 3 real Agent-mode runs (5 on their own API key) without starting the 7-day trial — via `/agent <request>` or the new **Run as agent** button on the multi-file prompt. Each run is capped at 8 tool iterations and gets a checkpoint. Cloud runs are served on Claude Haiku from a separate, server-enforced lifetime budget per identity (24 model requests, plus a per-IP daily limit), so they never touch the 10/day chat quota; BYOK runs cost nothing to serve. After the last run, the upgrade prompt offers the 7-day trial.
+* **Every prompt template is free for the first 7 days.** The whole Template Library unlocks automatically for a device's first week, then locks again (Pro and the standalone subscription are unaffected). The window is anchored server-side to the first time a device is seen, so reinstalling doesn't restart it, and a cached unlocked catalog stops serving its prompts the moment the window closes — including offline. The locked-template prompt now leads with a Pro trial.
+* **What's New page** after a minor or major update, with a `freebird.showWhatsNew` opt-out and a **Freebird: What's New** command.
+* **Freebird: Set API Key** and **Freebird: Clear Saved API Keys** commands.
+* **Anthropic token-usage accounting** (backend). `api/chat.js` now records input, cache-write, cache-read and output tokens per request into `telemetry:usage:{date}`, split by audience (paid / trial / free agent trial / template) and request kind (chat / completion). `backend/scripts/usage-report.js` turns it into cost per request and prompt-cache hit rate — the console's daily totals couldn't show either.
+* **Per-country trial and Agent-trial funnel data** in the telemetry (`trial_started`, `agent_trial_*`), plus `byok_message` per backend.
+
+### Changed
+
+* **BYOK API keys moved out of settings into VS Code's secure storage, one per provider.** The old `freebird.apiKey` setting was plaintext in settings.json, synced to every machine by Settings Sync, and shared by every provider — so switching provider overwrote the previous key. A key still in the old setting is migrated automatically on first launch; the setting is deprecated.
+* In-extension prices updated to $9.90/month.
+
+### Fixed
+
+* **Free-tier chat ignored a configured BYOK backend.** Chat always went through Freebird Cloud's shared daily quota unless the backend was Ollama, so a free user who had pasted their own key still hit the cloud quota wall. BYOK chat now goes straight to the user's own provider, unmetered.
+* **Streamed responses silently lost data whenever a network chunk ended mid-line.** Anthropic, OpenAI-compatible (DeepSeek, Qwen, Kimi, Custom) and Ollama streams parsed each chunk on its own, dropping any line split across two — lost text, and lost tool-call JSON fragments that left a tool call with an empty `{}` input and no error. The same pattern in the backend's `api/chat.js` and `api/fallback.js` affected cloud responses too. All now carry the partial line over to the next chunk.
+* Stale copy that said BYOK required Pro.
+
 ## \[0.13.6] — 2026-10-01
 
 ### Added

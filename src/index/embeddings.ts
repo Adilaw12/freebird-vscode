@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { getCachedLicenseStatus } from '../license/validator';
+import { getApiKey } from '../ai/keys';
 
 const API_BASE = 'https://freebird-backend.vercel.app';
 
@@ -77,7 +78,7 @@ class OpenAIEmbeddingProvider implements EmbeddingProvider {
     readonly id = 'openai:text-embedding-3-small';
 
     private get apiKey() {
-        return vscode.workspace.getConfiguration('freebird').get<string>('apiKey', '');
+        return getApiKey('openai');
     }
 
     async embedBatch(texts: string[]): Promise<number[][]> {

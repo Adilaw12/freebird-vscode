@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { AIProvider, CompletionOptions, Message, FIMProvider } from './provider';
+import { LineBuffer } from './sse';
 
 // Does not set supportsImageInput: Ollama's own multimodal convention is a
 // separate `images: string[]` field per message, not the Anthropic-shaped
@@ -46,18 +47,21 @@ export class OllamaProvider implements AIProvider, FIMProvider {
         }
 
         const reader = response.body!.getReader();
-        const decoder = new TextDecoder();
+        const buffer = new LineBuffer();
+        const handle = (line: string) => {
+            if (!line.trim()) return;
+            try {
+                const data = JSON.parse(line);
+                if (data.message?.content) onChunk(data.message.content);
+            } catch { /* skip malformed lines */ }
+        };
 
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            for (const line of decoder.decode(value).split('\n').filter(Boolean)) {
-                try {
-                    const data = JSON.parse(line);
-                    if (data.message?.content) onChunk(data.message.content);
-                } catch { /* skip malformed lines */ }
-            }
+            buffer.push(value).forEach(handle);
         }
+        buffer.flush().forEach(handle);
     }
 
     async complete(messages: Message[], opts?: CompletionOptions): Promise<string> {

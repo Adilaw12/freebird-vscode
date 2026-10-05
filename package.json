@@ -145,6 +145,18 @@
         "title": "Freebird: AI Commit"
       },
       {
+        "command": "freebird.showWhatsNew",
+        "title": "Freebird: What's New"
+      },
+      {
+        "command": "freebird.setApiKey",
+        "title": "Freebird: Set API Key"
+      },
+      {
+        "command": "freebird.clearApiKeys",
+        "title": "Freebird: Clear Saved API Keys"
+      },
+      {
         "command": "freebird.configure",
         "title": "Freebird: Configure AI Backend"
       },
@@ -264,7 +276,9 @@
         "freebird.apiKey": {
           "type": "string",
           "default": "",
-          "markdownDescription": "API key for cloud AI backends (Anthropic or OpenAI). Leave blank if using Ollama."
+          "scope": "machine",
+          "deprecationMessage": "Deprecated: Freebird now stores API keys in VS Code's secure storage, one per provider. Use the \"Freebird: Set API Key\" command. A key left here is moved automatically.",
+          "markdownDescription": "**Deprecated** — use the Freebird: Set API Key command instead. Keys are now kept in VS Code's secure storage, one per provider, and never written to settings.json. A key still here is migrated automatically."
         },
         "freebird.customBaseUrl": {
           "type": "string",
@@ -305,6 +319,11 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "Allow Freebird to collect anonymous usage statistics (feature usage counts, no code or personal data). Helps us improve the extension."
+        },
+        "freebird.showWhatsNew": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the What's New page the first time Freebird opens after a minor or major update."
         },
         "freebird.agent.respectGitignore": {
           "type": "boolean",

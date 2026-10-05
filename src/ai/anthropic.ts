@@ -1,11 +1,15 @@
 import * as vscode from 'vscode';
 import { AIProvider, CompletionOptions, Message, ToolSchema, RichMessage, StreamToolsResult, NativeToolCall } from './provider';
+import { sseData } from './sse';
+import { getApiKey } from './keys';
+
+const NO_KEY_MESSAGE = 'No Anthropic API key set. Run "Freebird: Configure AI Backend" (or "Freebird: Set API Key") to add one.';
 
 export class AnthropicProvider implements AIProvider {
     readonly supportsNativeTools = true;
 
     private get apiKey() {
-        return vscode.workspace.getConfiguration('freebird').get<string>('apiKey', '');
+        return getApiKey('anthropic');
     }
 
     private get model() {
@@ -14,7 +18,7 @@ export class AnthropicProvider implements AIProvider {
 
     async stream(messages: Message[], onChunk: (text: string) => void, opts?: CompletionOptions): Promise<void> {
         if (!this.apiKey) {
-            throw new Error('No Anthropic API key set. Go to Settings → Freebird → API Key.');
+            throw new Error(NO_KEY_MESSAGE);
         }
 
         const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -38,23 +42,14 @@ export class AnthropicProvider implements AIProvider {
             throw new Error(`Anthropic API error: ${err}`);
         }
 
-        const reader = response.body!.getReader();
-        const decoder = new TextDecoder();
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            for (const line of decoder.decode(value).split('\n')) {
-                if (!line.startsWith('data: ')) continue;
-                const data = line.slice(6).trim();
-                if (data === '[DONE]') return;
-                try {
-                    const parsed = JSON.parse(data);
-                    if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
-                        onChunk(parsed.delta.text);
-                    }
-                } catch { /* skip */ }
-            }
+        for await (const data of sseData(response)) {
+            if (data === '[DONE]') return;
+            try {
+                const parsed = JSON.parse(data);
+                if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
+                    onChunk(parsed.delta.text);
+                }
+            } catch { /* skip */ }
         }
     }
 
@@ -65,7 +60,7 @@ export class AnthropicProvider implements AIProvider {
         opts?: CompletionOptions
     ): Promise<StreamToolsResult> {
         if (!this.apiKey) {
-            throw new Error('No Anthropic API key set. Go to Settings → Freebird → API Key.');
+            throw new Error(NO_KEY_MESSAGE);
         }
 
         const anthropicMessages = convertToAnthropicMessages(messages);
@@ -103,50 +98,41 @@ export class AnthropicProvider implements AIProvider {
         let currentToolName = '';
         let currentToolInput = '';
 
-        const reader = response.body!.getReader();
-        const decoder = new TextDecoder();
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            for (const line of decoder.decode(value).split('\n')) {
-                if (!line.startsWith('data: ')) continue;
-                const data = line.slice(6).trim();
-                if (data === '[DONE]') break;
-                try {
-                    const event = JSON.parse(data);
-                    switch (event.type) {
-                        case 'content_block_start':
-                            if (event.content_block?.type === 'tool_use') {
-                                currentToolId = event.content_block.id;
-                                currentToolName = event.content_block.name;
-                                currentToolInput = '';
+        for await (const data of sseData(response)) {
+            if (data === '[DONE]') break;
+            try {
+                const event = JSON.parse(data);
+                switch (event.type) {
+                    case 'content_block_start':
+                        if (event.content_block?.type === 'tool_use') {
+                            currentToolId = event.content_block.id;
+                            currentToolName = event.content_block.name;
+                            currentToolInput = '';
+                        }
+                        break;
+                    case 'content_block_delta':
+                        if (event.delta?.type === 'text_delta' && event.delta.text) {
+                            text += event.delta.text;
+                            onChunk(event.delta.text);
+                        } else if (event.delta?.type === 'input_json_delta' && event.delta.partial_json) {
+                            currentToolInput += event.delta.partial_json;
+                        }
+                        break;
+                    case 'content_block_stop':
+                        if (currentToolId) {
+                            try {
+                                const input = currentToolInput ? JSON.parse(currentToolInput) : {};
+                                toolCalls.push({ id: currentToolId, name: currentToolName, input });
+                            } catch {
+                                toolCalls.push({ id: currentToolId, name: currentToolName, input: {} });
                             }
-                            break;
-                        case 'content_block_delta':
-                            if (event.delta?.type === 'text_delta' && event.delta.text) {
-                                text += event.delta.text;
-                                onChunk(event.delta.text);
-                            } else if (event.delta?.type === 'input_json_delta' && event.delta.partial_json) {
-                                currentToolInput += event.delta.partial_json;
-                            }
-                            break;
-                        case 'content_block_stop':
-                            if (currentToolId) {
-                                try {
-                                    const input = currentToolInput ? JSON.parse(currentToolInput) : {};
-                                    toolCalls.push({ id: currentToolId, name: currentToolName, input });
-                                } catch {
-                                    toolCalls.push({ id: currentToolId, name: currentToolName, input: {} });
-                                }
-                                currentToolId = '';
-                                currentToolName = '';
-                                currentToolInput = '';
-                            }
-                            break;
-                    }
-                } catch { /* skip malformed */ }
-            }
+                            currentToolId = '';
+                            currentToolName = '';
+                            currentToolInput = '';
+                        }
+                        break;
+                }
+            } catch { /* skip malformed */ }
         }
 
         return { text, toolCalls };
