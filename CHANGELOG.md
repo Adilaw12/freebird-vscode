@@ -1,5 +1,15 @@
 # Changelog
 
+## \[0.14.2] — 2026-10-05
+
+### Changed
+
+* **A more welcoming start screen.** The welcome text and icons were set at 25–40% opacity, which read as disabled; contrast is raised, the copy is warmer, and the screen now leads with state-aware cards — free users see their remaining free Agent runs and the days left of the all-templates window (both clickable), Pro users a one-line confirmation.
+
+### Fixed
+
+* **The panel and status bar looked unlicensed for the seconds the licence check took on every window open**, which read as having to activate Pro again. They now show the last known-good Pro state immediately and are corrected by the real check. Display only — never used to gate a feature.
+
 ## \[0.14.1] — 2026-10-05
 
 ### Changed
