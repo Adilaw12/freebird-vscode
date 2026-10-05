@@ -8,6 +8,7 @@
 import { Redis } from '@upstash/redis';
 import { hasTemplateLibraryAccess } from '../lib/license.js';
 import { TEMPLATE_CATALOG } from '../lib/templateCatalog.js';
+import { getWelcomeEndsAt } from '../lib/templateWelcome.js';
 
 const redis = Redis.fromEnv();
 
@@ -32,7 +33,7 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-    const { licenseKey, templateLicenseKey } = req.body ?? {};
+    const { licenseKey, templateLicenseKey, machineId, installedAt } = req.body ?? {};
 
     let entitled = false;
     for (const raw of [licenseKey, templateLicenseKey]) {
@@ -53,9 +54,24 @@ export default async function handler(req, res) {
         }
     }
 
+    // Welcome window: every device gets the whole library free for its first
+    // 7 days (see lib/templateWelcome.js). Only consulted when not already
+    // entitled, and a Redis failure just means the normal locked catalog.
+    let welcomeEndsAt = null;
+    if (!entitled) {
+        try {
+            welcomeEndsAt = await getWelcomeEndsAt(redis, machineId, installedAt);
+        } catch (err) {
+            console.error('Redis error during template welcome-window check:', err);
+        }
+    }
+    const unlocked = entitled || welcomeEndsAt !== null;
+
     const templates = TEMPLATE_CATALOG.map(({ prompt, ...meta }) =>
-        entitled ? { ...meta, locked: false, prompt } : { ...meta, locked: true }
+        unlocked ? { ...meta, locked: false, prompt } : { ...meta, locked: true }
     );
 
-    return res.status(200).json({ templates });
+    // welcomeEndsAt lets the client show the countdown and, importantly, stop
+    // serving its cached unlocked prompts the moment the window closes.
+    return res.status(200).json({ templates, welcomeEndsAt });
 }

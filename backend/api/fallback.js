@@ -14,6 +14,7 @@ import { fetchGeminiWithFallback, PRO_GEMINI_MODEL_CANDIDATES } from '../lib/gem
 import { fetchAnthropicWithFallback, anthropicConfigured } from '../lib/anthropicModel.js';
 import { fetchCerebrasWithFallback, cerebrasConfigured } from '../lib/cerebrasModel.js';
 import { quotaKeysFor, reserveQuota, refundQuota, reserveSingleCounter } from '../lib/quota.js';
+import { createLineSplitter } from '../lib/sseLines.js';
 
 const redis = Redis.fromEnv();
 
@@ -329,30 +330,31 @@ export default async function handler(req, res) {
         }
 
         const reader  = upstream.body.getReader();
-        const decoder = new TextDecoder();
+        const splitter = createLineSplitter();
+
+        const handleLine = (line) => {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data:')) return;
+            const jsonStr = trimmed.slice(5).trim();
+            if (jsonStr === '[DONE]') return;
+            try {
+                const parsed = JSON.parse(jsonStr);
+                // Cerebras: OpenAI-compatible choices[0].delta.content — see chat.js
+                const text = provider === 'anthropic'
+                    ? (parsed?.type === 'content_block_delta' ? parsed?.delta?.text : undefined)
+                    : provider === 'cerebras'
+                    ? parsed?.choices?.[0]?.delta?.content
+                    : parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (text) res.write(text);
+            } catch { /* skip malformed SSE lines */ }
+        };
 
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-
-            const raw = decoder.decode(value);
-            for (const line of raw.split('\n')) {
-                const trimmed = line.trim();
-                if (!trimmed.startsWith('data:')) continue;
-                const jsonStr = trimmed.slice(5).trim();
-                if (jsonStr === '[DONE]') continue;
-                try {
-                    const parsed = JSON.parse(jsonStr);
-                    // Cerebras: OpenAI-compatible choices[0].delta.content — see chat.js
-                    const text = provider === 'anthropic'
-                        ? (parsed?.type === 'content_block_delta' ? parsed?.delta?.text : undefined)
-                        : provider === 'cerebras'
-                        ? parsed?.choices?.[0]?.delta?.content
-                        : parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
-                    if (text) res.write(text);
-                } catch { /* skip malformed SSE lines */ }
-            }
+            splitter.push(value).forEach(handleLine);
         }
+        splitter.flush().forEach(handleLine);
 
         res.end();
     } catch (err) {

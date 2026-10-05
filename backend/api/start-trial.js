@@ -72,6 +72,17 @@ export default async function handler(req, res) {
         const telemetryKey = `telemetry:daily:${new Date().toISOString().slice(0, 10)}`;
         await redis.hincrby(telemetryKey, 'trial_started', 1).catch(() => {});
         await redis.expire(telemetryKey, 90 * 24 * 60 * 60).catch(() => {});
+
+        // Same event, broken down by country (same hash and key shape as
+        // api/telemetry.js's countryFunnel) — trials were only counted globally
+        // before, so a country's trial -> paid ratio couldn't be read.
+        const rawCountry = req.headers['x-vercel-ip-country'];
+        const country = (Array.isArray(rawCountry) ? rawCountry[0] : rawCountry) || null;
+        if (country) {
+            const funnelKey = `telemetry:countryFunnel:${new Date().toISOString().slice(0, 10)}`;
+            await redis.hincrby(funnelKey, `${country.slice(0, 4)}:trial_started`, 1).catch(() => {});
+            await redis.expire(funnelKey, 90 * 24 * 60 * 60).catch(() => {});
+        }
     } catch (err) {
         console.error('Redis error creating trial license:', err);
         return res.status(500).json({ error: 'Could not create trial. Please try again.' });

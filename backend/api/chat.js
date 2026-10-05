@@ -24,6 +24,9 @@ import { fetchAnthropicWithFallback, anthropicConfigured, SONNET_MODEL_CANDIDATE
 import { fetchCerebrasWithFallback, cerebrasConfigured } from '../lib/cerebrasModel.js';
 import { quotaKeysFor, reserveQuota, refundQuota, reserveSingleCounter } from '../lib/quota.js';
 import { textOnlyContent } from '../lib/messageContent.js';
+import { createLineSplitter } from '../lib/sseLines.js';
+import { reserveAgentTrial, refundAgentTrial, AGENT_TRIAL_MAX_TOKENS } from '../lib/agentTrial.js';
+import { createUsageTracker, usageAudience, modelFamily, recordUsage } from '../lib/usageStats.js';
 
 const redis = Redis.fromEnv();
 
@@ -70,6 +73,7 @@ const PREMIUM_TTL = 35 * 24 * 60 * 60;
 // the agent loop's default 2048 would truncate real output.
 const SONNET_MIN_MAX_TOKENS = 8192;
 const MONITOR_TTL        = 8 * 24 * 60 * 60; // keep daily monitoring keys ~8 days
+
 const hashIp = (ip) => createHash('sha256').update(ip).digest('hex').slice(0, 16);
 
 export const config = { runtime: 'nodejs' }; // streaming needs Node runtime, not edge
@@ -85,7 +89,7 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: 'Server misconfigured', code: 'NO_API_KEY' });
     }
 
-    const { messages, sessionId: rawSession, authToken, licenseKey, templateId, templateLicenseKey, maxTokens: requestedMaxTokens = 2048, isTabCompletion, premium } = req.body ?? {};
+    const { messages, sessionId: rawSession, authToken, licenseKey, templateId, templateLicenseKey, maxTokens: requestedMaxTokens = 2048, isTabCompletion, premium, agentTrial } = req.body ?? {};
     const isCompletion = isTabCompletion === true;
 
     if (!Array.isArray(messages) || messages.length === 0) {
@@ -180,6 +184,27 @@ export default async function handler(req, res) {
         }
     }
 
+    // ── Free Agent-mode trial reservation ───────────────────────────────────
+    // Spoofing agentTrial:true only buys the capped Haiku budget below, which
+    // is the same thing the feature gives away on purpose.
+    let agentTrialReserved = false;
+    let agentTrialRemaining = null;
+    let agentTrialKeys = null;
+    if (!unmetered && agentTrial === true && !isCompletion) {
+        if (!anthropicConfigured()) {
+            return res.status(503).json({ error: 'Agent trial is temporarily unavailable.', code: 'AGENT_TRIAL_UNAVAILABLE' });
+        }
+        const trial = await reserveAgentTrial(redis, identityKey, hashIp(ip), today);
+        if (trial.blocked) {
+            return res.status(429).json(trial.code === 'AGENT_TRIAL_EXHAUSTED'
+                ? { error: 'Free Agent-mode runs used up. Try Pro free for 7 days, or upgrade.', code: trial.code }
+                : { error: 'Too many free Agent-mode requests from this network today. Try again tomorrow.', code: trial.code });
+        }
+        agentTrialReserved = true;
+        agentTrialRemaining = trial.remaining;
+        agentTrialKeys = trial.keys;
+    }
+
     // ── Quota (two layers: identity + IP) ───────────────────────────────────
     // ATOMIC reserve-then-refund, not check-then-increment — see
     // backend/lib/quota.js for the full race-condition rationale (this is
@@ -190,7 +215,7 @@ export default async function handler(req, res) {
     const ipDailyLimit = isCompletion ? COMPLETION_IP_DAILY_LIMIT : IP_DAILY_LIMIT;
     let sessionUsed = 0, ipUsed = 0;
 
-    if (!unmetered) {
+    if (!unmetered && !agentTrialReserved) {
         const result = await reserveQuota(redis, quotaKeys, {
             dailyLimit,
             ipDailyLimit,
@@ -227,6 +252,8 @@ export default async function handler(req, res) {
 
     const maxTokens = (isCompletion && !unmetered)
         ? Math.min(Number(requestedMaxTokens) || COMPLETION_MAX_TOKENS, COMPLETION_MAX_TOKENS)
+        : agentTrialReserved
+        ? Math.min(Number(requestedMaxTokens) || AGENT_TRIAL_MAX_TOKENS, AGENT_TRIAL_MAX_TOKENS)
         : requestedMaxTokens;
 
     // ── Build provider request(s) ────────────────────────────────────────────
@@ -357,7 +384,7 @@ export default async function handler(req, res) {
             }
         }
 
-        if (!upstream && (unmetered || templateHaikuEligible) && anthropicConfigured()) {
+        if (!upstream && (unmetered || templateHaikuEligible || agentTrialReserved) && anthropicConfigured()) {
             try {
                 const result = await fetchAnthropicWithFallback(anthropicBody, { signal: AbortSignal.timeout(30_000) });
                 if (result.response.ok) {
@@ -408,7 +435,9 @@ export default async function handler(req, res) {
         if (!upstream.ok) {
             const errText = await upstream.text().catch(() => upstream.statusText);
             console.error(`${provider} error:`, upstream.status, errText);
-            if (!unmetered) await refundQuota(redis, quotaKeys); // never charge for a failed upstream request
+            // never charge for a failed upstream request
+            if (agentTrialReserved) await refundAgentTrial(redis, agentTrialKeys);
+            else if (!unmetered) await refundQuota(redis, quotaKeys);
             return res.status(502).json({
                 error: 'AI provider error',
                 code:  'UPSTREAM_ERROR',
@@ -419,7 +448,7 @@ export default async function handler(req, res) {
         // Quota was already reserved atomically before this request began (see
         // above) — no increment needed here. Just track unique-IP monitoring,
         // which isn't limit-critical so a race on it doesn't matter.
-        if (!unmetered) {
+        if (!unmetered && !agentTrialReserved) {
             await redis.sadd(`monitor:ips:${today}`, hashIp(ip)).catch(() => {});
             await redis.expire(`monitor:ips:${today}`, MONITOR_TTL).catch(() => {});
         }
@@ -438,6 +467,10 @@ export default async function handler(req, res) {
                 res.setHeader('X-Premium-Remaining', String(premiumRemaining));
                 res.setHeader('X-Premium-Limit', String(premiumLimit));
             }
+        } else if (agentTrialReserved) {
+            // Deliberately NOT the X-Quota-* headers: installed clients write
+            // those into the cached chat quota, and this request never touched it.
+            res.setHeader('X-Agent-Trial-Requests-Remaining', String(agentTrialRemaining));
         } else {
             // sessionUsed/ipUsed are already POST-increment (this request included)
             const remaining = Math.max(0, Math.min(
@@ -455,32 +488,48 @@ export default async function handler(req, res) {
         }
 
         const reader  = upstream.body.getReader();
-        const decoder = new TextDecoder();
+        const splitter = createLineSplitter(); // see lib/sseLines.js for why chunks aren't parsed in isolation
+
+        // SSE lines look like: "data: {...}\n\n".
+        // Anthropic token usage (incl. prompt-cache reads/writes) rides on the
+        // message_start / message_delta events — collected here, recorded below.
+        const usageTracker = createUsageTracker();
+
+        const handleLine = (line) => {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data:')) return;
+            const jsonStr = trimmed.slice(5).trim();
+            if (jsonStr === '[DONE]') return;
+            try {
+                const parsed = JSON.parse(jsonStr);
+                if (provider === 'anthropic') usageTracker.consume(parsed);
+                // Gemini: candidates[0].content.parts[0].text
+                // Anthropic: content_block_delta events carry delta.text
+                // Cerebras: OpenAI-compatible choices[0].delta.content
+                const text = provider === 'anthropic'
+                    ? (parsed?.type === 'content_block_delta' ? parsed?.delta?.text : undefined)
+                    : provider === 'cerebras'
+                    ? parsed?.choices?.[0]?.delta?.content
+                    : parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (text) res.write(text);
+            } catch { /* skip malformed SSE lines */ }
+        };
 
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
+            splitter.push(value).forEach(handleLine);
+        }
+        splitter.flush().forEach(handleLine);
 
-            const raw = decoder.decode(value);
-            // SSE lines look like: "data: {...}\n\n"
-            for (const line of raw.split('\n')) {
-                const trimmed = line.trim();
-                if (!trimmed.startsWith('data:')) continue;
-                const jsonStr = trimmed.slice(5).trim();
-                if (jsonStr === '[DONE]') continue;
-                try {
-                    const parsed = JSON.parse(jsonStr);
-                    // Gemini: candidates[0].content.parts[0].text
-                    // Anthropic: content_block_delta events carry delta.text
-                    // Cerebras: OpenAI-compatible choices[0].delta.content
-                    const text = provider === 'anthropic'
-                        ? (parsed?.type === 'content_block_delta' ? parsed?.delta?.text : undefined)
-                        : provider === 'cerebras'
-                        ? parsed?.choices?.[0]?.delta?.content
-                        : parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
-                    if (text) res.write(text);
-                } catch { /* skip malformed SSE lines */ }
-            }
+        // Awaited before res.end(): on a serverless runtime, work started after
+        // the response closes can be frozen mid-flight. recordUsage never throws.
+        if (provider === 'anthropic') {
+            await recordUsage(redis, today, usageTracker.snapshot(), {
+                audience: usageAudience({ agentTrialReserved, unmetered, licensePlan, templateHaikuEligible, premiumReserved }),
+                kind:     isCompletion ? 'completion' : 'chat',
+                family:   modelFamily(modelUsed)
+            });
         }
 
         res.end();

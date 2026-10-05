@@ -47,11 +47,20 @@ const ERROR_EVENTS = new Set([
     'commit_failed', 'push_failed', 'tool_error'
 ]);
 
-// The two client-side steps of the checkout funnel worth breaking down by
-// country. Kept to a small allowlist (not every event) so this hash stays
-// bounded — countries × all ~40 event names would grow unbounded for no
-// benefit, since only these two bear on "did Stripe availability cost us."
-const FUNNEL_EVENTS = new Set(['quota_wall_shown', 'upgrade_clicked']);
+// The checkout-funnel steps worth breaking down by country: the two client-side
+// steps that bear on "did Stripe availability cost us", plus the free
+// Agent-mode trial steps (agent_trial_started -> agent_trial_exhausted_shown is
+// the point where the upgrade prompt lands). trial_started and pro_subscribed
+// are written to the same hash server-side (api/start-trial.js, api/webhook.js).
+// Kept to a small allowlist (not every event) so this hash stays bounded —
+// countries × all ~40 event names would grow unbounded for no benefit.
+const FUNNEL_EVENTS = new Set([
+    'quota_wall_shown',
+    'upgrade_clicked',
+    'agent_trial_started',
+    'agent_trial_completed',
+    'agent_trial_exhausted_shown'
+]);
 
 export default async function handler(req, res) {
     // No CORS restriction — extension calls don't send Origin
