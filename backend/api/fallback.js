@@ -10,6 +10,8 @@ import { Redis } from '@upstash/redis';
 import { createHash } from 'crypto';
 import { verifySession } from '../lib/authToken.js';
 import { isLicenseActive, hasTemplateLibraryAccess, FREE_TEMPLATE_IDS } from '../lib/license.js';
+import { TEMPLATE_CATALOG } from '../lib/templateCatalog.js';
+import { templateHaikuDailyLimit } from '../lib/templateWelcome.js';
 import { fetchGeminiWithFallback, PRO_GEMINI_MODEL_CANDIDATES } from '../lib/geminiModel.js';
 import { fetchAnthropicWithFallback, anthropicConfigured } from '../lib/anthropicModel.js';
 import { fetchCerebrasWithFallback, cerebrasConfigured } from '../lib/cerebrasModel.js';
@@ -117,7 +119,18 @@ export default async function handler(req, res) {
     // ── Free-template Haiku eligibility — see chat.js for the full rationale ──
     let templateHaikuEligible = false;
     let templateBonusUsed = false;
-    if (!unmetered && templateId && FREE_TEMPLATE_IDS.includes(templateId) && anthropicConfigured()) {
+    // How many free Haiku template runs/day this request qualifies for: 1 for the
+    // 3 free templates, 2 for any template while the device is inside its 7-day
+    // welcome window (lib/templateWelcome.js), 0 otherwise.
+    const templateBonusLimit = (!unmetered && templateId && anthropicConfigured())
+        ? await templateHaikuDailyLimit(redis, {
+            templateId,
+            machineId: rawSession,
+            freeIds: FREE_TEMPLATE_IDS,
+            allIds: TEMPLATE_CATALOG.map(t => t.id).concat(FREE_TEMPLATE_IDS)
+        })
+        : 0;
+    if (templateBonusLimit > 0) {
         let hasTemplateAccess = false;
         if (templateLicenseKey && typeof templateLicenseKey === 'string') {
             try {
@@ -131,7 +144,7 @@ export default async function handler(req, res) {
             templateHaikuEligible = true; // $3/mo subscriber — unlimited
         } else {
             const bonusKey = `template-haiku:${identityKey}:${today}`;
-            const { blocked } = await reserveSingleCounter(redis, bonusKey, 1, QUOTA_TTL);
+            const { blocked } = await reserveSingleCounter(redis, bonusKey, templateBonusLimit, QUOTA_TTL);
             if (!blocked) {
                 templateHaikuEligible = true;
                 templateBonusUsed = true;
