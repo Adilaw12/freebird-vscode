@@ -13,7 +13,7 @@ import { previewHtmlFile } from './agent/preview';
 import { checkOllamaSetup } from './ai/ollamaSetup';
 import { initTelemetry, disposeTelemetry, trackEvent, getMachineId } from './telemetry';
 import { buildBackendPickerItems } from './license/backendPicker';
-import { getMergedTemplates, clearTemplateCatalogCache, isTemplateLibraryUnlocked, getTemplateWelcomeEndsAt } from './agent/templateCatalog';
+import { getMergedTemplates, clearTemplateCatalogCache, isTemplateLibraryUnlocked, getTemplateWelcomeEndsAt, recordFirstSeen } from './agent/templateCatalog';
 import { checkAnnouncement } from './announcement';
 import { maybeShowWhatsNew, showWhatsNew } from './whatsNew';
 import { initApiKeys, setApiKey, clearApiKey, hasApiKey, isKeyProvider, KEY_PROVIDERS, KeyProvider } from './ai/keys';
@@ -99,6 +99,9 @@ export async function activate(context: vscode.ExtensionContext) {
     // Before anything that can call a provider: load stored API keys into memory
     // and migrate a key still sitting in the old plaintext setting.
     await initApiKeys(context);
+
+    // Start the 7-day all-templates window now, at first use — see recordFirstSeen.
+    recordFirstSeen(context);
 
     const git = new GitService();
 

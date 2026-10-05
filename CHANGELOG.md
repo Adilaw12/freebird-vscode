@@ -1,5 +1,15 @@
 # Changelog
 
+## \[0.14.1] — 2026-10-05
+
+### Changed
+
+* **Free Haiku template runs: 2 a day on any template during the 7-day window** (was 1 a day, free templates only). The unlocked paid templates previously ran on Gemini Flash Lite during the window, which undersold the library. After day 7 it reverts to 1 a day on the 3 free templates. Applies to both `api/chat.js` and `api/fallback.js`; a chat request can never be what starts a device's window.
+
+### Fixed
+
+* **The 7-day all-templates window started the first time the template picker was opened**, not at first use, so a user who opened it days after installing got extra days. It now starts at activation.
+
 ## \[0.14.0] — 2026-10-05
 
 ### Added

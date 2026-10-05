@@ -25,7 +25,10 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), { status
 
 async function run() {
     const modPath = path.join(__dirname, '..', 'backend', 'lib', 'templateWelcome.js');
-    const { getWelcomeEndsAt, WELCOME_MS } = await import(`file://${modPath}`);
+    const {
+        getWelcomeEndsAt, WELCOME_MS, peekWelcomeEndsAt, templateHaikuDailyLimit,
+        TEMPLATE_HAIKU_DAILY, TEMPLATE_HAIKU_DAILY_WELCOME
+    } = await import(`file://${modPath}`);
 
     suite('server window — anchored to first sight of the machine id');
     {
@@ -75,7 +78,38 @@ async function run() {
         check('non-string machineId -> no window', await getWelcomeEndsAt(redis, 12345, Date.now()) === null);
     }
 
-    const { getMergedTemplates, getTemplateWelcomeEndsAt, clearTemplateCatalogCache } = require(path.join(OUT, 'agent/templateCatalog.js'));
+    suite('Haiku template bonus — 2/day on any template during the window, 1/day on the free 3 after');
+    {
+        const freeIds = ['codebase-cartographer', 'security-auditor', 'multi-file-test-engineer'];
+        const allIds = [...freeIds, 'framework-migration-planner', 'senior-code-reviewer'];
+        const args = (templateId, machineId) => ({ templateId, machineId, freeIds, allIds });
+        const t0 = 1_800_000_000_000;
+
+        const redis = Redis.fromEnv();
+        await getWelcomeEndsAt(redis, 'in-window', t0, t0);            // device has a window starting at t0
+
+        check('inside the window a PAID template gets the Haiku bonus, twice a day',
+            await templateHaikuDailyLimit(redis, args('framework-migration-planner', 'in-window'), t0 + DAY) === TEMPLATE_HAIKU_DAILY_WELCOME && TEMPLATE_HAIKU_DAILY_WELCOME === 2);
+        check('inside the window a free template also gets 2/day',
+            await templateHaikuDailyLimit(redis, args('security-auditor', 'in-window'), t0 + DAY) === 2);
+        check('after day 7 a paid template gets nothing', await templateHaikuDailyLimit(redis, args('framework-migration-planner', 'in-window'), t0 + 8 * DAY) === 0);
+        check('after day 7 the free templates fall back to 1/day', await templateHaikuDailyLimit(redis, args('security-auditor', 'in-window'), t0 + 8 * DAY) === TEMPLATE_HAIKU_DAILY && TEMPLATE_HAIKU_DAILY === 1);
+        check('a device with no window gets 1/day on free templates, 0 on paid',
+            await templateHaikuDailyLimit(redis, args('security-auditor', 'never-seen'), t0) === 1 &&
+            await templateHaikuDailyLimit(redis, args('senior-code-reviewer', 'never-seen'), t0) === 0);
+        check('an unknown or missing template id never qualifies',
+            await templateHaikuDailyLimit(redis, args('made-up-id', 'in-window'), t0 + DAY) === 0 &&
+            await templateHaikuDailyLimit(redis, args(undefined, 'in-window'), t0 + DAY) === 0);
+
+        // A chat request must never be what opens a window.
+        const fresh = Redis.fromEnv();
+        check('peek never starts a window', await peekWelcomeEndsAt(fresh, 'chat-only-device', t0) === null);
+        await templateHaikuDailyLimit(fresh, args('senior-code-reviewer', 'chat-only-device'), t0);
+        check('and a bonus lookup does not either', await peekWelcomeEndsAt(fresh, 'chat-only-device', t0) === null);
+        check('peek sees a window the catalog fetch already started', await peekWelcomeEndsAt(redis, 'in-window', t0 + DAY) === t0 + WELCOME_MS);
+    }
+
+    const { getMergedTemplates, getTemplateWelcomeEndsAt, clearTemplateCatalogCache, recordFirstSeen } = require(path.join(OUT, 'agent/templateCatalog.js'));
     const paidIds = ['framework-migration-planner', 'senior-code-reviewer'];
 
     suite('client — unlocked during the window, with a countdown');
@@ -93,6 +127,26 @@ async function run() {
         check('paid templates arrive unlocked with their prompts', paid.length === 2 && paid.every(i => !i.locked && i.prompt === 'P'));
         check('the countdown is exposed', getTemplateWelcomeEndsAt(ctx) === endsAt);
         check('the request carries a machine id and an install time', 'machineId' in sent && typeof sent.installedAt === 'number');
+    }
+
+    suite('client — the clock starts at first use, not at the first picker open');
+    {
+        const ctx = makeFakeContext();
+        clearTemplateCatalogCache(ctx);
+        const realNow = Date.now;
+        const day0 = realNow();
+        try {
+            Date.now = () => day0;
+            recordFirstSeen(ctx);                     // activation on day 0
+            Date.now = () => day0 + 5 * DAY;          // user first opens the picker on day 5
+            recordFirstSeen(ctx);                     // a later call must not move the stamp
+            let sent;
+            await withFetch(async (_u, init) => { sent = JSON.parse(init.body); return json({ templates: [], welcomeEndsAt: null }); },
+                () => getMergedTemplates(ctx));
+            check('the install time sent to the server is day 0, not day 5', sent.installedAt === day0);
+        } finally {
+            Date.now = realNow;
+        }
     }
 
     suite('client — locked once the window closes, even offline');

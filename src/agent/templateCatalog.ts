@@ -101,6 +101,16 @@ function getFirstSeenAt(context: vscode.ExtensionContext): number {
     return now;
 }
 
+/**
+ * Starts the 7-day clock. Call once at activation: the window must run from
+ * when the user starts using Freebird, not from the first time they happen to
+ * open the template picker (which could be days later, quietly extending it).
+ * Idempotent — the first value wins.
+ */
+export function recordFirstSeen(context: vscode.ExtensionContext): void {
+    getFirstSeenAt(context);
+}
+
 /** A cached/served catalog whose welcome window has closed must not keep its unlocked prompts. */
 function welcomeExpired(welcomeEndsAt: number | null | undefined): boolean {
     return typeof welcomeEndsAt === 'number' && Date.now() >= welcomeEndsAt;
