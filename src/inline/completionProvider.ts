@@ -34,7 +34,15 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
 
         const delayMs = config.get<number>('tabCompletion.delay', DEFAULT_DELAY_MS);
         const cancelled = await this.debounce(delayMs, token);
-        if (cancelled || token.isCancellationRequested) return [];
+        if (cancelled || token.isCancellationRequested) {
+            // Never sent: the user kept typing inside the debounce window. Free,
+            // so counted apart from in-flight cancellations (which cost quota).
+            trackEvent('tab_completion_cancelled_debounce');
+            return [];
+        }
+
+        const abort = new AbortController();
+        const cancelSub = token.onCancellationRequested(() => abort.abort());
 
         const { prefix, suffix } = getSurroundingText(document, position);
 
@@ -44,7 +52,7 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
 
             // Use FIM endpoint when available (Ollama) — much faster for completions
             if (isFIMProvider(provider)) {
-                raw = await provider.fillInMiddle(prefix, suffix, { maxTokens: 128, temperature: 0.2 });
+                raw = await provider.fillInMiddle(prefix, suffix, { maxTokens: 128, temperature: 0.2, signal: abort.signal });
             } else {
                 const fileName = vscode.workspace.asRelativePath(document.fileName);
                 const lang = document.languageId;
@@ -57,10 +65,20 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
 
                 raw = await provider.complete(
                     [{ role: 'user', content: prompt }],
-                    { maxTokens: 128, temperature: 0.2, isTabCompletion: true }
+                    { maxTokens: 128, temperature: 0.2, isTabCompletion: true, signal: abort.signal }
                 );
             }
         } catch (err: any) {
+            // Aborted because the user typed past it — not an error, no warning.
+            if (token.isCancellationRequested) {
+                trackEvent('tab_completion_cancelled');
+                return [];
+            }
+            if (err?.code === 'COMPLETION_QUOTA_EXCEEDED' || err?.code === 'QUOTA_EXCEEDED') {
+                // The warning below shows once per session; this counts every
+                // completion the quota wall blocked afterwards.
+                trackEvent('tab_completion_quota_blocked');
+            }
             if (!warnedThisSession) {
                 warnedThisSession = true;
 
@@ -109,6 +127,8 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
                 }
             }
             return [];
+        } finally {
+            cancelSub.dispose();
         }
 
         // Distinguishes WHY a completion never reaches the user — previously
@@ -119,6 +139,8 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
         // after the user had already typed past it and VS Code cancelled?
         // Those have very different fixes (a bad maxTokens/reasoning_effort
         // tuning vs. nothing actually wrong), so they need separate counts.
+        // (Normally an in-flight cancellation aborts the request and lands in the
+        // catch above; this covers a response that finished as it was cancelled.)
         if (token.isCancellationRequested) {
             trackEvent('tab_completion_cancelled');
             return [];

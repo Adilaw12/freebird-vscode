@@ -116,7 +116,7 @@ class FallbackProvider implements AIProvider {
             ollamaUnreachableUntil = 0;
         } catch (err: any) {
             // Don't fall back on quota errors — surface them directly
-            if (err?.code === 'QUOTA_EXCEEDED') throw err;
+            if (err?.code === 'QUOTA_EXCEEDED' || opts?.signal?.aborted) throw err;
 
             // Ollama unreachable — fall back to cloud
             ollamaUnreachableUntil = Date.now() + OLLAMA_RETRY_MS;
@@ -135,7 +135,7 @@ class FallbackProvider implements AIProvider {
             ollamaUnreachableUntil = 0;
             return result;
         } catch (err: any) {
-            if (err?.code === 'QUOTA_EXCEEDED') throw err;
+            if (err?.code === 'QUOTA_EXCEEDED' || opts?.signal?.aborted) throw err;
             ollamaUnreachableUntil = Date.now() + OLLAMA_RETRY_MS;
             trackEvent('ollama_fallback');
             await this.notifyFallback();

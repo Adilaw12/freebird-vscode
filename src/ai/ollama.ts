@@ -84,7 +84,8 @@ export class OllamaProvider implements AIProvider, FIMProvider {
                     temperature: opts?.temperature ?? 0.2,
                     stop: ['\n\n', '\r\n\r\n']
                 }
-            })
+            }),
+            signal: opts?.signal
         });
 
         if (!response.ok) {

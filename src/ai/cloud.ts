@@ -28,6 +28,18 @@ export function getPremiumAllowance(context: vscode.ExtensionContext): { remaini
  *                                     daily quota (shared keys) plus an hourly
  *                                     IP burst limit to prevent abuse
  */
+/** Combines an optional caller signal with a timeout (AbortSignal.any needs Node 20+). */
+function withTimeout(signal: AbortSignal | undefined, ms: number): AbortSignal {
+    const timeout = AbortSignal.timeout(ms);
+    if (!signal) return timeout;
+    const ctrl = new AbortController();
+    for (const s of [signal, timeout]) {
+        if (s.aborted) { ctrl.abort(s.reason); break; }
+        s.addEventListener('abort', () => ctrl.abort(s.reason), { once: true });
+    }
+    return ctrl.signal;
+}
+
 export class CloudProvider implements AIProvider {
     private readonly context: vscode.ExtensionContext;
     private readonly sessionId: string;
@@ -114,7 +126,7 @@ export class CloudProvider implements AIProvider {
             // the old destructive error-overwrite in panel.ts, wipe out an
             // answer that was actually most of the way through. 90s gives real
             // slow responses room to finish while still bounding a truly stuck request.
-            signal:  AbortSignal.timeout(90_000)
+            signal:  withTimeout(opts?.signal, 90_000)
         });
 
         if (res.status === 401) {
