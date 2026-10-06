@@ -1,5 +1,17 @@
 # Changelog
 
+## \[0.14.3] — 2026-10-07
+
+### Fixed
+
+* **Ollama tab completion never used Ollama's fast fill-in-the-middle endpoint.** With the Ollama backend selected, completions went through the chat endpoint instead, which was slower and returned empty or chatty results more often. FIM is now used, with the cloud provider as the fallback if Ollama is down.
+* **Tab completions the user had already typed past kept running to completion.** The request is now aborted when VS Code cancels it (cloud and Ollama), so it no longer wastes bandwidth or local CPU.
+* **The "Ollama is unreachable" cooldown reset on every window reload**, re-triggering the fallback for the same outage. It is now remembered across reloads.
+
+### Changed
+
+* Tab-completion telemetry now separates completions cancelled before sending from those cancelled in flight, counts completions blocked by the daily quota, and records which backend produced each outcome.
+
 ## \[0.14.2] — 2026-10-05
 
 ### Changed
