@@ -32,9 +32,11 @@ export class OllamaProvider implements AIProvider, FIMProvider {
                         ...(opts.temperature !== undefined && { temperature: opts.temperature })
                     }
                 })
-            })
+            }),
+            signal: opts?.signal
         });
-        } catch (err) {
+        } catch (err: any) {
+            if (opts?.signal?.aborted) throw err;
             // fetch throws a bare TypeError on connection refusal — turn it
             // into something actionable instead of "fetch failed".
             const e = new Error(`Ollama isn't reachable at ${this.url}. Start it with \`ollama serve\`, or switch backend via "Freebird: Configure AI Backend".`) as any;

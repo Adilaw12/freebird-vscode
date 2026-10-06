@@ -19,6 +19,9 @@ export interface CompletionOptions {
     /** Aborts the in-flight request. Tab completions pass VS Code's cancellation
      *  here so a result the user has typed past stops costing quota and bandwidth. */
     signal?: AbortSignal;
+    /** Tab completion only: the chat-style prompt a non-FIM provider should use
+     *  when a FIM-capable primary (Ollama) is unavailable. */
+    fallbackPrompt?: string;
     /** Set only by the Agent-mode loop — asks the backend to serve this request
      *  from the licence's monthly Claude Sonnet allowance (see api/chat.js). */
     premium?: boolean;

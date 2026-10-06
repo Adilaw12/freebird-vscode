@@ -24,6 +24,7 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
         token: vscode.CancellationToken
     ): Promise<vscode.InlineCompletionItem[]> {
         const config = vscode.workspace.getConfiguration('freebird');
+        const backend = config.get<string>('backend', 'cloud');
         if (!config.get<boolean>('tabCompletion.enabled', true)) return [];
 
         if (document.uri.scheme !== 'file' && document.uri.scheme !== 'untitled') return [];
@@ -37,7 +38,7 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
         if (cancelled || token.isCancellationRequested) {
             // Never sent: the user kept typing inside the debounce window. Free,
             // so counted apart from in-flight cancellations (which cost quota).
-            trackEvent('tab_completion_cancelled_debounce');
+            trackEvent('tab_completion_cancelled_debounce', backend);
             return [];
         }
 
@@ -46,23 +47,27 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
 
         const { prefix, suffix } = getSurroundingText(document, position);
 
+        const fileName = vscode.workspace.asRelativePath(document.fileName);
+        const lang = document.languageId;
+        const prompt =
+            `You are a code-completion engine for ${fileName} (${lang}). Given the code ` +
+            `before and after <CURSOR>, output ONLY the text to insert at <CURSOR> — ` +
+            `no explanation, no markdown fences, no repeating surrounding code. If ` +
+            `nothing useful belongs there, output nothing.\n\n` +
+            `${prefix}<CURSOR>${suffix}`;
+
         let raw: string;
         try {
             const provider = getProvider(this.context, getMachineId());
 
-            // Use FIM endpoint when available (Ollama) — much faster for completions
+            // Use FIM endpoint when available (Ollama, incl. via the cloud-fallback
+            // wrapper) — much faster for completions. fallbackPrompt is what the
+            // cloud provider gets if Ollama is down.
             if (isFIMProvider(provider)) {
-                raw = await provider.fillInMiddle(prefix, suffix, { maxTokens: 128, temperature: 0.2, signal: abort.signal });
+                raw = await provider.fillInMiddle(prefix, suffix, {
+                    maxTokens: 128, temperature: 0.2, signal: abort.signal, fallbackPrompt: prompt
+                });
             } else {
-                const fileName = vscode.workspace.asRelativePath(document.fileName);
-                const lang = document.languageId;
-                const prompt =
-                    `You are a code-completion engine for ${fileName} (${lang}). Given the code ` +
-                    `before and after <CURSOR>, output ONLY the text to insert at <CURSOR> — ` +
-                    `no explanation, no markdown fences, no repeating surrounding code. If ` +
-                    `nothing useful belongs there, output nothing.\n\n` +
-                    `${prefix}<CURSOR>${suffix}`;
-
                 raw = await provider.complete(
                     [{ role: 'user', content: prompt }],
                     { maxTokens: 128, temperature: 0.2, isTabCompletion: true, signal: abort.signal }
@@ -71,13 +76,13 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
         } catch (err: any) {
             // Aborted because the user typed past it — not an error, no warning.
             if (token.isCancellationRequested) {
-                trackEvent('tab_completion_cancelled');
+                trackEvent('tab_completion_cancelled', backend);
                 return [];
             }
             if (err?.code === 'COMPLETION_QUOTA_EXCEEDED' || err?.code === 'QUOTA_EXCEEDED') {
                 // The warning below shows once per session; this counts every
                 // completion the quota wall blocked afterwards.
-                trackEvent('tab_completion_quota_blocked');
+                trackEvent('tab_completion_quota_blocked', backend);
             }
             if (!warnedThisSession) {
                 warnedThisSession = true;
@@ -142,17 +147,17 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
         // (Normally an in-flight cancellation aborts the request and lands in the
         // catch above; this covers a response that finished as it was cancelled.)
         if (token.isCancellationRequested) {
-            trackEvent('tab_completion_cancelled');
+            trackEvent('tab_completion_cancelled', backend);
             return [];
         }
 
         const text = stripFences(raw).replace(/\s+$/, '');
         if (!text.trim()) {
-            trackEvent('tab_completion_empty');
+            trackEvent('tab_completion_empty', backend);
             return [];
         }
         if (suffix.startsWith(text)) {
-            trackEvent('tab_completion_redundant');
+            trackEvent('tab_completion_redundant', backend);
             return [];
         }
 
@@ -163,7 +168,7 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
         // "accepted" — VS Code's provider API doesn't hand back a clean
         // accept/reject signal here, and shown-count is still far more visible
         // than the prior nothing.
-        trackEvent('tab_completion_shown');
+        trackEvent('tab_completion_shown', backend);
 
         return [new vscode.InlineCompletionItem(text, new vscode.Range(position, position))];
     }
