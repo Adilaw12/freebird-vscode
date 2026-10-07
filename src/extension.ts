@@ -18,6 +18,7 @@ import { checkAnnouncement } from './announcement';
 import { maybeShowWhatsNew, showWhatsNew } from './whatsNew';
 import { initApiKeys, setApiKey, clearApiKey, hasApiKey, isKeyProvider, KEY_PROVIDERS, KeyProvider } from './ai/keys';
 import { checkTrialReminder } from './license/trialReminder';
+import { watchForDevReload } from './devReload';
 
 // Shared input-box → withProgress → validate → success/buy/retry flow used by
 // both freebird.activateLicense and freebird.activateTemplateLicense — same
@@ -96,6 +97,7 @@ const KEY_PROVIDER_LABELS: Record<KeyProvider, string> = {
 };
 
 export async function activate(context: vscode.ExtensionContext) {
+    watchForDevReload(context); // dev host only — no-op for an installed copy
     // Before anything that can call a provider: load stored API keys into memory
     // and migrate a key still sitting in the old plaintext setting.
     await initApiKeys(context);
