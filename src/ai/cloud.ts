@@ -28,6 +28,8 @@ export function getPremiumAllowance(context: vscode.ExtensionContext): { remaini
  *                                     daily quota (shared keys) plus an hourly
  *                                     IP burst limit to prevent abuse
  */
+const STREAM_TIMEOUT_MS = 150_000;
+
 /** Combines an optional caller signal with a timeout (AbortSignal.any needs Node 20+). */
 function withTimeout(signal: AbortSignal | undefined, ms: number): AbortSignal {
     const timeout = AbortSignal.timeout(ms);
@@ -66,6 +68,28 @@ export class CloudProvider implements AIProvider {
     }
 
     async stream(
+        messages: Message[],
+        onChunk: (text: string) => void,
+        opts?: CompletionOptions
+    ): Promise<void> {
+        try {
+            await this.streamOnce(messages, onChunk, opts);
+        } catch (err: any) {
+            // Our own backstop timer fired (not a user cancel, which has AbortError). Say so in
+            // plain words instead of surfacing "The operation was aborted due to timeout".
+            if (err?.name === 'TimeoutError') {
+                const e = new Error(
+                    'Freebird Cloud did not finish answering in time (over ' + Math.round(STREAM_TIMEOUT_MS / 60_000 * 10) / 10 + ' minutes). ' +
+                    'Agent requests that plan a lot before writing can be slow — try again, or break the request into smaller steps.'
+                ) as any;
+                e.code = 'REQUEST_TIMEOUT';
+                throw e;
+            }
+            throw err;
+        }
+    }
+
+    private async streamOnce(
         messages: Message[],
         onChunk: (text: string) => void,
         opts?: CompletionOptions
@@ -124,12 +148,12 @@ export class CloudProvider implements AIProvider {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify(body),
-            // 30s was too tight for a genuinely slow-but-working response (not
-            // just a hung one) — it would abort mid-stream and, combined with
-            // the old destructive error-overwrite in panel.ts, wipe out an
-            // answer that was actually most of the way through. 90s gives real
-            // slow responses room to finish while still bounding a truly stuck request.
-            signal:  withTimeout(opts?.signal, 90_000)
+            // Backstop only. This covers the WHOLE request, including the time a Pro agent
+            // model spends planning before it streams a single character. It sits above the
+            // backend's own 120s function limit (backend/vercel.json) so the server's limit,
+            // not this timer, normally ends a stuck request. 90s used to cut off requests
+            // the server was still happily working on.
+            signal:  withTimeout(opts?.signal, STREAM_TIMEOUT_MS)
         });
 
         if (res.status === 401) {
