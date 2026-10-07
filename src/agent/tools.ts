@@ -9,6 +9,9 @@ import { exec, execFile, ExecException } from 'child_process';
 import { GitService } from '../git/service';
 import { previewHtmlFile, previewHtmlFileWithRaster } from './preview';
 import { mermaidPage, svgPage, checkSvg } from './diagramPage';
+import { parsePlan, validatePlan, describeValidation } from '../architecture/plan';
+import { renderPlan } from '../architecture/render';
+import { lookupReference, listTopics } from '../architecture/reference';
 import { ToolSchema } from '../ai/provider';
 import { searchCodebaseSemantic } from '../index/indexer';
 import * as checkpoint from './checkpoint';
@@ -172,6 +175,40 @@ export const NATIVE_TOOL_SCHEMAS: ToolSchema[] = [
         }
     },
     {
+        name: 'create_floor_plan',
+        description: 'Design a building floor plan (house, office, school, clinic, shop/cafe, hotel) from a STRUCTURED spec. The spec is validated like a design review - every room reachable through doors without crossing a private room, windows on habitable rooms, room sizes, bedroom count, circulation share - and only then drawn deterministically with computed dimensions, door swings, windows, scale bar and north arrow. Validation errors come back for you to fix; fix them and call again. Prefer this over create_drawing for any building layout. Before the first call, use architecture_reference ("spec", "process" and the building type) to get the format and the design rules. Concept sketch only - never present it as construction documentation.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                title: { type: 'string', description: 'Plan title, e.g. "Ground Floor - 4-bedroom house"' },
+                spec: {
+                    type: 'object',
+                    description: 'Units are metres; origin top-left, x east, y south. Do NOT include dimensions or areas - they are computed.',
+                    properties: {
+                        brief: { type: 'object', description: '{ buildingType?: residential|office|education|healthcare|retail|hotel, bedrooms?: number, hemisphere?: south|north }' },
+                        rooms: { type: 'array', description: 'Axis-aligned rectangles that must not overlap; neighbours share an edge exactly. Each: { id, name, type, x, y, w, h }.', items: { type: 'object' } },
+                        doors: { type: 'array', description: 'Each: { from, to, at?: 0..1, width?, kind?: swing|open|sliding|vehicle, side?: N|E|S|W }. Use from:"exterior" with a side for entrances.', items: { type: 'object' } },
+                        windows: { type: 'array', description: 'Each: { room, side: N|E|S|W, at?: 0..1, width? } on an exterior side.', items: { type: 'object' } }
+                    },
+                    required: ['rooms']
+                },
+                path: { type: 'string', description: 'Optional workspace-relative path for the HTML viewer (default diagrams/<title>.html); .svg and .plan.json are saved alongside' }
+            },
+            required: ['title', 'spec']
+        }
+    },
+    {
+        name: 'architecture_reference',
+        description: 'Look up architectural design guidance: the floor-plan spec format ("spec"), the design process ("process"), room sizes, doors and corridors, circulation and egress, stairs, accessibility, landscape, and building-type guidance (residential, office, education, healthcare, retail, hotel). Also searches the user\'s own reference notes in .freebird/references/ (for example licensed material such as notes from Neufert). Call it before designing a building. Figures are guideline defaults, not a substitute for the local building code.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                query: { type: 'string', description: 'Topic or keyword, e.g. "spec", "process", "office", "stairs", "classroom". Leave empty to list topics.' },
+                buildingType: { type: 'string', description: 'residential, office, education, healthcare, retail or hotel - adds that type\'s guidance' }
+            }
+        }
+    },
+    {
         name: 'verify_diagram',
         description: 'Render a Mermaid diagram to a PNG via mermaid.ink and attach it so you can actually look at the result. Catches Mermaid syntax errors and layout problems (overlapping nodes, truncated labels, a confusing flow) that writing the HTML preview alone never surfaces. Call this right after create_diagram, using the same Mermaid source, before telling the user the diagram is ready — if the render fails or the image looks wrong, fix the Mermaid syntax and call create_diagram again rather than reporting success anyway. The diagram source is sent to mermaid.ink, a third-party rendering service — avoid this tool for diagrams containing sensitive proprietary details.',
         input_schema: {
@@ -241,6 +278,8 @@ AVAILABLE TOOLS:
 - run_command   {"action":"run_command","command":"npm test"}                                     run in terminal
 - download_file  {"action":"download_file","url":"https://example.com/file.zip","path":"files/file.zip"} download from web
 - create_diagram {"action":"create_diagram","title":"Auth Flow","mermaid":"graph TD; A-->B;"}     create & preview a Mermaid diagram (flows / relationships only — not layouts)
+- create_floor_plan {"action":"create_floor_plan","title":"Ground floor","spec":{"brief":{"buildingType":"residential","bedrooms":2},"rooms":[{"id":"liv","name":"Living","type":"living","x":0,"y":0,"w":5,"h":4}],"doors":[{"from":"exterior","to":"liv","side":"S"}],"windows":[{"room":"liv","side":"N","width":2}]}}  design a building plan from a structured spec: validated (reachability, windows, sizes) then drawn with computed dimensions - USE THIS for any floor plan; call architecture_reference first
+- architecture_reference {"action":"architecture_reference","query":"spec","buildingType":"office"}   design rules, room sizes, spec format, plus the user's own notes in .freebird/references/
 - create_drawing {"action":"create_drawing","title":"Ground Floor","svg":"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 800'>…</svg>"}  draw a spatial picture as SVG (floor plans, wireframes, maps, illustrations) and preview it
 - verify_diagram {"action":"verify_diagram","mermaid":"graph TD; A-->B;","path":"diagrams/auth-flow.html"}  render via mermaid.ink and check it before reporting success
 - copy_file      {"action":"copy_file","source":"src/old.ts","destination":"src/new.ts"}           copy a file
@@ -255,7 +294,7 @@ GUIDELINES:
 - Use edit_file for targeted changes; write_file only for new files or complete rewrites
 - edit_file matches oldStr exactly when possible; if that fails it falls back to a whitespace-insensitive line match, so minor spacing differences are OK — but still copy oldStr from the file as closely as you can
 - After creating or editing an HTML file, call preview_html on it so the user can see the rendered page in a tab inside VS Code — don't tell them to install a separate live-server extension
-- Pick the tool by what the picture must show: create_diagram (Mermaid) for flows, sequences and relationships; create_drawing (SVG) when position, scale or shape matter — floor plans, room layouts, wireframes, maps. Never draw a floor plan as a Mermaid flowchart of rooms: that shows which rooms connect, not what the building looks like.
+- Pick the tool by what the picture must show: create_diagram (Mermaid) for flows, sequences and relationships; create_floor_plan for any building layout (call architecture_reference first, state your brief and assumptions, then fix every validator error); create_drawing (SVG) for other spatial pictures — wireframes, maps, site sketches. Never draw a floor plan as a Mermaid flowchart of rooms.
 - After create_drawing, look at the rendered image it returns; if anything overlaps, is cut off, mislabelled or out of proportion, fix the SVG and call create_drawing again instead of reporting success
 - After create_diagram, call verify_diagram with the same Mermaid source to render and check it before telling the user it's ready — if verify_diagram reports a failure, fix the syntax and call create_diagram again rather than reporting success anyway
 - All paths are relative to the workspace root
@@ -272,7 +311,7 @@ export const NATIVE_TOOL_GUIDELINES = `GUIDELINES:
 - Always read files before editing — never assume their contents.
 - Use search_code for exact strings/symbol names; use search_codebase_semantic for concepts or "where is X handled" when you don't know the exact wording.
 - Use edit_file for targeted changes; write_file only for new files or complete rewrites.
-- Pick the tool by what the picture must show: create_diagram (Mermaid) for flows, sequences and relationships; create_drawing (SVG) when position, scale or shape matter — floor plans, room layouts, wireframes, maps. Never draw a floor plan as a Mermaid flowchart of rooms.
+- Pick the tool by what the picture must show: create_diagram (Mermaid) for flows, sequences and relationships; create_floor_plan for any building layout (call architecture_reference first, then fix every validator error); create_drawing (SVG) for other spatial pictures — wireframes, maps, site sketches. Never draw a floor plan as a Mermaid flowchart of rooms.
 - After create_drawing, look at the rendered image it returns; if anything overlaps, is cut off, mislabelled or out of proportion, fix the SVG and call create_drawing again instead of reporting success.
 - After create_diagram, always call verify_diagram with the same mermaid source before telling the user the diagram is ready. If it reports a render failure or the image looks wrong (overlapping nodes, truncated text, a confusing layout), fix the Mermaid syntax and call create_diagram again — don't just apologize in text.
 - All paths are relative to the workspace root.
@@ -397,6 +436,8 @@ export async function executeToolCall(
             case 'download_file':  return await downloadFileTool(tool, onApprovalNeeded, turnId);
             case 'create_diagram': return await createDiagramTool(tool);
             case 'create_drawing': return await createDrawingTool(tool);
+            case 'create_floor_plan': return await createFloorPlanTool(tool);
+            case 'architecture_reference': return await architectureReferenceTool(tool);
             case 'verify_diagram': return await verifyDiagramTool(tool);
             case 'copy_file':      return await copyFileTool(tool, onApprovalNeeded, turnId);
             case 'git_status':     return { success: true, output: await git.getStatus() };
@@ -985,18 +1026,15 @@ async function createDiagramTool(tool: ToolCall): Promise<ToolResult> {
     }
 }
 
-async function createDrawingTool(tool: ToolCall): Promise<ToolResult> {
-    const title = String(tool.title ?? '').trim();
-    const svg = String(tool.svg ?? '').trim();
-    if (!title || !svg) return { success: false, output: 'create_drawing requires "title" and "svg".' };
-
-    const problem = checkSvg(svg);
-    if (problem) return { success: false, output: `The svg ${problem}. Fix it and call create_drawing again.` };
-
-    const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-    const relPath = String(tool.path ?? '') || `diagrams/${slug}.html`;
+/** Writes the viewer page + raw SVG, previews it, and returns the rendered image to the model. */
+async function saveAndPreviewDrawing(
+    title: string, svg: string, requestedPath: string, kind: string, extraText = '', extraFiles: Record<string, string> = {}
+): Promise<ToolResult> {
+    const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'drawing';
+    const relPath = requestedPath || `diagrams/${slug}.html`;
     const svgRelPath = relPath.replace(/\.html?$/i, '') + '.svg';
-    for (const p of [relPath, svgRelPath]) {
+    const extraRel = Object.keys(extraFiles).map(ext => relPath.replace(/\.html?$/i, '') + ext);
+    for (const p of [relPath, svgRelPath, ...extraRel]) {
         if (isPathIgnored(getWorkspaceRoot(), p)) return { success: false, output: ignoreBlockMessage(p, 'write') };
     }
     const full = resolveWorkspacePath(relPath);
@@ -1006,19 +1044,103 @@ async function createDrawingTool(tool: ToolCall): Promise<ToolResult> {
         fs.mkdirSync(path.dirname(full), { recursive: true });
         fs.writeFileSync(full, svgPage(title, svg), 'utf8');
         fs.writeFileSync(svgFull, svg, 'utf8');
+        for (const [ext, content] of Object.entries(extraFiles)) {
+            fs.writeFileSync(resolveWorkspacePath(relPath.replace(/\.html?$/i, '') + ext), content, 'utf8');
+        }
         const raster = await previewHtmlFileWithRaster(full);
-        const saved = `Drawing saved to ${relPath} (viewer) and ${svgRelPath} (raw SVG), and opened in a zoomable preview.`;
+        const saved = `${kind} saved to ${relPath} (viewer) and ${svgRelPath} (raw SVG)${extraRel.length ? `, plus ${extraRel.join(', ')}` : ''}, and opened in a zoomable preview.${extraText ? `\n\n${extraText}` : ''}`;
         if (raster.image) {
             return {
                 success: true,
-                output: `${saved} Look at the attached render before telling the user it's ready: check that nothing overlaps or runs off the edge, every label is readable and inside its shape, proportions and dimensions match what was asked, and doors/windows sit on walls. If anything is wrong, fix the SVG and call create_drawing again.`,
+                output: `${saved}\n\nLook at the attached render before telling the user it's ready: check that nothing overlaps or runs off the edge, every label is readable and inside its shape, proportions match what was asked, and doors/windows sit on walls.`,
                 image: raster.image
             };
         }
-        return { success: true, output: `${saved} The render could not be captured for a visual check (${raster.error ?? 'unknown'}), so verify labels, dimensions and scale against the request yourself.` };
+        return { success: true, output: `${saved}\n\nThe render could not be captured for a visual check (${raster.error ?? 'unknown'}), so verify the result against the request yourself.` };
     } catch (err: any) {
-        return { success: false, output: `Error creating drawing: ${err?.message ?? String(err)}` };
+        return { success: false, output: `Error saving ${kind.toLowerCase()}: ${err?.message ?? String(err)}` };
     }
+}
+
+async function createDrawingTool(tool: ToolCall): Promise<ToolResult> {
+    const title = String(tool.title ?? '').trim();
+    const svg = String(tool.svg ?? '').trim();
+    if (!title || !svg) return { success: false, output: 'create_drawing requires "title" and "svg".' };
+
+    const problem = checkSvg(svg);
+    if (problem) return { success: false, output: `The svg ${problem}. Fix it and call create_drawing again.` };
+
+    return saveAndPreviewDrawing(title, svg, String(tool.path ?? ''), 'Drawing', 'If anything is wrong, fix the SVG and call create_drawing again.');
+}
+
+async function createFloorPlanTool(tool: ToolCall): Promise<ToolResult> {
+    const title = String(tool.title ?? '').trim();
+    if (!title || tool.spec === undefined) return { success: false, output: 'create_floor_plan requires "title" and "spec". Call architecture_reference with query "spec" for the format.' };
+
+    // Everything below that is the DESIGN failing (bad spec, validator errors) is returned as
+    // guidance with success:true. The agent loop stops after 3 consecutive failed tool calls,
+    // and a plan can legitimately need several fix-and-retry rounds.
+    const parsed = parsePlan(tool.spec);
+    if (!parsed.plan) {
+        return { success: true, output: `NOT DRAWN — the spec could not be read:\n${parsed.errors.map(e => `- ${e}`).join('\n')}\n\nFix these and call create_floor_plan again (architecture_reference "spec" shows the format).` };
+    }
+    const validation = validatePlan(parsed.plan);
+    if (validation.errors.length) {
+        return { success: true, output: `NOT DRAWN — the design has problems a reviewer would reject:\n${describeValidation(validation)}\n\nFix exactly these in the spec (move/resize rooms, add doors or windows) and call create_floor_plan again.` };
+    }
+
+    const svg = renderPlan(parsed.plan, validation, title);
+    const schedule = validation.areas
+        .map(a => `${a.name} (${a.type}) ${(a.w / 1000).toFixed(1)} × ${(a.h / 1000).toFixed(1)} m = ${a.area.toFixed(1)} m²`)
+        .join('; ');
+    const advice = describeValidation(validation);
+    const text = `Validated: ${validation.doors.length} door(s), ${validation.windows.length} window(s), internal area ${validation.internalArea.toFixed(1)} m².\nRooms: ${schedule}.` +
+        (advice ? `\n${advice}\nAddress warnings that matter for this brief; mention any you leave.` : '') +
+        '\nThis is a concept sketch, not a construction drawing — say so when you summarise.';
+    return saveAndPreviewDrawing(title, svg, String(tool.path ?? ''), 'Floor plan', text, { '.plan.json': JSON.stringify(tool.spec, null, 2) });
+}
+
+const REFERENCE_DIR = path.join('.freebird', 'references');
+const REFERENCE_MAX_FILES = 40;
+const REFERENCE_MAX_FILE_BYTES = 200 * 1024;
+const REFERENCE_MAX_OUTPUT = 9000;
+
+async function architectureReferenceTool(tool: ToolCall): Promise<ToolResult> {
+    const query = String(tool.query ?? '').trim();
+    const buildingType = String(tool.buildingType ?? '').trim().toLowerCase() || undefined;
+
+    const hits = lookupReference(query, buildingType);
+    const parts: string[] = [];
+    if (!query) parts.push(`Topics available. ${listTopics()}\nCall again with a topic or keyword (for example "spec", "process", "office", "stairs").`);
+    for (const h of hits.slice(0, query ? 4 : 0)) parts.push(`## ${h.topic}\n${h.text}`);
+
+    // The user's own licensed material (e.g. notes from Neufert), if they have supplied any.
+    try {
+        const root = getWorkspaceRoot();
+        const dir = path.join(root, REFERENCE_DIR);
+        if (fs.existsSync(dir) && !isPathIgnored(root, REFERENCE_DIR + '/x')) {
+            const words = [query, buildingType ?? ''].join(' ').toLowerCase().split(/\s+/).filter(w => w.length > 2);
+            const files = fs.readdirSync(dir).filter(n => /\.(md|txt)$/i.test(n)).slice(0, REFERENCE_MAX_FILES);
+            const scored: { name: string; text: string; score: number }[] = [];
+            for (const name of files) {
+                const full = path.join(dir, name);
+                if (fs.statSync(full).size > REFERENCE_MAX_FILE_BYTES) continue;
+                const text = fs.readFileSync(full, 'utf8');
+                const hay = (name + ' ' + text).toLowerCase();
+                const score = words.reduce((s, w) => s + (hay.includes(w) ? 1 : 0) + (name.toLowerCase().includes(w) ? 2 : 0), 0);
+                if (!words.length || score > 0) scored.push({ name, text, score });
+            }
+            scored.sort((a, b) => b.score - a.score);
+            for (const f of scored.slice(0, 3)) parts.push(`## your reference: ${f.name}\n${f.text.slice(0, 3500)}`);
+            if (!scored.length && files.length) parts.push(`(Your ${REFERENCE_DIR} folder has ${files.length} file(s) but none matched "${query}".)`);
+        } else if (query) {
+            parts.push(`(Tip: the user can add their own licensed or project reference notes as .md/.txt files in ${REFERENCE_DIR}/ and they will be searched here.)`);
+        }
+    } catch { /* no workspace open — built-in references still apply */ }
+
+    if (!parts.length) return { success: true, output: `No reference matched "${query}". ${listTopics()}` };
+    const out = parts.join('\n\n');
+    return { success: true, output: out.length > REFERENCE_MAX_OUTPUT ? out.slice(0, REFERENCE_MAX_OUTPUT) + '\n…(truncated — ask for a narrower topic)' : out };
 }
 
 const MERMAID_INK_BASE = 'https://mermaid.ink/img/';

@@ -969,6 +969,8 @@ function toolLabel(tool: { action: string; [key: string]: unknown }): string {
         case 'download_file':  return `Downloading ${tool.url}`;
         case 'create_diagram': return `Creating diagram: ${tool.title}`;
         case 'create_drawing': return `Drawing: ${tool.title}`;
+        case 'create_floor_plan': return `Designing floor plan: ${tool.title}`;
+        case 'architecture_reference': return `Consulting design references${tool.query ? `: ${tool.query}` : ''}`;
         case 'copy_file':      return `Copying ${tool.source} → ${tool.destination}`;
         case 'git_status':     return 'Checking git status';
         case 'git_push':       return 'Pushing to remote';
