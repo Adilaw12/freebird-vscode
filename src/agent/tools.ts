@@ -176,7 +176,7 @@ export const NATIVE_TOOL_SCHEMAS: ToolSchema[] = [
     },
     {
         name: 'create_floor_plan',
-        description: 'Design a building floor plan (house, office, school, clinic, shop/cafe, hotel) from a STRUCTURED spec. The spec is validated like a design review - every room reachable through doors without crossing a private room, windows on habitable rooms, room sizes, bedroom count, circulation share - and only then drawn deterministically with computed dimensions, door swings, windows, scale bar and north arrow. Validation errors come back for you to fix; fix them and call again. Prefer this over create_drawing for any building layout. Before the first call, use architecture_reference ("spec", "process" and the building type) to get the format and the design rules. Concept sketch only - never present it as construction documentation.',
+        description: 'Design a building floor plan (house, office, school, clinic, shop/cafe, hotel) from a STRUCTURED spec. The spec is validated like a design review - every room reachable through doors without crossing a private room, windows on habitable rooms, room sizes, bedroom count, circulation share - and only then drawn deterministically with computed dimensions, door swings, windows, scale bar and north arrow. Validation errors come back for you to fix; fix them and call again. Prefer this over create_drawing for any building layout. You can call it directly for a house - the format is below. Design process: state the brief and assumptions; group rooms into day/night/service zones; keep the hall short (circulation under ~15% of the area); put a door on every connection you intend and a window on every habitable room; neighbouring rooms share an edge exactly. For a non-residential type, or to check sizes, call architecture_reference ONCE with a combined query such as "spec process office" (every extra round trip costs 10+ seconds). Concept sketch only - never present it as construction documentation.',
         input_schema: {
             type: 'object',
             properties: {
@@ -278,7 +278,7 @@ AVAILABLE TOOLS:
 - run_command   {"action":"run_command","command":"npm test"}                                     run in terminal
 - download_file  {"action":"download_file","url":"https://example.com/file.zip","path":"files/file.zip"} download from web
 - create_diagram {"action":"create_diagram","title":"Auth Flow","mermaid":"graph TD; A-->B;"}     create & preview a Mermaid diagram (flows / relationships only — not layouts)
-- create_floor_plan {"action":"create_floor_plan","title":"Ground floor","spec":{"brief":{"buildingType":"residential","bedrooms":2},"rooms":[{"id":"liv","name":"Living","type":"living","x":0,"y":0,"w":5,"h":4}],"doors":[{"from":"exterior","to":"liv","side":"S"}],"windows":[{"room":"liv","side":"N","width":2}]}}  design a building plan from a structured spec: validated (reachability, windows, sizes) then drawn with computed dimensions - USE THIS for any floor plan; call architecture_reference first
+- create_floor_plan {"action":"create_floor_plan","title":"Ground floor","spec":{"brief":{"buildingType":"residential","bedrooms":2},"rooms":[{"id":"liv","name":"Living","type":"living","x":0,"y":0,"w":5,"h":4}],"doors":[{"from":"exterior","to":"liv","side":"S"}],"windows":[{"room":"liv","side":"N","width":2}]}}  design a building plan from a structured spec: validated (reachability, windows, sizes) then drawn with computed dimensions - USE THIS for any floor plan; ask architecture_reference ONCE with a combined query only if you need rules for a non-residential type
 - architecture_reference {"action":"architecture_reference","query":"spec","buildingType":"office"}   design rules, room sizes, spec format, plus the user's own notes in .freebird/references/
 - create_drawing {"action":"create_drawing","title":"Ground Floor","svg":"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 800'>…</svg>"}  draw a spatial picture as SVG (floor plans, wireframes, maps, illustrations) and preview it
 - verify_diagram {"action":"verify_diagram","mermaid":"graph TD; A-->B;","path":"diagrams/auth-flow.html"}  render via mermaid.ink and check it before reporting success
@@ -294,7 +294,7 @@ GUIDELINES:
 - Use edit_file for targeted changes; write_file only for new files or complete rewrites
 - edit_file matches oldStr exactly when possible; if that fails it falls back to a whitespace-insensitive line match, so minor spacing differences are OK — but still copy oldStr from the file as closely as you can
 - After creating or editing an HTML file, call preview_html on it so the user can see the rendered page in a tab inside VS Code — don't tell them to install a separate live-server extension
-- Pick the tool by what the picture must show: create_diagram (Mermaid) for flows, sequences and relationships; create_floor_plan for any building layout (call architecture_reference first, state your brief and assumptions, then fix every validator error); create_drawing (SVG) for other spatial pictures — wireframes, maps, site sketches. Never draw a floor plan as a Mermaid flowchart of rooms.
+- Pick the tool by what the picture must show: create_diagram (Mermaid) for flows, sequences and relationships; create_floor_plan for any building layout (state your brief and assumptions, then fix every validator error; for non-residential types call architecture_reference once with a combined query); create_drawing (SVG) for other spatial pictures — wireframes, maps, site sketches. Never draw a floor plan as a Mermaid flowchart of rooms.
 - After create_drawing, look at the rendered image it returns; if anything overlaps, is cut off, mislabelled or out of proportion, fix the SVG and call create_drawing again instead of reporting success
 - After create_diagram, call verify_diagram with the same Mermaid source to render and check it before telling the user it's ready — if verify_diagram reports a failure, fix the syntax and call create_diagram again rather than reporting success anyway
 - All paths are relative to the workspace root
@@ -311,7 +311,7 @@ export const NATIVE_TOOL_GUIDELINES = `GUIDELINES:
 - Always read files before editing — never assume their contents.
 - Use search_code for exact strings/symbol names; use search_codebase_semantic for concepts or "where is X handled" when you don't know the exact wording.
 - Use edit_file for targeted changes; write_file only for new files or complete rewrites.
-- Pick the tool by what the picture must show: create_diagram (Mermaid) for flows, sequences and relationships; create_floor_plan for any building layout (call architecture_reference first, then fix every validator error); create_drawing (SVG) for other spatial pictures — wireframes, maps, site sketches. Never draw a floor plan as a Mermaid flowchart of rooms.
+- Pick the tool by what the picture must show: create_diagram (Mermaid) for flows, sequences and relationships; create_floor_plan for any building layout (then fix every validator error; for non-residential types call architecture_reference once); create_drawing (SVG) for other spatial pictures — wireframes, maps, site sketches. Never draw a floor plan as a Mermaid flowchart of rooms.
 - After create_drawing, look at the rendered image it returns; if anything overlaps, is cut off, mislabelled or out of proportion, fix the SVG and call create_drawing again instead of reporting success.
 - After create_diagram, always call verify_diagram with the same mermaid source before telling the user the diagram is ready. If it reports a render failure or the image looks wrong (overlapping nodes, truncated text, a confusing layout), fix the Mermaid syntax and call create_diagram again — don't just apologize in text.
 - All paths are relative to the workspace root.
@@ -1028,7 +1028,7 @@ async function createDiagramTool(tool: ToolCall): Promise<ToolResult> {
 
 /** Writes the viewer page + raw SVG, previews it, and returns the rendered image to the model. */
 async function saveAndPreviewDrawing(
-    title: string, svg: string, requestedPath: string, kind: string, extraText = '', extraFiles: Record<string, string> = {}
+    title: string, svg: string, requestedPath: string, kind: string, extraText = '', extraFiles: Record<string, string> = {}, wantImage = true
 ): Promise<ToolResult> {
     const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'drawing';
     const relPath = requestedPath || `diagrams/${slug}.html`;
@@ -1046,6 +1046,12 @@ async function saveAndPreviewDrawing(
         fs.writeFileSync(svgFull, svg, 'utf8');
         for (const [ext, content] of Object.entries(extraFiles)) {
             fs.writeFileSync(resolveWorkspacePath(relPath.replace(/\.html?$/i, '') + ext), content, 'utf8');
+        }
+        // wantImage=false: the picture is computed from validated data, so don't wait for the page to
+        // render it back (up to 8s) just to discard it — open the preview and carry on.
+        if (!wantImage) {
+            previewHtmlFile(full);
+            return { success: true, output: `${kind} saved to ${relPath} (viewer) and ${svgRelPath} (raw SVG)${extraRel.length ? `, plus ${extraRel.join(', ')}` : ''}, and opened in a zoomable preview.${extraText ? `\n\n${extraText}` : ''}` };
         }
         const raster = await previewHtmlFileWithRaster(full);
         const saved = `${kind} saved to ${relPath} (viewer) and ${svgRelPath} (raw SVG)${extraRel.length ? `, plus ${extraRel.join(', ')}` : ''}, and opened in a zoomable preview.${extraText ? `\n\n${extraText}` : ''}`;
@@ -1097,7 +1103,9 @@ async function createFloorPlanTool(tool: ToolCall): Promise<ToolResult> {
     const text = `Validated: ${validation.doors.length} door(s), ${validation.windows.length} window(s), internal area ${validation.internalArea.toFixed(1)} m².\nRooms: ${schedule}.` +
         (advice ? `\n${advice}\nAddress warnings that matter for this brief; mention any you leave.` : '') +
         '\nThis is a concept sketch, not a construction drawing — say so when you summarise.';
-    return saveAndPreviewDrawing(title, svg, String(tool.path ?? ''), 'Floor plan', text, { '.plan.json': JSON.stringify(tool.spec, null, 2) });
+    // The drawing is computed from the validated spec, so sending the picture back for the model to
+    // re-inspect only adds a slow vision turn and invites needless redraws. The user still sees the preview.
+    return saveAndPreviewDrawing(title, svg, String(tool.path ?? ''), 'Floor plan', text + '\nThe drawing is computed from the validated spec, so there is no need to inspect it: summarise the design for the user (rooms, areas, how it meets the brief) and mention any warnings you left.', { '.plan.json': JSON.stringify(tool.spec, null, 2) }, false);
 }
 
 const REFERENCE_DIR = path.join('.freebird', 'references');

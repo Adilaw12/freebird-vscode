@@ -21,6 +21,7 @@ import { readProjectRules, RULES_RELATIVE_PATH } from '../agent/rules';
 import { finalizeTurn, restoreCheckpoint, checkpointsRootFor } from '../agent/checkpoint';
 import { trackEvent, getMachineId } from '../telemetry';
 import { MERMAID_THEME_SCRIPT } from '../agent/mermaidTheme';
+import { perfLog } from '../util/perfLog';
 import { submitFeedback, canAutoPrompt, markPrompted, recordDismissed, recordResultDelivered, FeedbackSubmission } from '../feedback';
 import { getTrialBannerState } from '../license/trialReminder';
 
@@ -101,6 +102,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     // Not verified against the actual sent text — matches this codebase's
     // existing loose trust level (e.g. quota is trusted from server headers).
     private pendingTemplateId: string | undefined;
+    private readonly toolStartedAt = new Map<string, number>();
 
     constructor(context: vscode.ExtensionContext, git: GitService) {
         this.context = context;
@@ -824,11 +826,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 this.rawBuffer = '';
                 break;
             case 'tool-start':
+                this.toolStartedAt.set(event.id, Date.now());
                 this.toolCallsThisRound++;
                 trackEvent(`tool_used_${event.tool.action}`);
                 this.post({ type: 'tool-status', id: event.id, state: 'running', label: toolLabel(event.tool) });
                 break;
             case 'tool-result': {
+                perfLog(`tool     ${event.tool.action}  ${((Date.now() - (this.toolStartedAt.get(event.id) ?? Date.now())) / 1000).toFixed(1)}s  ${event.success ? 'ok' : 'FAILED'}`);
+                this.toolStartedAt.delete(event.id);
                 if (!event.success) trackEvent('tool_error', event.tool.action);
                 // Related-location lists are short (max 6 lines) and meant to be read
                 // in full — the generic 200-char preview cap would cut them mid-list.

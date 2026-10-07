@@ -330,6 +330,42 @@ export function validatePlan(plan: Plan): Validation {
         }
     }
 
+    // A habitable room with no window is the most common slip and always the same fix, so make
+    // it ourselves (and say so) rather than rejecting the plan and costing a model round trip.
+    // Only a room with no exterior wall at all is left as an error below.
+    const sunSide: Side | undefined = plan.brief.hemisphere === 'south' ? 'N' : plan.brief.hemisphere === 'north' ? 'S' : undefined;
+    const autoWindow = (r: Room): { opening: PlacedOpening; side: Side } | undefined => {
+        const margin = WINDOW.sideMargin * 1000;
+        const area = m2((r.x2 - r.x1) * (r.y2 - r.y1));
+        const want = Math.min(2400, Math.max(1200, Math.round((area * WINDOW.lightRatio / 1.2) * 1000 / 100) * 100));
+        let best: { score: number; side: Side; opening: PlacedOpening } | undefined;
+        for (const side of SIDES) {
+            for (const [a, b] of exteriorIntervals(r, side, plan.rooms)) {
+                if (b - a < WINDOW.minWidth * 1000 + 2 * margin) continue;
+                const L = sideLine(r, side);
+                const width = Math.min(want, b - a - 2 * margin);
+                for (const at of [0.5, 0.25, 0.75]) {
+                    const center = placeAlong(a, b, width, margin, at);
+                    if (doors.some(d => d.orient === L.orient && d.fixed === L.fixed && Math.abs(d.center - center) < (d.width + width) / 2)) continue;
+                    const score = width + (side === sunSide ? 1e6 : 0);
+                    if (!best || score > best.score) best = { score, side, opening: { orient: L.orient, fixed: L.fixed, center, width, side, room: r.id } };
+                    break;
+                }
+            }
+        }
+        return best;
+    };
+    for (const r of plan.rooms) {
+        if (!rule(r).habitable) continue;
+        const hasWindow = windows.some(w => w.room === r.id) || doors.some(d => d.room === r.id && !d.other && d.kind !== 'vehicle');
+        if (hasWindow) continue;
+        const added = autoWindow(r);
+        if (added) {
+            windows.push(added.opening);
+            notes.push(`${r.name} had no window, so a ${(added.opening.width / 1000).toFixed(1)} m window was added on its ${added.side} side. Specify one yourself if you want a different position.`);
+        }
+    }
+
     // Windows & light
     const winWidth = new Map<string, number>();
     for (const w of windows) winWidth.set(w.room, (winWidth.get(w.room) ?? 0) + w.width);

@@ -98,7 +98,20 @@ function run() {
     check('overlapping rooms are an error', has(errs(s), /overlap/));
 
     s = clone(HOUSE); s.windows = s.windows.filter(w => w.room !== 'bed2');
-    check('a bedroom with no window is an error', has(errs(s), /Bedroom 2 is a habitable room with no window/));
+    {
+        const a = analyse(s);
+        check('a bedroom with no window gets one added automatically, with a note', a.v.errors.length === 0 && a.v.notes.some(n => /Bedroom 2 had no window.*added/.test(n)));
+        check('the added window is a real opening on that room', a.v.windows.some(w => w.room === 'bed2'));
+    }
+    {
+        const grid = [];
+        for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
+            const mid = r === 1 && c === 1;
+            grid.push(rm('r' + r + c, mid ? 'Inner bedroom' : 'Room ' + r + c, mid ? 'bedroom' : 'other', c * 3.2, r * 3.2, 3.2, 3.2));
+        }
+        const e = errs({ rooms: grid, doors: [door('exterior', 'r00', { side: 'N' }), door('r00', 'r01', {}), door('r01', 'r11', {})] });
+        check('a habitable room with no exterior wall at all is still an error', has(e, /Inner bedroom is a habitable room with no window/));
+    }
 
     s = clone(HOUSE); s.windows.push({ room: 'bed3', side: 'N', width: 1.2 });
     check('a window on an interior wall is an error', has(errs(s), /no exterior wall/));

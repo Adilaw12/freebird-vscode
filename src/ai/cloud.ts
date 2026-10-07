@@ -1,3 +1,4 @@
+import { perfLog } from '../util/perfLog';
 import * as vscode from 'vscode';
 import { AIProvider, Message, CompletionOptions } from './provider';
 import { getStoredSession } from '../auth/github';
@@ -94,6 +95,7 @@ export class CloudProvider implements AIProvider {
         onChunk: (text: string) => void,
         opts?: CompletionOptions
     ): Promise<void> {
+        const t0 = Date.now();
         const endpoint = this.mode === 'fallback'
             ? `${API_BASE}/api/fallback`
             : `${API_BASE}/api/chat`;
@@ -254,13 +256,19 @@ export class CloudProvider implements AIProvider {
         // Stream plain-text response
         const reader  = res.body!.getReader();
         const decoder = new TextDecoder();
+        let firstByteMs = -1, chars = 0;
 
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
             const text = decoder.decode(value, { stream: true });
-            if (text) onChunk(text);
+            if (text) {
+                if (firstByteMs < 0) firstByteMs = Date.now() - t0;
+                chars += text.length;
+                onChunk(text);
+            }
         }
+        perfLog(`request  model=${modelUsed ?? '?'}  first-text=${firstByteMs < 0 ? 'none' : (firstByteMs / 1000).toFixed(1) + 's'}  total=${((Date.now() - t0) / 1000).toFixed(1)}s  out=${chars} chars`);
     }
 
     async complete(messages: Message[], opts?: CompletionOptions): Promise<string> {
