@@ -180,7 +180,13 @@ export async function activate(context: vscode.ExtensionContext) {
     // to tell an existing user (show notes) from a fresh install (don't).
     maybeShowWhatsNew(context);
     context.subscriptions.push(
-        vscode.commands.registerCommand('freebird.showWhatsNew', () => showWhatsNew(context))
+        vscode.commands.registerCommand('freebird.showWhatsNew', () => showWhatsNew(context)),
+        vscode.commands.registerCommand('freebird.sendFeedback', async (feedbackContext?: unknown) => {
+            const ctx = typeof feedbackContext === 'string' ? feedbackContext : undefined;
+            trackEvent('feedback_opened', ctx ?? 'command');
+            await vscode.commands.executeCommand('freebird.chatView.focus');
+            ChatViewProvider.current?.openFeedback(ctx);
+        })
     );
 
     // ── First-run onboarding walkthrough ────────────────────────────────────
@@ -370,7 +376,13 @@ export async function activate(context: vscode.ExtensionContext) {
                         }
                     } else {
                         trackEvent('trial_start_failed');
-                        vscode.window.showErrorMessage(result.error ?? 'Could not start trial. Please try again.');
+                        const choice = await vscode.window.showErrorMessage(
+                            result.error ?? 'Could not start trial. Please try again.',
+                            'Tell us what happened'
+                        );
+                        if (choice === 'Tell us what happened') {
+                            await vscode.commands.executeCommand('freebird.sendFeedback', 'trial_start_failed');
+                        }
                     }
                 }
             );

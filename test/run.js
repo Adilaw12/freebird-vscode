@@ -31,6 +31,7 @@ const suites = [
     require('./checkpoint.test.js'),
     require('./fetch-url.test.js'),
     require('./verify-diagram.test.js'),
+    require('./diagram-page.test.js'),
     require('./message-content.test.js'),
     require('./backend-picker.test.js'),
     require('./prompt-templates.test.js'),

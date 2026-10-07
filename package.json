@@ -145,6 +145,10 @@
         "title": "Freebird: AI Commit"
       },
       {
+        "command": "freebird.sendFeedback",
+        "title": "Freebird: Send Feedback"
+      },
+      {
         "command": "freebird.showWhatsNew",
         "title": "Freebird: What's New"
       },
@@ -319,6 +323,11 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "Allow Freebird to collect anonymous usage statistics (feature usage counts, no code or personal data). Helps us improve the extension."
+        },
+        "freebird.feedbackPrompts": {
+          "type": "boolean",
+          "default": true,
+          "description": "Occasionally ask whether a result was useful, after a task finishes (at most once a day). The Send Feedback command is always available."
         },
         "freebird.showWhatsNew": {
           "type": "boolean",

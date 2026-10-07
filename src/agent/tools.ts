@@ -7,7 +7,8 @@ import * as dns from 'dns';
 import * as net from 'net';
 import { exec, execFile, ExecException } from 'child_process';
 import { GitService } from '../git/service';
-import { previewHtmlFile } from './preview';
+import { previewHtmlFile, previewHtmlFileWithRaster } from './preview';
+import { mermaidPage, svgPage, checkSvg } from './diagramPage';
 import { ToolSchema } from '../ai/provider';
 import { searchCodebaseSemantic } from '../index/indexer';
 import * as checkpoint from './checkpoint';
@@ -146,7 +147,7 @@ export const NATIVE_TOOL_SCHEMAS: ToolSchema[] = [
     },
     {
         name: 'create_diagram',
-        description: 'Create a diagram using Mermaid syntax. Generates an HTML file with the rendered diagram and opens a live preview. Supports flowcharts, sequence diagrams, class diagrams, ER diagrams, Gantt charts, pie charts, and more.',
+        description: 'Create a diagram using Mermaid syntax. Generates an HTML file with the rendered diagram and opens a zoomable live preview. Supports flowcharts, sequence diagrams, class diagrams, ER diagrams, Gantt charts, pie charts, and more. Mermaid draws RELATIONSHIPS and FLOWS (nodes and arrows) — it cannot place things in space, so do NOT use it for floor plans, room layouts, wireframes, maps or anything where position, scale and shape carry meaning; use create_drawing for those.',
         input_schema: {
             type: 'object',
             properties: {
@@ -155,6 +156,19 @@ export const NATIVE_TOOL_SCHEMAS: ToolSchema[] = [
                 path: { type: 'string', description: 'Workspace-relative path to save the HTML file (default: diagrams/<title>.html)' }
             },
             required: ['title', 'mermaid']
+        }
+    },
+    {
+        name: 'create_drawing',
+        description: 'Draw a picture as SVG and open it in a zoomable live preview (also saved as a standalone .svg next to the HTML). Use this for anything spatial or illustrated where position, scale and shape matter: floor plans and room layouts, site plans, wireframes / UI mockups, maps, architecture illustrations, charts. Use create_diagram (Mermaid) instead for flows, sequences, hierarchies and relationships. For a floor plan: choose a scale and say so (e.g. viewBox in centimetres, or 1 unit = 10 cm), draw outer and inner walls as thick strokes or filled rects, leave gaps for doors (add a swing arc) and windows, label every room with its name and dimensions, and include a scale bar and north arrow. Provide ONE complete <svg> element with xmlns and a viewBox. Draw for a white page (dark strokes, light fills). No scripts, event handlers, foreignObject or external references. The rendered image is returned to you: inspect it and fix problems by calling create_drawing again.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                title: { type: 'string', description: 'Drawing title (used for the filename)' },
+                svg: { type: 'string', description: 'A complete <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 W H">…</svg> document' },
+                path: { type: 'string', description: 'Workspace-relative path to save the HTML viewer (default: diagrams/<title>.html); the raw SVG is saved alongside with a .svg extension' }
+            },
+            required: ['title', 'svg']
         }
     },
     {
@@ -226,7 +240,8 @@ AVAILABLE TOOLS:
 - preview_html  {"action":"preview_html","path":"index.html"}                                    open a live preview tab
 - run_command   {"action":"run_command","command":"npm test"}                                     run in terminal
 - download_file  {"action":"download_file","url":"https://example.com/file.zip","path":"files/file.zip"} download from web
-- create_diagram {"action":"create_diagram","title":"Auth Flow","mermaid":"graph TD; A-->B;"}     create & preview a Mermaid diagram
+- create_diagram {"action":"create_diagram","title":"Auth Flow","mermaid":"graph TD; A-->B;"}     create & preview a Mermaid diagram (flows / relationships only — not layouts)
+- create_drawing {"action":"create_drawing","title":"Ground Floor","svg":"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 800'>…</svg>"}  draw a spatial picture as SVG (floor plans, wireframes, maps, illustrations) and preview it
 - verify_diagram {"action":"verify_diagram","mermaid":"graph TD; A-->B;","path":"diagrams/auth-flow.html"}  render via mermaid.ink and check it before reporting success
 - copy_file      {"action":"copy_file","source":"src/old.ts","destination":"src/new.ts"}           copy a file
 - git_status     {"action":"git_status"}                                                          repo status
@@ -240,6 +255,8 @@ GUIDELINES:
 - Use edit_file for targeted changes; write_file only for new files or complete rewrites
 - edit_file matches oldStr exactly when possible; if that fails it falls back to a whitespace-insensitive line match, so minor spacing differences are OK — but still copy oldStr from the file as closely as you can
 - After creating or editing an HTML file, call preview_html on it so the user can see the rendered page in a tab inside VS Code — don't tell them to install a separate live-server extension
+- Pick the tool by what the picture must show: create_diagram (Mermaid) for flows, sequences and relationships; create_drawing (SVG) when position, scale or shape matter — floor plans, room layouts, wireframes, maps. Never draw a floor plan as a Mermaid flowchart of rooms: that shows which rooms connect, not what the building looks like.
+- After create_drawing, look at the rendered image it returns; if anything overlaps, is cut off, mislabelled or out of proportion, fix the SVG and call create_drawing again instead of reporting success
 - After create_diagram, call verify_diagram with the same Mermaid source to render and check it before telling the user it's ready — if verify_diagram reports a failure, fix the syntax and call create_diagram again rather than reporting success anyway
 - All paths are relative to the workspace root
 - When the user asks you to build, create, make, scaffold, or set up something (e.g. "make a website", "create a script that..."), use write_file to create the actual files in their workspace — don't just print example code in chat. Only show inline snippets when they ask for an explanation, example, or something not meant to be saved.
@@ -255,6 +272,8 @@ export const NATIVE_TOOL_GUIDELINES = `GUIDELINES:
 - Always read files before editing — never assume their contents.
 - Use search_code for exact strings/symbol names; use search_codebase_semantic for concepts or "where is X handled" when you don't know the exact wording.
 - Use edit_file for targeted changes; write_file only for new files or complete rewrites.
+- Pick the tool by what the picture must show: create_diagram (Mermaid) for flows, sequences and relationships; create_drawing (SVG) when position, scale or shape matter — floor plans, room layouts, wireframes, maps. Never draw a floor plan as a Mermaid flowchart of rooms.
+- After create_drawing, look at the rendered image it returns; if anything overlaps, is cut off, mislabelled or out of proportion, fix the SVG and call create_drawing again instead of reporting success.
 - After create_diagram, always call verify_diagram with the same mermaid source before telling the user the diagram is ready. If it reports a render failure or the image looks wrong (overlapping nodes, truncated text, a confusing layout), fix the Mermaid syntax and call create_diagram again — don't just apologize in text.
 - All paths are relative to the workspace root.
 - When the user asks you to build/create something, use write_file to create actual files — don't just print code.
@@ -377,6 +396,7 @@ export async function executeToolCall(
             case 'run_command':    return await runCommandTool(tool, onApprovalNeeded, turnId);
             case 'download_file':  return await downloadFileTool(tool, onApprovalNeeded, turnId);
             case 'create_diagram': return await createDiagramTool(tool);
+            case 'create_drawing': return await createDrawingTool(tool);
             case 'verify_diagram': return await verifyDiagramTool(tool);
             case 'copy_file':      return await copyFileTool(tool, onApprovalNeeded, turnId);
             case 'git_status':     return { success: true, output: await git.getStatus() };
@@ -953,27 +973,7 @@ async function createDiagramTool(tool: ToolCall): Promise<ToolResult> {
     }
     const full = resolveWorkspacePath(relPath);
 
-    const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${title.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1e1e2e; color: #cdd6f4; display: flex; flex-direction: column; align-items: center; padding: 2rem; margin: 0; }
-    h1 { font-size: 1.4rem; margin-bottom: 1.5rem; color: #89b4fa; }
-    .mermaid { background: #181825; border-radius: 8px; padding: 1.5rem; max-width: 100%; overflow-x: auto; }
-  </style>
-</head>
-<body>
-  <h1>${title.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</h1>
-  <div class="mermaid">
-${mermaid}
-  </div>
-  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"><\/script>
-  <script>mermaid.initialize({ startOnLoad: true, theme: 'dark' });<\/script>
-</body>
-</html>`;
+    const html = mermaidPage(title, mermaid);
 
     try {
         fs.mkdirSync(path.dirname(full), { recursive: true });
@@ -982,6 +982,42 @@ ${mermaid}
         return { success: true, output: `Diagram saved to ${relPath} and opened in preview.` };
     } catch (err: any) {
         return { success: false, output: `Error creating diagram: ${err?.message ?? String(err)}` };
+    }
+}
+
+async function createDrawingTool(tool: ToolCall): Promise<ToolResult> {
+    const title = String(tool.title ?? '').trim();
+    const svg = String(tool.svg ?? '').trim();
+    if (!title || !svg) return { success: false, output: 'create_drawing requires "title" and "svg".' };
+
+    const problem = checkSvg(svg);
+    if (problem) return { success: false, output: `The svg ${problem}. Fix it and call create_drawing again.` };
+
+    const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    const relPath = String(tool.path ?? '') || `diagrams/${slug}.html`;
+    const svgRelPath = relPath.replace(/\.html?$/i, '') + '.svg';
+    for (const p of [relPath, svgRelPath]) {
+        if (isPathIgnored(getWorkspaceRoot(), p)) return { success: false, output: ignoreBlockMessage(p, 'write') };
+    }
+    const full = resolveWorkspacePath(relPath);
+    const svgFull = resolveWorkspacePath(svgRelPath);
+
+    try {
+        fs.mkdirSync(path.dirname(full), { recursive: true });
+        fs.writeFileSync(full, svgPage(title, svg), 'utf8');
+        fs.writeFileSync(svgFull, svg, 'utf8');
+        const raster = await previewHtmlFileWithRaster(full);
+        const saved = `Drawing saved to ${relPath} (viewer) and ${svgRelPath} (raw SVG), and opened in a zoomable preview.`;
+        if (raster.image) {
+            return {
+                success: true,
+                output: `${saved} Look at the attached render before telling the user it's ready: check that nothing overlaps or runs off the edge, every label is readable and inside its shape, proportions and dimensions match what was asked, and doors/windows sit on walls. If anything is wrong, fix the SVG and call create_drawing again.`,
+                image: raster.image
+            };
+        }
+        return { success: true, output: `${saved} The render could not be captured for a visual check (${raster.error ?? 'unknown'}), so verify labels, dimensions and scale against the request yourself.` };
+    } catch (err: any) {
+        return { success: false, output: `Error creating drawing: ${err?.message ?? String(err)}` };
     }
 }
 

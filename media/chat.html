@@ -469,6 +469,62 @@ em { font-style: italic; }
 }
 .multifile-cta-btn:hover { opacity: 0.85; }
 
+/* ── feedback card — thumbs after a result, a note after a failure, or opened on demand ── */
+.feedback-card {
+  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.08));
+  border-left: 3px solid var(--vscode-focusBorder, #4a9eff);
+  border-radius: 10px; padding: 10px 14px;
+  background: var(--vscode-editorWidget-background, rgba(255,255,255,0.02));
+  margin: 6px 24px 6px 54px;
+  display: flex; flex-direction: column; gap: 8px;
+  font-size: 0.82em;
+}
+.feedback-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.feedback-title { opacity: 0.92; font-weight: 500; line-height: 1.4; }
+.feedback-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.feedback-icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; padding: 0; cursor: pointer; border-radius: 6px;
+  background: transparent; color: var(--vscode-editor-foreground);
+  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.1));
+  opacity: 0.75; transition: opacity 0.15s, background 0.15s;
+}
+.feedback-icon-btn:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground, rgba(255,255,255,0.06)); }
+.feedback-icon-btn[aria-pressed="true"] { opacity: 1; background: var(--vscode-button-secondaryBackground, rgba(255,255,255,0.1)); border-color: var(--vscode-focusBorder, #4a9eff); }
+.feedback-icon-btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.feedback-close { border: none; width: 22px; height: 22px; opacity: 0.45; }
+.feedback-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.feedback-chip {
+  padding: 3px 10px; border-radius: 999px; cursor: pointer; font-family: inherit; font-size: 0.95em;
+  background: transparent; color: var(--vscode-editor-foreground);
+  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.15)); opacity: 0.8;
+}
+.feedback-chip:hover { opacity: 1; }
+.feedback-chip[aria-pressed="true"] { opacity: 1; border-color: var(--vscode-focusBorder, #4a9eff); background: var(--vscode-button-secondaryBackground, rgba(255,255,255,0.08)); }
+.feedback-text {
+  width: 100%; box-sizing: border-box; min-height: 60px; resize: vertical; padding: 6px 8px;
+  font-family: inherit; font-size: 1em; border-radius: 6px;
+  background: var(--vscode-input-background, rgba(255,255,255,0.04));
+  color: var(--vscode-input-foreground, var(--vscode-editor-foreground));
+  border: 1px solid var(--vscode-input-border, var(--vscode-widget-border, rgba(255,255,255,0.12)));
+}
+.feedback-text:focus { outline: 1px solid var(--vscode-focusBorder, #4a9eff); outline-offset: -1px; }
+.feedback-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.feedback-note { opacity: 0.5; font-size: 0.92em; line-height: 1.35; }
+.feedback-buttons { display: flex; gap: 6px; flex-shrink: 0; }
+.feedback-send {
+  border: none; border-radius: 6px; padding: 5px 14px; cursor: pointer; font-size: 0.95em; font-family: inherit; font-weight: 500;
+  background: var(--vscode-button-background); color: var(--vscode-button-foreground);
+}
+.feedback-send:disabled { opacity: 0.4; cursor: default; }
+.feedback-skip {
+  border: none; border-radius: 6px; padding: 5px 10px; cursor: pointer; font-size: 0.95em; font-family: inherit;
+  background: transparent; color: var(--vscode-editor-foreground); opacity: 0.6;
+}
+.feedback-skip:hover { opacity: 1; }
+.feedback-error { color: var(--vscode-errorForeground, #f48771); }
+.feedback-thanks { opacity: 0.85; display: flex; align-items: center; gap: 6px; }
+
 /* ── status hints (cloud edit / ollama fallback) ── */
 .status-hint {
   font-size: 0.78em; padding: 8px 16px; margin: 4px 24px 4px 54px;
@@ -741,6 +797,9 @@ em { font-style: italic; }
     <button class="icon-btn" id="templates-btn" title="Browse Prompt Templates — free + paid, expert-crafted for common agent tasks" onclick="vscode.postMessage({type:'browse-templates'})">
       <svg viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
     </button>
+    <button class="icon-btn" id="feedback-btn" title="Send feedback" aria-label="Send feedback">
+      <svg viewBox="0 0 16 16"><path d="M2.5 3h11a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H8l-3.5 2.5v-2.5h-2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/></svg>
+    </button>
     <button class="icon-btn" id="export-btn" title="Copy conversation to clipboard (prompts &amp; responses only, no file contents)">
       <svg viewBox="0 0 16 16"><path d="M4 2h5l3 3v9H4V2z"/><path d="M9 2v3h3"/><path d="M6 9h4M6 11h4"/></svg>
     </button>
@@ -892,10 +951,9 @@ em { font-style: italic; }
 </div>
 
 <script src="{{MERMAID_URI}}"></script>
+<script>{{MERMAID_THEME_SCRIPT}}</script>
 <script>
-if (window.mermaid) {
-  mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'dark' });
-}
+if (window.mermaid) freebirdMermaidInit();
 var vscode      = acquireVsCodeApi();
 var msgsEl      = document.getElementById('messages');
 var inputEl     = document.getElementById('input');
@@ -1111,7 +1169,7 @@ function setCurrentText(text) {
     stopThinkingAnimation();
     currentBubble.classList.remove('typing');
     currentBubble.innerHTML=renderMarkdown(text);
-    if (window.mermaid) { try { mermaid.run(); } catch(e) { /* incomplete/invalid diagram source — leave as-is */ } }
+    if (window.mermaid) { try { freebirdMermaidInit(); mermaid.run(); } catch(e) { /* incomplete/invalid diagram source — leave as-is */ } }
   } else {
     currentBubble.classList.add('typing');
     startThinkingAnimation(currentBubble);
@@ -1454,6 +1512,133 @@ function showOllamaFallback() {
   msgsEl.appendChild(h); scroll();
 }
 
+// ── Feedback card ─────────────────────────────────────────────────────────────
+// kind: 'result' (thumbs after a finished task), 'failure' (what went wrong),
+// 'manual' (opened by the user). auto = an unprompted ask, which counts toward
+// the "ignored" limit if closed without answering.
+var _feedbackSeq = 0;
+var THUMB_UP = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 7.5v6h-3v-6h3zM5.5 7.5l2.5-5c1.1 0 1.8.9 1.6 1.9L9.2 6.5h3.3c.9 0 1.6.8 1.4 1.7l-.9 4.2c-.1.6-.7 1.1-1.4 1.1H5.5"/></svg>';
+var THUMB_DOWN = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 8.5v-6h-3v6h3zM5.5 8.5l2.5 5c1.1 0 1.8-.9 1.6-1.9l-.4-2.1h3.3c.9 0 1.6-.8 1.4-1.7l-.9-4.2c-.1-.6-.7-1.1-1.4-1.1H5.5"/></svg>';
+var FEEDBACK_REASONS = {
+  down:   [['wrong_answer','Wrong answer'],['too_slow','Too slow'],['broke_code','Broke my code'],['other','Other']],
+  manual: [['bug','Bug'],['idea','Idea'],['pricing','Pricing'],['other','Other']]
+};
+
+function showFeedbackCard(kind, context, auto) {
+  var old = document.getElementById('feedback-card'); if (old) old.remove();
+  var id = ++_feedbackSeq;
+  var rating = null, reason = null, sent = false;
+
+  var card = document.createElement('div'); card.className = 'feedback-card'; card.id = 'feedback-card';
+  card.setAttribute('role', 'group'); card.setAttribute('aria-label', 'Feedback');
+
+  function mk(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
+  function close(answered) {
+    if (!sent && !answered) vscode.postMessage({type:'feedback-dismiss', trigger:kind, auto:!!auto});
+    card.remove(); inputEl.focus();
+  }
+
+  var head = mk('div', 'feedback-row');
+  var title = mk('span', 'feedback-title',
+    kind === 'result' ? 'Was this useful?' :
+    kind === 'failure' ? 'That didn\'t work. Mind telling us what happened?' : 'Send feedback');
+  var actions = mk('div', 'feedback-actions');
+
+  function thumb(which, svg, label) {
+    var b = mk('button', 'feedback-icon-btn'); b.type = 'button'; b.innerHTML = svg;
+    b.title = label; b.setAttribute('aria-label', label); b.setAttribute('aria-pressed', 'false');
+    b.onclick = function() {
+      rating = which;
+      up.setAttribute('aria-pressed', String(which === 'up'));
+      down.setAttribute('aria-pressed', String(which === 'down'));
+      if (kind === 'result' && which === 'up') { submit(); return; }
+      expand();
+    };
+    return b;
+  }
+  var up = thumb('up', THUMB_UP, 'Yes, useful');
+  var down = thumb('down', THUMB_DOWN, 'No, not useful');
+  var closeBtn = mk('button', 'feedback-icon-btn feedback-close'); closeBtn.type = 'button';
+  closeBtn.textContent = '\u00d7'; closeBtn.title = 'Dismiss'; closeBtn.setAttribute('aria-label', 'Dismiss feedback');
+  closeBtn.onclick = function() { close(false); };
+  if (kind !== 'failure') { actions.appendChild(up); actions.appendChild(down); }
+  actions.appendChild(closeBtn);
+  head.appendChild(title); head.appendChild(actions);
+  card.appendChild(head);
+
+  var body = mk('div'); body.style.display = 'none'; body.style.flexDirection = 'column'; body.style.gap = '8px';
+  var chipRow = mk('div', 'feedback-chips'); chipRow.setAttribute('role', 'group'); chipRow.setAttribute('aria-label', 'Reason');
+  var ta = mk('textarea', 'feedback-text'); ta.maxLength = 500; ta.rows = 3;
+  ta.setAttribute('aria-label', 'Your feedback');
+  ta.placeholder = kind === 'failure' ? 'What were you trying to do? (optional)'
+                 : kind === 'manual' ? 'Tell us what\'s on your mind' : 'What went wrong? (optional)';
+  var note = mk('span', 'feedback-note', 'Sent with your Freebird version and platform. No code, prompts or email.');
+  var status = mk('span', 'feedback-error'); status.setAttribute('role', 'status');
+  var send = mk('button', 'feedback-send', 'Send'); send.type = 'button';
+  var skip = mk('button', 'feedback-skip', kind === 'failure' ? 'Not now' : 'Cancel'); skip.type = 'button';
+  skip.onclick = function() { close(false); };
+  var foot = mk('div', 'feedback-foot'), btns = mk('div', 'feedback-buttons');
+  btns.appendChild(skip); btns.appendChild(send);
+  var footLeft = mk('div'); footLeft.appendChild(note); footLeft.appendChild(status);
+  foot.appendChild(footLeft); foot.appendChild(btns);
+  body.appendChild(chipRow); body.appendChild(ta); body.appendChild(foot);
+  card.appendChild(body);
+
+  function refresh() { send.disabled = !(rating || ta.value.trim() || (kind === 'failure')); }
+  function buildChips(list) {
+    chipRow.innerHTML = ''; reason = null;
+    list.forEach(function(r) {
+      var c = mk('button', 'feedback-chip', r[1]); c.type = 'button'; c.setAttribute('aria-pressed', 'false');
+      c.onclick = function() {
+        var on = c.getAttribute('aria-pressed') !== 'true';
+        Array.prototype.forEach.call(chipRow.children, function(x) { x.setAttribute('aria-pressed', 'false'); });
+        c.setAttribute('aria-pressed', String(on)); reason = on ? r[0] : null;
+      };
+      chipRow.appendChild(c);
+    });
+  }
+  function expand() {
+    body.style.display = 'flex';
+    if (kind === 'manual') buildChips(FEEDBACK_REASONS.manual);
+    else if (kind === 'result' && rating === 'down') buildChips(FEEDBACK_REASONS.down);
+    else chipRow.style.display = 'none';
+    refresh(); ta.focus();
+  }
+  function submit() {
+    if (sent) return;
+    sent = true; send.disabled = true; status.textContent = '';
+    vscode.postMessage({
+      type: 'feedback-submit', id: id, trigger: kind, context: context,
+      rating: rating || (kind === 'failure' ? 'down' : undefined),
+      reason: reason || undefined, text: ta.value.trim() || undefined
+    });
+  }
+  send.onclick = submit;
+  ta.addEventListener('input', refresh);
+  ta.addEventListener('keydown', function(e) { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !send.disabled) { e.preventDefault(); submit(); } });
+  card.addEventListener('keydown', function(e) { if (e.key === 'Escape') { e.stopPropagation(); close(false); } });
+
+  card._onResult = function(ok) {
+    if (ok) {
+      card.innerHTML = '';
+      var t = mk('div', 'feedback-thanks', rating === 'up' ? 'Thanks \u2014 glad it helped.' : 'Thanks \u2014 we read every one.');
+      card.appendChild(t);
+      setTimeout(function() { if (card.parentNode) card.remove(); }, 4000);
+    } else {
+      sent = false; status.textContent = 'Couldn\u2019t send \u2014 check your connection and try again.'; refresh();
+      body.style.display = 'flex'; if (kind === 'result' && !chipRow.children.length) chipRow.style.display = 'none';
+    }
+  };
+  card.dataset.fid = String(id);
+
+  msgsEl.appendChild(card); scroll();
+  // Opened by the user: go straight to the form. Unprompted asks stay one line until answered.
+  if (kind === 'manual') expand();
+  else if (kind === 'failure') expand();
+}
+
+document.getElementById('feedback-btn').addEventListener('click', function() { showFeedbackCard('manual', undefined, false); });
+
 // ── Autocomplete ──────────────────────────────────────────────────────────────
 function showAC(items, mode, sectionLabel) {
   acItems=items; acIndex=-1; acMode=mode;
@@ -1569,6 +1754,13 @@ window.addEventListener('message',function(e){
     case 'assistant-end':    endMsg(); break;
     case 'cloud-edit-used':  showCloudEditUsed(m.remaining); break;
     case 'ollama-fallback':  showOllamaFallback(); break;
+    case 'feedback-prompt':  showFeedbackCard(m.kind, m.context, true); break;
+    case 'feedback-open':    showFeedbackCard('manual', m.context, false); break;
+    case 'feedback-result': {
+      var fc = document.getElementById('feedback-card');
+      if (fc && fc.dataset.fid === String(m.id) && fc._onResult) fc._onResult(m.ok);
+      break;
+    }
     case 'upgrade-nudge':    showUpgradeNudge(m.variant); break;
     case 'cleared':          msgsEl.innerHTML=''; transcript=[]; currentAssistantText=''; addDivider('conversation cleared'); break;
     case 'workspace-files':  workspaceFiles=m.files||[]; break;

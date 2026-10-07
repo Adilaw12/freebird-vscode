@@ -20,6 +20,8 @@ import { readProjectMemory, clearProjectMemory, MEMORY_RELATIVE_PATH } from '../
 import { readProjectRules, RULES_RELATIVE_PATH } from '../agent/rules';
 import { finalizeTurn, restoreCheckpoint, checkpointsRootFor } from '../agent/checkpoint';
 import { trackEvent, getMachineId } from '../telemetry';
+import { MERMAID_THEME_SCRIPT } from '../agent/mermaidTheme';
+import { submitFeedback, canAutoPrompt, markPrompted, recordDismissed, recordResultDelivered, FeedbackSubmission } from '../feedback';
 import { getTrialBannerState } from '../license/trialReminder';
 
 const MAX_HISTORY_PAIRS = 20;
@@ -121,7 +123,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         );
         webviewView.webview.html = html
             .replace(/\{\{CSP_SOURCE\}\}/g, webviewView.webview.cspSource)
-            .replace(/\{\{MERMAID_URI\}\}/g, mermaidUri.toString());
+            .replace(/\{\{MERMAID_URI\}\}/g, mermaidUri.toString())
+            // Function replacer: the script contains `$` sequences a string replacement would mangle.
+            .replace(/\{\{MERMAID_THEME_SCRIPT\}\}/g, () => MERMAID_THEME_SCRIPT);
 
         this.sendWorkspaceFiles();
         // The webview only exists once VS Code lazily resolves it (first time the
@@ -195,6 +199,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         await this.runAgentTrial(this.lastFreeRequest.text, this.lastFreeRequest.mentionContext);
                     }
                     break;
+                case 'feedback-submit': {
+                    const ok = await submitFeedback(this.context, {
+                        trigger: msg.trigger, rating: msg.rating, reason: msg.reason,
+                        text: typeof msg.text === 'string' ? msg.text : undefined, context: msg.context
+                    } as FeedbackSubmission);
+                    this.post({ type: 'feedback-result', id: msg.id, ok });
+                    break;
+                }
+                case 'feedback-dismiss':
+                    // Only an unprompted ask counts as "ignored" — closing the
+                    // form the user opened themselves says nothing about prompts.
+                    if (msg.auto) await recordDismissed(this.context);
+                    trackEvent('feedback_dismissed', msg.trigger);
+                    break;
                 case 'browse-templates':
                     trackEvent('templates_button_clicked');
                     vscode.commands.executeCommand('freebird.usePromptTemplate');
@@ -206,6 +224,23 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             for (const resolve of this.pendingApprovals.values()) resolve(false);
             this.pendingApprovals.clear();
         });
+    }
+
+    /** Opens the feedback card on demand (top-bar button, command palette, error toasts). */
+    openFeedback(context?: string): void {
+        this.post({ type: 'feedback-open', context });
+    }
+
+    /**
+     * Unprompted ask, shown only after the task has finished and subject to the
+     * global cap in feedback.ts. A failure bypasses the warm-up but not the cap.
+     */
+    private async maybePromptFeedback(kind: 'result' | 'failure', context?: string): Promise<void> {
+        if (kind === 'result') await recordResultDelivered(this.context);
+        if (!canAutoPrompt(this.context, kind)) return;
+        await markPrompted(this.context);
+        trackEvent('feedback_prompt_shown', kind);
+        this.post({ type: 'feedback-prompt', kind, context });
     }
 
     /** What the welcome screen offers a free user right now: free Agent runs and the template window. */
@@ -492,6 +527,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 if (this.toolCallsThisRound >= 3) {
                     this.post({ type: 'upgrade-nudge', variant: 'power-user' });
                 }
+                // Don't stack the ask on top of an upgrade nudge from the same turn.
+                if (remaining !== 3 && this.toolCallsThisRound < 3) {
+                    await this.maybePromptFeedback('result', 'cloud_edit');
+                }
+            } else if (served) {
+                await this.maybePromptFeedback('result', mode === 'byok' ? 'byok_chat' : 'ollama_chat');
             }
         }
     }
@@ -505,6 +546,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         await this.maybeShowAgentModeExplainer();
 
+        let changedFiles = false;
+        let failureCode: string | undefined;
         try {
             const newHistory = await runAgentLoop({
                 userMessage: fullText,
@@ -527,6 +570,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
             const summary = finalizeTurn(checkpointsRootFor(this.context), this.currentTurnId);
             if (summary) {
+                changedFiles = true;
                 const isFirstEver = !this.context.globalState.get<boolean>('freebird.firstCheckpointSeen');
                 if (isFirstEver) await this.context.globalState.update('freebird.firstCheckpointSeen', true);
                 this.post({
@@ -546,6 +590,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 return;
             }
             trackEvent('api_error', err?.code || 'unknown');
+            failureCode = err?.code || 'unknown';
             this.post({ type: 'assistant-start' });
             this.post({
                 type: 'set-text',
@@ -553,6 +598,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             });
         }
         this.post({ type: 'assistant-end' });
+        // After the turn, not during it: a finished task that changed files is a real success.
+        if (failureCode) await this.maybePromptFeedback('failure', failureCode);
+        else if (changedFiles) await this.maybePromptFeedback('result', 'agent_run');
     }
 
     // ── Free-tier Agent-mode runs ─────────────────────────────────────────────
@@ -638,6 +686,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         this.post({ type: 'assistant-start' });
         let response = '';
         let served = true;
+        let failureCode: string | undefined;
         let cloudProvider: CloudProvider | undefined;
 
         try {
@@ -712,6 +761,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             } else {
                 trackEvent('api_error', err?.code || 'unknown');
                 served = false;
+                failureCode = err?.code || 'unknown';
                 const errorNote =
                     `**Error:** ${err.message}\n\n` +
                     `Try running \`Freebird: Configure AI Backend\` to check your settings, ` +
@@ -733,6 +783,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         ]);
 
         this.post({ type: 'assistant-end' });
+        if (failureCode) await this.maybePromptFeedback('failure', failureCode);
         return served && response.length > 0;
     }
 
@@ -917,6 +968,7 @@ function toolLabel(tool: { action: string; [key: string]: unknown }): string {
         case 'run_command':    return `Running: ${tool.command}`;
         case 'download_file':  return `Downloading ${tool.url}`;
         case 'create_diagram': return `Creating diagram: ${tool.title}`;
+        case 'create_drawing': return `Drawing: ${tool.title}`;
         case 'copy_file':      return `Copying ${tool.source} → ${tool.destination}`;
         case 'git_status':     return 'Checking git status';
         case 'git_push':       return 'Pushing to remote';
