@@ -111,7 +111,10 @@ export class CloudProvider implements AIProvider {
             // for anything billing/security-relevant.
             templateId: opts?.templateId,
             templateLicenseKey: templateLicenseKey || undefined,
-            maxTokens:  opts?.maxTokens ?? 2048,
+            // Agent-mode requests (premium flag) produce whole files and drawings in one
+            // answer; the chat default of 2048 truncated them mid-file. The backend still
+            // caps each tier (free trial 4096) — this just stops us asking for too little.
+            maxTokens:  opts?.maxTokens ?? (opts?.premium ? 4096 : 2048),
             isTabCompletion: opts?.isTabCompletion,
             premium: opts?.premium,
             agentTrial: opts?.agentTrial
@@ -165,6 +168,20 @@ export class CloudProvider implements AIProvider {
             // own message is the useful one to show.
             const err  = new Error((errorBody.error as string) || 'Rate limited') as any;
             err.code   = code;
+            throw err;
+        }
+
+        // 502/503/504 here come from the hosting gateway, not the AI provider: the
+        // backend function hit its time limit before sending anything. The usual
+        // cause is a very large single answer (e.g. a detailed drawing), and the
+        // bare "Cloud AI error (504)" gave the user nothing to act on.
+        if (res.status === 504 || res.status === 503 || res.status === 502) {
+            const err = new Error(
+                'The cloud AI took too long to answer (the request timed out). ' +
+                'This usually happens with very large outputs — try again, or ask for something smaller or simpler ' +
+                '(for a drawing: fewer rooms or less detail). If it keeps happening, switch to a faster backend via "Freebird: Configure AI Backend".'
+            ) as any;
+            err.code = 'GATEWAY_TIMEOUT';
             throw err;
         }
 

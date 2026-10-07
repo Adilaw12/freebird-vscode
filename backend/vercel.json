@@ -1,6 +1,7 @@
 {
   "functions": {
-    "api/*.js": { "maxDuration": 45 }
+    "api/*.js": { "maxDuration": 45 },
+    "api/chat.js": { "maxDuration": 120 }
   },
   "rewrites": [
     { "source": "/success", "destination": "/api/success" },

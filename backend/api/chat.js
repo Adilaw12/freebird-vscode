@@ -80,6 +80,22 @@ const hashIp = (ip) => createHash('sha256').update(ip).digest('hex').slice(0, 16
 
 export const config = { runtime: 'nodejs' }; // streaming needs Node runtime, not edge
 
+// Bounds only the time to START an upstream answer. A bare AbortSignal.timeout()
+// on the fetch also aborts the response BODY when it fires, so every streamed
+// answer was cut off at 30s no matter how healthy it was — and a large answer
+// (a detailed drawing, a multi-file edit) needs longer than that. Once headers
+// arrive the timer is cleared and the total is bounded by the function's
+// maxDuration (vercel.json) instead.
+async function withConnectTimeout(ms, doFetch) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), ms);
+    try {
+        return await doFetch(ctrl.signal);
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -379,7 +395,7 @@ export default async function handler(req, res) {
                 ...(anthropicBody.system && { system: anthropicBody.system })
             };
             try {
-                const result = await fetchAnthropicWithFallback(sonnetBody, { signal: AbortSignal.timeout(90_000) }, SONNET_MODEL_CANDIDATES);
+                const result = await withConnectTimeout(90_000, signal => fetchAnthropicWithFallback(sonnetBody, { signal }, SONNET_MODEL_CANDIDATES));
                 if (result.response.ok) {
                     upstream = result.response;
                     modelUsed = result.modelUsed;
@@ -399,7 +415,7 @@ export default async function handler(req, res) {
 
         if (!upstream && (unmetered || templateHaikuEligible || agentTrialReserved) && anthropicConfigured()) {
             try {
-                const result = await fetchAnthropicWithFallback(anthropicBody, { signal: AbortSignal.timeout(30_000) });
+                const result = await withConnectTimeout(30_000, signal => fetchAnthropicWithFallback(anthropicBody, { signal }));
                 if (result.response.ok) {
                     upstream = result.response;
                     modelUsed = result.modelUsed;
@@ -434,12 +450,12 @@ export default async function handler(req, res) {
         }
 
         if (!upstream) {
-            const result = await fetchGeminiWithFallback(
+            const result = await withConnectTimeout(30_000, signal => fetchGeminiWithFallback(
                 'streamGenerateContent',
                 geminiBody,
-                { signal: AbortSignal.timeout(30_000) },
+                { signal },
                 unmetered ? PRO_GEMINI_MODEL_CANDIDATES : undefined
-            );
+            ));
             upstream = result.response;
             modelUsed = result.modelUsed;
             provider = 'gemini';
