@@ -64,6 +64,25 @@ const OFFICE = {
     ]
 };
 
+const L = (id, name, type, size) => ({ id, name, type, ...size });
+// The same house as HOUSE, written as nested rows and columns instead of coordinates.
+const HOUSE_LAYOUT = {
+    brief: HOUSE.brief,
+    layout: { w: 14, items: [
+        { h: 4.6, items: [
+            L('liv', 'Living', 'living', { w: 5.6 }), L('din', 'Dining', 'dining', { w: 3.8 }),
+            { w: 4.6, items: [ L('kit', 'Kitchen', 'kitchen', { h: 3.0 }), { h: 1.6, items: [ L('lau', 'Laundry', 'laundry', { w: 2.6 }), L('pan', 'Pantry', 'pantry', { w: 2.0 }) ] } ] }
+        ] },
+        { h: 1.4, items: [ L('hall', 'Entry hall', 'hall', {}) ] },
+        { h: 4.4, items: [
+            L('bed2', 'Bedroom 2', 'bedroom', { w: 3.4 }), L('bed3', 'Bedroom 3', 'bedroom', { w: 3.4 }),
+            { w: 2.2, items: [ L('bath', 'Bathroom', 'bathroom', { h: 3.0 }), L('lin', 'Linen', 'storage', {}) ] },
+            { w: 5.0, items: [ L('mas', 'Master', 'master_bedroom', { h: 2.9 }), { h: 1.5, items: [ L('ens', 'Ensuite', 'ensuite', { w: 2.8 }), L('rob', 'Robe', 'robe', {}) ] } ] }
+        ] }
+    ] },
+    doors: HOUSE.doors, windows: HOUSE.windows
+};
+
 const clone = o => JSON.parse(JSON.stringify(o));
 const analyse = spec => {
     const p = parsePlan(spec);
@@ -90,10 +109,24 @@ function run() {
 
     suite('floor plan: the mistakes an LLM-drawn plan made are now caught');
     let s = clone(HOUSE); s.doors = s.doors.filter(d => !(d.from === 'hall' && d.to === 'bed2'));
-    check('a bedroom with no door is an error', has(errs(s), /Bedroom 2 has no door/));
+    {
+        const a = analyse(s);
+        check('a bedroom with no door gets one from the hall, with a note', a.v.errors.length === 0 && a.v.notes.some(n => /Bedroom 2 had no usable way in.*Entry hall/.test(n)));
+        check('the added door is a real opening on the shared wall', a.v.doors.some(d => (d.room === 'hall' && d.other === 'bed2') || (d.room === 'bed2' && d.other === 'hall')));
+    }
+    {
+        // Two bedrooms and nothing else touching the second: no honest way to give it a door.
+        const sealed = { rooms: [rm('h', 'Hall', 'hall', 0, 0, 4, 3), rm('a', 'Bed A', 'bedroom', 0, 3, 4, 3), rm('b', 'Bed B', 'bedroom', 0, 6, 4, 3)],
+            doors: [door('exterior', 'h', { side: 'N' }), door('h', 'a', {}), door('a', 'b', {})],
+            windows: [{ room: 'a', side: 'W' }, { room: 'b', side: 'W' }] };
+        check('a room that only touches private rooms is still an error', has(errs(sealed), /Bed B can only be reached by walking through/));
+    }
 
     s = clone(HOUSE); s.doors = s.doors.filter(d => !(d.from === 'hall' && d.to === 'bed3')); s.doors.push(door('bed2', 'bed3', {}));
-    check('a bedroom reached only through another bedroom is an error', has(errs(s), /Bedroom 3 can only be reached/));
+    {
+        const a = analyse(s);
+        check('a bedroom reached only through another bedroom is given its own door from the hall', a.v.errors.length === 0 && a.v.notes.some(n => /Bedroom 3 had no usable way in/.test(n)));
+    }
 
     s = clone(HOUSE); s.rooms[0].w = 6.0;
     check('overlapping rooms are an error', has(errs(s), /overlap/));
@@ -115,10 +148,38 @@ function run() {
     }
 
     s = clone(HOUSE); s.windows.push({ room: 'bed3', side: 'N', width: 1.2 });
-    check('a window on an interior wall is an error', has(errs(s), /no exterior wall/));
+    {
+        const a = analyse(s);
+        check('a window asked for on an interior wall is moved to an outside wall, with a note', a.v.errors.length === 0 && a.v.notes.some(n => /Bedroom 3 is not an outside wall|north side of Bedroom 3|N side of Bedroom 3/i.test(n) || /Bedroom 3.*window was placed on the S side/.test(n)));
+        check('the moved window really is on an exterior side', a.v.windows.filter(w => w.room === 'bed3').every(w => w.side === 'S'));
+    }
+    s = clone(HOUSE); s.doors.find(d => d.from === 'exterior').to = 'liv'; s.doors.find(d => d.from === 'exterior').side = 'S';
+    {
+        const a = analyse(s);
+        check('an entrance asked for on an inside wall is moved to an outside wall, with a note', a.v.errors.every(e => !/outside wall/.test(e)) && a.v.notes.some(n => /Living.*door was placed on its (N|W) side/.test(n)));
+    }
+    {
+        const grid = [];
+        for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) grid.push(rm('r' + r + c, 'Room ' + r + c, r === 1 && c === 1 ? 'bedroom' : 'other', c * 3.2, r * 3.2, 3.2, 3.2));
+        const e = errs({ rooms: grid, doors: [door('exterior', 'r11', { side: 'N' })] });
+        check('an entrance into a fully enclosed room is an error that lists its exterior sides', has(e, /no outside wall long enough.*Its exterior sides: none/));
+        const e2 = errs({ rooms: grid, doors: [door('exterior', 'r00', { side: 'N' })], windows: [{ room: 'r11', side: 'N' }] });
+        check('a window in a fully enclosed room is an error that lists its exterior sides', has(e2, /Window in Room 11: the room has no outside wall/));
+    }
 
     s = clone(HOUSE); s.doors.push(door('liv', 'mas', {}));
-    check('a door between rooms that do not touch is an error', has(errs(s), /do not share a wall/));
+    {
+        const a = analyse(s);
+        check('a door between rooms that do not touch is ignored, with a note saying what each touches', a.v.errors.length === 0 && a.v.notes.some(n => /Living → Master was ignored.*do not share a wall/.test(n)));
+        check('the note names the rooms each one does touch', a.v.notes.some(n => /Master touches: [^;]*Entry hall/.test(n)));
+    }
+    s = clone(HOUSE); s.doors.push(door('exterior', 'liv', { side: 'N' }));
+    {
+        const a = analyse(s);
+        const overlap = a.v.windows.some(w => a.v.doors.some(d => d.orient === w.orient && d.fixed === w.fixed && Math.abs(d.center - w.center) < (d.width + w.width) / 2));
+        check('a window that would sit on a door slides along the wall instead of failing', a.v.errors.length === 0 && !overlap && a.v.windows.some(w => w.room === 'liv'));
+    }
+    s = clone(HOUSE);
 
     s = clone(HOUSE); s.brief.bedrooms = 4;
     check('the brief bedroom count is enforced', has(errs(s), /brief asks for 4 bedrooms but the plan has 3/));
@@ -133,12 +194,70 @@ function run() {
     check('living-room glazing with no north window warns in the southern hemisphere', analyse(s).v.warnings.some(w => /faces N/.test(w)));
 
     s = clone(HOUSE); s.doors.find(d => d.to === 'bed2').width = 3.8;
-    check('a door wider than its wall is an error', has(errs(s), /too short for a 3.8 m door/));
+    {
+        const a = analyse(s);
+        check('a door wider than its wall is narrowed to fit, with a note', a.v.errors.length === 0 && a.v.notes.some(n => /was narrowed from 3.8 m to 3 m/.test(n)) && a.v.doors.some(d => d.width === 3000));
+    }
+    {
+        const tiny = { rooms: [rm('a', 'Hall', 'hall', 0, 0, 4, 3), rm('b', 'Bedroom', 'bedroom', 3.4, 3, 3, 3)], doors: [door('exterior', 'a', { side: 'W' }), door('a', 'b', {})], windows: [{ room: 'b', side: 'E' }] };
+        check('a shared wall too short for any door is still an error', has(errs(tiny), /too short for even a 0.7 m door/));
+    }
+    {
+        const a = analyse({ rooms: [rm('a', 'Back', 'utility', 0, 0, 3, 3), rm('b', 'Front', 'lounge', 3, 0, 5, 4)], doors: [door('exterior', 'b', { side: 'S' }), door('b', 'a', {})], windows: [{ room: 'b', side: 'N' }] });
+        check('synonym room types are read as ours, with a note', !!a.plan && a.plan.rooms.find(r => r.id === 'a').type === 'laundry' && a.plan.rooms.find(r => r.id === 'b').type === 'living' && a.v.notes.some(n => /"utility" for "a" was read as "laundry"/.test(n)));
+    }
+    check('a type with no sensible match is still rejected with the valid list', has(errs({ rooms: [rm('a', 'A', 'dungeon', 0, 0, 3, 3)] }), /not a residential room type.*living/));
+
+    suite('floor plan: a layout of nested rows and columns replaces coordinates');
+    const viaLayout = analyse(HOUSE_LAYOUT);
+    check('a layout spec parses and validates with no errors' + (viaLayout.v && viaLayout.v.errors.length ? ': ' + viaLayout.v.errors.join(' | ') : ''), !!viaLayout.plan && viaLayout.v.errors.length === 0);
+    const sig = a => a.plan.rooms.map(r => [r.id, r.x1, r.y1, r.x2, r.y2].join(',')).sort().join(';');
+    check('the layout produces exactly the same rooms as the coordinate version', sig(viaLayout) === sig(house));
+    check('rooms in a layout cannot overlap or leave gaps', !viaLayout.v.errors.some(e => /overlap/.test(e)) && !viaLayout.v.warnings.some(w => /not assigned to any room/.test(w)));
+    s = clone(HOUSE_LAYOUT); s.rooms = HOUSE.rooms;
+    check('layout and rooms together are rejected', has(errs(s), /either "layout" or "rooms"/));
+    s = clone(HOUSE_LAYOUT); s.layout.items[0].items[0].w = 9;
+    check('widths that exceed the row are rejected with the numbers', has(errs(s), /widths add up to .* m but only 14 m is available/));
+    s = { layout: { items: [ { items: [ L('a', 'A', 'other', {}), L('b', 'B', 'other', {}) ] } ] } };
+    check('a layout with no stated size asks for one', has(errs(s), /needs its overall size/));
+    s = { layout: { w: 10, items: [ { h: 4, items: [ L('a', 'A', 'living', { w: 6 }), L('b', 'B', 'dining', { w: 3 }) ] } ] } };
+    check('a short row is stretched to fit, with a note', analyse(s).v.notes.some(n => /last item was stretched/.test(n)) && analyse(s).plan.rooms.find(r => r.id === 'b').x2 === 10000);
+    s = { layout: { w: 10, items: [ { h: 4, items: [ L('a', 'A', 'living', {}), L('b', 'B', 'dining', {}) ] } ] } };
+    check('unsized rooms share the row equally', analyse(s).plan.rooms.every(r => r.x2 - r.x1 === 5000));
+    s = { layout: { w: 6, items: [ { h: 4, items: [ { name: 'Front Room', type: 'other', w: 3 }, { name: 'Front Room', type: 'other' } ] } ] } };
+    {
+        const a2 = analyse(s);
+        check('a layout room with a name but no id gets one derived from the name, with a note', !!a2.plan && a2.plan.rooms.map(r => r.id).join(',') === 'front-room,front-room-2' && a2.v.notes.some(n => /had no id, so "front-room"/.test(n)));
+    }
+    s = { layout: { items: [ { h: 4, items: [ { type: 'other', w: 3 } ] } ] } };
+    check('a layout room with neither id nor name is rejected', has(errs(s), /needs a "name" or an "id"/));
+
+    suite('floor plan: validator errors say how to fix them');
+    s = clone(HOUSE); s.doors.push(door('liv', 'mas', {}));
+    check('a door between non-touching rooms is reported in the notes with what touches what', analyse(s).v.notes.some(n => /Master touches: [^;]*Entry hall/.test(n)));
+    s = clone(HOUSE); s.rooms[0].w = 6.0;
+    check('overlap errors give the coordinates of both rooms', has(errs(s), /Living" \(x 0–6, y 0–4\.6\) and "Dining" \(x 5\.6–9\.4/));
+
+    suite('floor plan: oversized rooms are caught too');
+    s = clone(HOUSE); s.rooms.find(r => r.id === 'ens').w = 2.8;
+    check('the sound house raises no oversize warnings', !house.v.warnings.some(w => /oversized|far too large/.test(w)) && !house.v.errors.length);
+    {
+        const big = { layout: { w: 12, items: [ { h: 6, items: [ L('liv', 'Living', 'living', { w: 6 }), L('ens', 'Ensuite', 'ensuite', { w: 6 }) ] } ] },
+            doors: [door('exterior', 'liv', { side: 'W' }), door('liv', 'ens', {})], windows: [{ room: 'liv', side: 'N', width: 3 }] };
+        check('an absurdly large ensuite (36 m²) is an error that says what to do', has(errs(big), /Ensuite .* far too large for an ensuite/) && has(errs(big), /Shrink it and give the space to a neighbouring room/));
+        const mid = clone(big); mid.layout.items[0].h = 3; mid.layout.items[0].items[0].w = 8; mid.layout.items[0].items[1].w = 4; // ensuite 4 x 3 = 12 m2
+        check('a merely large ensuite (9 m²) is only a warning', errs(mid).length === 0 && analyse(mid).v.warnings.some(w => /Ensuite .* oversized/.test(w)));
+    }
+    {
+        const hall = { brief: { buildingType: 'office' }, layout: { w: 30, items: [ { h: 20, items: [ L('rec', 'Reception', 'reception', {}) ] } ] },
+            doors: [door('exterior', 'rec', { side: 'S' })], windows: [{ room: 'rec', side: 'N', width: 6 }] };
+        check('large rooms in a non-residential building are not flagged', !analyse(hall).v.warnings.some(w => /oversized|far too large/.test(w)) && errs(hall).length === 0);
+    }
 
     suite('floor plan: spec parsing');
     check('a non-object spec is rejected', has(errs('nope'), /not valid JSON/));
     check('a JSON string spec is accepted', analyse(JSON.stringify(HOUSE)).plan !== undefined);
-    check('missing rooms is rejected', has(errs({}), /rooms must be a non-empty array/));
+    check('missing rooms is rejected', has(errs({}), /needs "layout"/));
     check('duplicate ids are rejected', has(errs({ rooms: [rm('a', 'A', 'other', 0, 0, 1, 1), rm('a', 'B', 'other', 1, 0, 1, 1)] }), /duplicate room id/));
     check('an unknown room type lists the valid ones', has(errs({ rooms: [rm('a', 'A', 'dungeon', 0, 0, 3, 3)] }), /not a residential room type.*living/));
     check('an exterior door without a side is rejected', has(errs({ rooms: [rm('a', 'A', 'living', 0, 0, 4, 4)], doors: [door('exterior', 'a')] }), /needs "side"/));

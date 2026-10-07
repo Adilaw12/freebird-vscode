@@ -11,7 +11,7 @@ import { previewHtmlFile, previewHtmlFileWithRaster } from './preview';
 import { mermaidPage, svgPage, checkSvg } from './diagramPage';
 import { parsePlan, validatePlan, describeValidation } from '../architecture/plan';
 import { renderPlan } from '../architecture/render';
-import { lookupReference, listTopics } from '../architecture/reference';
+import { lookupReference, listTopics, sizeSummary } from '../architecture/reference';
 import { ToolSchema } from '../ai/provider';
 import { searchCodebaseSemantic } from '../index/indexer';
 import * as checkpoint from './checkpoint';
@@ -176,7 +176,7 @@ export const NATIVE_TOOL_SCHEMAS: ToolSchema[] = [
     },
     {
         name: 'create_floor_plan',
-        description: 'Design a building floor plan (house, office, school, clinic, shop/cafe, hotel) from a STRUCTURED spec. The spec is validated like a design review - every room reachable through doors without crossing a private room, windows on habitable rooms, room sizes, bedroom count, circulation share - and only then drawn deterministically with computed dimensions, door swings, windows, scale bar and north arrow. Validation errors come back for you to fix; fix them and call again. Prefer this over create_drawing for any building layout. You can call it directly for a house - the format is below. Design process: state the brief and assumptions; group rooms into day/night/service zones; keep the hall short (circulation under ~15% of the area); put a door on every connection you intend and a window on every habitable room; neighbouring rooms share an edge exactly. For a non-residential type, or to check sizes, call architecture_reference ONCE with a combined query such as "spec process office" (every extra round trip costs 10+ seconds). Do not deliberate at length: draft the spec promptly - the validator checks it and tells you exactly what to fix. Concept sketch only - never present it as construction documentation.',
+        description: 'Design a building floor plan (house, office, school, clinic, shop/cafe, hotel) from a STRUCTURED spec. The spec is validated like a design review - every room reachable through doors without crossing a private room, windows on habitable rooms, room sizes, bedroom count, circulation share - and only then drawn deterministically with computed dimensions, door swings, windows, scale bar and north arrow. Validation errors come back for you to fix; fix them and call again. Prefer this over create_drawing for any building layout. You can call it directly for a house - the format is below; describe the plan with `layout` (nested rows and columns with sizes), not absolute coordinates, so rooms line up by construction. Design process: state the brief and assumptions; group rooms into day/night/service zones; keep the hall short (circulation under ~15% of the area); put a door on every connection you intend and a window on every habitable room; neighbouring rooms share an edge exactly. For a non-residential type, or to check sizes, call architecture_reference ONCE with a combined query such as "spec process office" (every extra round trip costs 10+ seconds). Comfortable minimum sizes for a house (smaller is flagged, much smaller rejected): ' + sizeSummary('residential') + '. The plan is the BUILDING FOOTPRINT, not the plot: a 20 x 16 m plot does not mean a 20 x 16 m house - leave 3-4 m of setback and garden around it; a 4-bedroom house is typically 180-250 m2 including the garage, roughly 40-60 m2 per bedroom in total (about 15 x 12 m). Do not deliberate at length: draft the spec promptly - the validator checks it and tells you exactly what to fix. Concept sketch only - never present it as construction documentation.',
         input_schema: {
             type: 'object',
             properties: {
@@ -186,11 +186,12 @@ export const NATIVE_TOOL_SCHEMAS: ToolSchema[] = [
                     description: 'Units are metres; origin top-left, x east, y south. Do NOT include dimensions or areas - they are computed.',
                     properties: {
                         brief: { type: 'object', description: '{ buildingType?: residential|office|education|healthcare|retail|hotel, bedrooms?: number, hemisphere?: south|north }' },
-                        rooms: { type: 'array', description: 'Axis-aligned rectangles that must not overlap; neighbours share an edge exactly. Each: { id, name, type, x, y, w, h }.', items: { type: 'object' } },
+                        layout: { type: 'object', description: 'PREFERRED over rooms. A tree of rows and columns, no coordinates: { w?, h?, items: [ { h, items: [ { id, name, type, w }, ... ] }, ... ] }. The root stacks rows north to south; a row runs west to east (give each room a w, each row an h); a container inside a row is a column that stacks north to south (give items an h). An item with no size shares what is left. Neighbouring rooms align automatically.' },
+                        rooms: { type: 'array', description: 'Alternative to layout: absolute rectangles { id, name, type, x, y, w, h } in metres; must not overlap and neighbours must share an edge exactly.', items: { type: 'object' } },
                         doors: { type: 'array', description: 'Each: { from, to, at?: 0..1, width?, kind?: swing|open|sliding|vehicle, side?: N|E|S|W }. Use from:"exterior" with a side for entrances.', items: { type: 'object' } },
                         windows: { type: 'array', description: 'Each: { room, side: N|E|S|W, at?: 0..1, width? } on an exterior side.', items: { type: 'object' } }
                     },
-                    required: ['rooms']
+                    required: []
                 },
                 path: { type: 'string', description: 'Optional workspace-relative path for the HTML viewer (default diagrams/<title>.html); .svg and .plan.json are saved alongside' }
             },
@@ -278,7 +279,7 @@ AVAILABLE TOOLS:
 - run_command   {"action":"run_command","command":"npm test"}                                     run in terminal
 - download_file  {"action":"download_file","url":"https://example.com/file.zip","path":"files/file.zip"} download from web
 - create_diagram {"action":"create_diagram","title":"Auth Flow","mermaid":"graph TD; A-->B;"}     create & preview a Mermaid diagram (flows / relationships only — not layouts)
-- create_floor_plan {"action":"create_floor_plan","title":"Ground floor","spec":{"brief":{"buildingType":"residential","bedrooms":2},"rooms":[{"id":"liv","name":"Living","type":"living","x":0,"y":0,"w":5,"h":4}],"doors":[{"from":"exterior","to":"liv","side":"S"}],"windows":[{"room":"liv","side":"N","width":2}]}}  design a building plan from a structured spec: validated (reachability, windows, sizes) then drawn with computed dimensions - USE THIS for any floor plan; ask architecture_reference ONCE with a combined query only if you need rules for a non-residential type
+- create_floor_plan {"action":"create_floor_plan","title":"Ground floor","spec":{"brief":{"buildingType":"residential","bedrooms":2},"layout":{"w":9,"items":[{"h":4,"items":[{"id":"liv","name":"Living","type":"living","w":5},{"id":"bed","name":"Bedroom","type":"bedroom"}]}]},"doors":[{"from":"exterior","to":"liv","side":"S"}],"windows":[{"room":"liv","side":"N","width":2}]}}  design a building plan from a structured spec: validated (reachability, windows, sizes) then drawn with computed dimensions - USE THIS for any floor plan; ask architecture_reference ONCE with a combined query only if you need rules for a non-residential type
 - architecture_reference {"action":"architecture_reference","query":"spec","buildingType":"office"}   design rules, room sizes, spec format, plus the user's own notes in .freebird/references/
 - create_drawing {"action":"create_drawing","title":"Ground Floor","svg":"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 800'>…</svg>"}  draw a spatial picture as SVG (floor plans, wireframes, maps, illustrations) and preview it
 - verify_diagram {"action":"verify_diagram","mermaid":"graph TD; A-->B;","path":"diagrams/auth-flow.html"}  render via mermaid.ink and check it before reporting success

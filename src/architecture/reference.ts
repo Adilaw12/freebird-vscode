@@ -22,6 +22,8 @@ export interface RoomRule {
     hardArea: number; hardDim: number;
     /** Below these the room is flagged as a warning (cramped, but conceivable). */
     softArea: number; softDim: number;
+    /** Upper bounds (m²): above softMax the room is flagged as oversized, above hardMax it is rejected as absurd. */
+    softMax?: number; hardMax?: number;
     /** Needs natural light from an exterior window. */
     habitable?: boolean;
     /** Counts as circulation for the circulation-share check. */
@@ -217,6 +219,20 @@ Acoustics: separate lifts, ice machines and plant from guest rooms with a buffer
     }
 };
 
+// Upper bounds for a house. Without them a plan can be "valid" while an ensuite is the size of the master
+// bedroom and the WC is an 18 m² strip — a fast model will happily fill rows with whatever sizes make the
+// rectangles tile. Only the residential pack has them: public buildings legitimately have huge halls and
+// foyers, and their packs can add limits when real use shows what is sensible.
+const RESIDENTIAL_MAX_AREA: Record<string, [number, number]> = {
+    ensuite: [8, 14], bathroom: [10, 15], wc: [3, 6], laundry: [8, 14], pantry: [5, 9], robe: [8, 14], storage: [6, 12],
+    entry: [10, 18], study: [16, 28], kitchen: [25, 45], dining: [25, 40], bedroom: [20, 32], master_bedroom: [30, 45],
+    living: [50, 80], family: [50, 80], hall: [25, 45], mudroom: [8, 14], cleaner: [3, 6], garage: [45, 70]
+};
+for (const [type, [softMax, hardMax]] of Object.entries(RESIDENTIAL_MAX_AREA)) {
+    if (RESIDENTIAL.rooms[type]) { RESIDENTIAL.rooms[type].softMax = softMax; RESIDENTIAL.rooms[type].hardMax = hardMax; }
+    else (RESIDENTIAL.overrides ??= {})[type] = { softMax, hardMax };
+}
+
 export const PACKS: Record<string, BuildingPack> = {
     residential: RESIDENTIAL, office: OFFICE, education: EDUCATION,
     healthcare: HEALTHCARE, retail: RETAIL, hotel: HOSPITALITY
@@ -232,6 +248,40 @@ export function rulesFor(buildingType: string): Record<string, RoomRule> {
 }
 
 export function roomTypesFor(buildingType: string): string[] { return Object.keys(rulesFor(buildingType)); }
+
+// Words models reach for that mean one of our room types. Mapping them (and saying so) avoids a failed
+// call over a synonym.
+const TYPE_ALIASES: Record<string, string> = {
+    utility: 'laundry', 'laundry room': 'laundry', lounge: 'living', 'living room': 'living', 'family room': 'family', 'rumpus': 'family',
+    'dining room': 'dining', 'master': 'master_bedroom', 'master bedroom': 'master_bedroom', 'main bedroom': 'master_bedroom', 'bed': 'bedroom',
+    'guest bedroom': 'bedroom', 'kids bedroom': 'bedroom', bath: 'bathroom', 'main bathroom': 'bathroom', toilet: 'wc', powder: 'wc', 'powder room': 'wc',
+    'walk-in robe': 'robe', 'walk in robe': 'robe', wir: 'robe', wardrobe: 'robe', closet: 'robe', 'walk-in closet': 'robe', office: 'study', 'home office': 'study',
+    foyer: 'entry', 'entry hall': 'hall', passage: 'corridor', hallway: 'hall', 'double garage': 'garage', 'single garage': 'garage', carport: 'garage',
+    patio: 'alfresco', deck: 'alfresco', verandah: 'alfresco', porch: 'alfresco', balcony: 'alfresco', yard: 'courtyard', linen: 'storage', 'linen cupboard': 'storage', cupboard: 'storage'
+};
+
+/** The valid type for what the model wrote: itself, a known synonym, or undefined. */
+export function canonicalRoomType(buildingType: string, written: string): string | undefined {
+    const valid = roomTypesFor(buildingType);
+    const key = written.trim().toLowerCase();
+    if (valid.includes(key)) return key;
+    const alias = TYPE_ALIASES[key];
+    return alias && valid.includes(alias) ? alias : undefined;
+}
+
+/**
+ * One line of comfortable minimums ("bedroom 9 m² / 2.7 m wide, …") for the room types that have size
+ * rules, generated from the same table the validator uses so the two cannot drift. It goes in the
+ * create_floor_plan description so the model gets sizes right the first time instead of being told
+ * "too small" a round trip later.
+ */
+export function sizeSummary(buildingType: string): string {
+    const rules = rulesFor(buildingType);
+    return Object.entries(rules)
+        .filter(([, k]) => !k.outdoor && (k.softArea > 0 || k.softDim > 0))
+        .map(([type, k]) => `${type} ${k.softArea ? k.softArea + ' m²' : ''}${k.softArea && k.softDim ? ' / ' : ''}${k.softDim ? k.softDim + ' m wide' : ''}`)
+        .join(', ');
+}
 
 // ── Openings & general thresholds ───────────────────────────────────────────
 export const DOOR = {
@@ -257,24 +307,36 @@ const typeList = () => Object.values(PACKS)
     .map(p => `  ${p.id} (${p.label}, ${p.maturity}): ${Object.keys(p.rooms).join(', ')}`).join('\n');
 
 export const COMMON_TOPICS: Record<string, string> = {
-    spec: `FLOOR PLAN SPEC (create_floor_plan). Units are METRES. Origin top-left; x grows east (right), y grows south (down); north is up.
+    spec: `FLOOR PLAN SPEC (create_floor_plan). Units are METRES. North is up; x grows east (right), y grows south (down).
+PREFERRED: describe the plan as nested rows and columns (no coordinates, so rooms cannot overlap or leave gaps):
 {
-  "brief": { "buildingType": "residential", "bedrooms": 3, "hemisphere": "south" },   // all optional; buildingType picks the rule pack
-  "rooms": [ { "id": "liv", "name": "Living", "type": "living", "x": 0, "y": 0, "w": 5.5, "h": 4.2 } ],
+  "brief": { "buildingType": "residential", "bedrooms": 3, "hemisphere": "south" },     // all optional; buildingType picks the rule pack
+  "layout": { "w": 14, "items": [                          // the root stacks rows from north (top) to south (bottom)
+    { "h": 4.6, "items": [                                 // a row 4.6 m tall; its items run west to east
+        { "id": "liv", "name": "Living", "type": "living", "w": 5.6 },
+        { "id": "din", "name": "Dining", "type": "dining", "w": 3.8 },
+        { "w": 4.6, "items": [                           // a column inside the row: items stack north to south
+            { "id": "kit", "name": "Kitchen", "type": "kitchen", "h": 3.0 },
+            { "id": "lau", "name": "Laundry", "type": "laundry" } ] } ] },   // an unsized item shares what is left
+    { "h": 1.4, "items": [ { "id": "hall", "name": "Hall", "type": "hall" } ] }
+  ] },
   "doors": [
-    { "from": "exterior", "to": "entry", "side": "S" },          // front door; 'side' = which wall of 'to'
-    { "from": "hall", "to": "bed1", "at": 0.5 },                  // 'at' 0..1 along the shared wall (default centre)
-    { "from": "liv", "to": "din", "kind": "open" }                // 'open' = open-plan gap, no leaf; also 'sliding', 'vehicle'
+    { "from": "exterior", "to": "hall", "side": "W" },          // front door; 'side' = which wall of 'to'
+    { "from": "hall", "to": "liv", "at": 0.3, "kind": "open" },   // 'at' 0..1 along the shared wall; 'open' = open-plan gap, no leaf (also 'sliding', 'vehicle')
+    { "from": "liv", "to": "din", "kind": "open" }
   ],
-  "windows": [ { "room": "liv", "side": "N", "at": 0.5, "width": 2.4 } ]
+  "windows": [ { "room": "liv", "side": "N", "width": 3 } ]
 }
-Rules: rooms are axis-aligned rectangles that must not overlap; adjacent rooms share a wall edge exactly (use the same coordinates). Every non-outdoor room needs a door route from the front door that does not pass through a private room (bedroom, office, classroom, consult room...). Every habitable room needs a window on an exterior side. Do NOT write dimensions or areas — they are computed from x/y/w/h.
+Sizes along a row are "w", along a column "h"; the layout's "w" and each row's "h" fix the overall size. A door needs two rooms that SHARE A WALL: neighbours in a row touch, and across rows rooms touch where their x-ranges overlap.
+ALTERNATIVE (more error-prone): "rooms": [ { "id": "liv", "name": "Living", "type": "living", "x": 0, "y": 0, "w": 5.5, "h": 4.2 } ] with absolute metres; rooms must not overlap and neighbours must share an edge exactly.
+Rules: every non-outdoor room needs a door route from the front door that does not pass through a private room (bedroom, office, classroom, consult room...). Every habitable room needs a window on an exterior side (one is added for you if you forget). Do NOT write dimensions or areas — they are computed.
 Building types and their room types (common types — entry, hall, corridor, stairs, lift, wc, accessible_wc, storage, plant, cleaner, alfresco, courtyard, other — work in all):
 ${typeList()}`,
 
     process: `DESIGN PROCESS (do these in order, briefly, before calling create_floor_plan)
 1. Brief: confirm or state assumptions — building type, site/plot size, storeys, capacity or bedrooms, must-haves, hemisphere/orientation. Ask only if truly ambiguous. Call architecture_reference for the building type.
 2. Program: list rooms with target areas, then group them into zones (public/private, front/back-of-house, day/night, clean/dirty, noisy/quiet).
+2b. Size the BUILDING, not the plot: a 4-bedroom house is typically 180-250 m² including the garage (about 15 × 12 m) — leave setbacks and garden around it. Check each room against the size guidance so no room is absurdly large or small.
 3. Adjacency: what must touch, what must be apart, what must be reachable only through something else (privacy, hygiene, security).
 4. Layout on a grid: place zones as blocks, keep circulation short and legible, align walls, put the main entry on the street/arrival side.
 5. Openings: a door for every connection you intend (no sealed rooms), windows on every habitable room's exterior wall, an accessible route and more than one exit for public buildings.

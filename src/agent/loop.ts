@@ -247,10 +247,16 @@ async function runTextParsedLoop(opts: AgentRunOptions, turnId: string): Promise
 
         // premium: lets Freebird Cloud serve this from the Pro Sonnet allowance;
         // other providers ignore it.
-        await provider.stream(messages, chunk => {
-            rawText += chunk;
-            onEvent({ type: 'text-chunk', text: chunk });
-        }, { premium: true, agentTrial: opts.agentTrial, effort });
+        const onChunk = (chunk: string) => { rawText += chunk; onEvent({ type: 'text-chunk', text: chunk }); };
+        try {
+            await provider.stream(messages, onChunk, { premium: true, agentTrial: opts.agentTrial, effort });
+        } catch (err: any) {
+            // The Pro model can spend its whole budget planning and write nothing. Rather than end the
+            // run, redo this one step on the fast model — it answers immediately, and the validators
+            // give it concrete fixes to apply.
+            if (err?.code !== 'EMPTY_RESPONSE' || rawText) throw err;
+            await provider.stream(messages, onChunk, { premium: false, agentTrial: opts.agentTrial, effort });
+        }
 
         onEvent({ type: 'response-complete', rawText });
         newHistory.push({ role: 'assistant', content: rawText });
