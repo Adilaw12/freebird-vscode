@@ -14,6 +14,7 @@ const { parsePlan, validatePlan, describeValidation } = require(path.join(OUT, '
 const { renderPlan } = require(path.join(OUT, 'architecture/render.js'));
 const { PACKS, rulesFor, roomTypesFor, lookupReference, COMMON_TOPICS } = require(path.join(OUT, 'architecture/reference.js'));
 const { checkSvg } = require(path.join(OUT, 'agent/diagramPage.js'));
+const { isDesignConversation } = require(path.join(OUT, 'architecture/intent.js'));
 
 const rm = (id, name, type, x, y, w, h) => ({ id, name, type, x, y, w, h });
 const door = (from, to, extra = {}) => ({ from, to, ...extra });
@@ -157,6 +158,13 @@ function run() {
     check('has a scale bar, north arrow and concept-sketch disclaimer', svg.includes('>N<') && /\d+ m<\/text>/.test(svg) && svg.includes('not for construction'));
     check('door swings and windows are drawn', (svg.match(/stroke-dasharray="3 2"/g) || []).length >= 8 && svg.includes('#d6ebf8'));
     check('open-plan gaps get no door leaf (fewer swings than doors)', (svg.match(/stroke-dasharray="3 2"/g) || []).length === HOUSE.doors.filter(d => d.kind !== 'open').length);
+
+    suite('design-conversation detection (drives low thinking effort)');
+    check('a floor-plan request is detected', isDesignConversation('Design a 4-bedroom single-storey house for a 20 x 16 m plot'));
+    check('an office or clinic design request is detected', isDesignConversation('design an office for 20 people') && isDesignConversation('Can you draw a floor plan for a small clinic?'));
+    check('ordinary coding requests are not', !isDesignConversation('refactor the auth middleware to use async/await') && !isDesignConversation('fix the failing test in checkout.ts') && !isDesignConversation('design a database schema for users'));
+    check('a follow-up in a design conversation is detected from history', isDesignConversation('make the kitchen bigger', [{ content: 'Here is your floor plan' }, { content: 'ok' }]));
+    check('history that is not about design does not trigger it', !isDesignConversation('make it faster', [{ content: 'sorted the array' }]));
 
     suite('reference packs');
     check('all packs resolve room rules that include the common rooms', Object.keys(PACKS).every(p => 'corridor' in rulesFor(p) && 'wc' in rulesFor(p)));

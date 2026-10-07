@@ -16,6 +16,8 @@ export interface CompletionOptions {
      *  free-tier completions through Cerebras (fast, paid) before the existing
      *  Gemini path, without touching regular chat. See api/chat.js. */
     isTabCompletion?: boolean;
+    /** How hard the Freebird Cloud Sonnet model should think before answering. Omitted = server default (medium). */
+    effort?: 'low' | 'medium' | 'high';
     /** Aborts the in-flight request. Tab completions pass VS Code's cancellation
      *  here so a result the user has typed past stops costing quota and bandwidth. */
     signal?: AbortSignal;

@@ -1,3 +1,4 @@
+import { isDesignConversation } from '../architecture/intent';
 import * as vscode from 'vscode';
 import { Message, AIProvider, RichMessage, ToolResultEntry } from '../ai/provider';
 import { parseToolCalls, executeToolCall, getWorkspaceTree, stripToolBlocks, nativeToToolCall,
@@ -236,6 +237,8 @@ async function runTextParsedLoop(opts: AgentRunOptions, turnId: string): Promise
     ];
 
     let consecutiveToolFailures = 0;
+    // Layout briefs make the Pro model plan silently for minutes; the floor-plan validator does the checking instead.
+    const effort = isDesignConversation(userMessage, history) ? 'low' as const : undefined;
 
     for (let i = 0; i < (opts.maxIterations ?? MAX_ITERATIONS); i++) {
         let rawText = '';
@@ -247,7 +250,7 @@ async function runTextParsedLoop(opts: AgentRunOptions, turnId: string): Promise
         await provider.stream(messages, chunk => {
             rawText += chunk;
             onEvent({ type: 'text-chunk', text: chunk });
-        }, { premium: true, agentTrial: opts.agentTrial });
+        }, { premium: true, agentTrial: opts.agentTrial, effort });
 
         onEvent({ type: 'response-complete', rawText });
         newHistory.push({ role: 'assistant', content: rawText });

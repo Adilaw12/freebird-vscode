@@ -74,6 +74,9 @@ const PREMIUM_TTL = 35 * 24 * 60 * 60;
 // Sonnet 5 thinks by default and thinking tokens count against max_tokens, so
 // the agent loop's default 2048 would truncate real output.
 const SONNET_MIN_MAX_TOKENS = 8192;
+// Effort bounds how long Sonnet thinks before it writes. The client may ask for less on tasks where
+// something else does the checking (floor plans are validated in code); anything unrecognised is ignored.
+const SONNET_EFFORTS = ['low', 'medium', 'high'];
 const MONITOR_TTL        = 8 * 24 * 60 * 60; // keep daily monitoring keys ~8 days
 
 const hashIp = (ip) => createHash('sha256').update(ip).digest('hex').slice(0, 16);
@@ -107,7 +110,7 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: 'Server misconfigured', code: 'NO_API_KEY' });
     }
 
-    const { messages, sessionId: rawSession, authToken, licenseKey, templateId, templateLicenseKey, maxTokens: requestedMaxTokens = 2048, isTabCompletion, premium, agentTrial } = req.body ?? {};
+    const { messages, sessionId: rawSession, authToken, licenseKey, templateId, templateLicenseKey, maxTokens: requestedMaxTokens = 2048, isTabCompletion, premium, agentTrial, effort: requestedEffort } = req.body ?? {};
     const isCompletion = isTabCompletion === true;
 
     if (!Array.isArray(messages) || messages.length === 0) {
@@ -390,7 +393,7 @@ export default async function handler(req, res) {
             const sonnetBody = {
                 max_tokens: Math.max(Number(maxTokens) || 0, SONNET_MIN_MAX_TOKENS),
                 stream: true,
-                output_config: { effort: 'medium' },
+                output_config: { effort: SONNET_EFFORTS.includes(requestedEffort) ? requestedEffort : 'medium' },
                 messages: anthropicMessages,
                 ...(anthropicBody.system && { system: anthropicBody.system })
             };

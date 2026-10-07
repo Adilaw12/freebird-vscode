@@ -143,7 +143,8 @@ export class CloudProvider implements AIProvider {
             maxTokens:  opts?.maxTokens ?? (opts?.premium ? 4096 : 2048),
             isTabCompletion: opts?.isTabCompletion,
             premium: opts?.premium,
-            agentTrial: opts?.agentTrial
+            agentTrial: opts?.agentTrial,
+            effort: opts?.effort
         };
 
         const res = await fetch(endpoint, {
@@ -267,6 +268,17 @@ export class CloudProvider implements AIProvider {
                 chars += text.length;
                 onChunk(text);
             }
+        }
+        // A request that ends without a single character of text is a failure, not an empty answer: the Pro
+        // model can spend its whole output budget planning and stop before writing anything, which used to
+        // end the run silently. (Tab completions legitimately come back empty, so they are exempt.)
+        if (chars === 0 && !opts?.isTabCompletion) {
+            const e = new Error(
+                'The model used its whole response budget planning and wrote nothing. Try again, or ask for a simpler or smaller result.'
+            ) as any;
+            e.code = 'EMPTY_RESPONSE';
+            perfLog('request  EMPTY RESPONSE after ' + ((Date.now() - t0) / 1000).toFixed(1) + 's');
+            throw e;
         }
         perfLog(`request  model=${modelUsed ?? '?'}  first-text=${firstByteMs < 0 ? 'none' : (firstByteMs / 1000).toFixed(1) + 's'}  total=${((Date.now() - t0) / 1000).toFixed(1)}s  out=${chars} chars`);
     }
