@@ -22,6 +22,7 @@ import { isLicenseActive, hasTemplateLibraryAccess, FREE_TEMPLATE_IDS } from '..
 import { TEMPLATE_CATALOG } from '../lib/templateCatalog.js';
 import { templateHaikuDailyLimit } from '../lib/templateWelcome.js';
 import { fetchGeminiWithFallback, PRO_GEMINI_MODEL_CANDIDATES } from '../lib/geminiModel.js';
+import { geminiChunkText, GEMINI_THINKING_HEADROOM } from '../lib/geminiText.js';
 import { fetchAnthropicWithFallback, anthropicConfigured, SONNET_MODEL_CANDIDATES } from '../lib/anthropicModel.js';
 import { fetchCerebrasWithFallback, cerebrasConfigured } from '../lib/cerebrasModel.js';
 import { quotaKeysFor, reserveQuota, refundQuota, reserveSingleCounter } from '../lib/quota.js';
@@ -327,7 +328,7 @@ export default async function handler(req, res) {
     const geminiBody = {
         contents: geminiContents,
         generationConfig: {
-            maxOutputTokens: maxTokens,
+            maxOutputTokens: maxTokens + (isCompletion ? 0 : GEMINI_THINKING_HEADROOM),
             temperature: 0.2,
         },
         ...(systemParts.length > 0 && {
@@ -535,14 +536,14 @@ export default async function handler(req, res) {
             try {
                 const parsed = JSON.parse(jsonStr);
                 if (provider === 'anthropic') usageTracker.consume(parsed);
-                // Gemini: candidates[0].content.parts[0].text
+                // Gemini: all non-thought parts of candidates[0].content (see lib/geminiText.js)
                 // Anthropic: content_block_delta events carry delta.text
                 // Cerebras: OpenAI-compatible choices[0].delta.content
                 const text = provider === 'anthropic'
                     ? (parsed?.type === 'content_block_delta' ? parsed?.delta?.text : undefined)
                     : provider === 'cerebras'
                     ? parsed?.choices?.[0]?.delta?.content
-                    : parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
+                    : geminiChunkText(parsed);
                 if (text) res.write(text);
             } catch { /* skip malformed SSE lines */ }
         };

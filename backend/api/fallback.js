@@ -6,6 +6,7 @@
 // shares the same Redis keys, so fallback can't be used to bypass the chat
 // quota. Also keeps a short-term hourly IP burst limit for abuse protection.
 
+import { geminiChunkText } from '../lib/geminiText.js';
 import { Redis } from '@upstash/redis';
 import { createHash } from 'crypto';
 import { verifySession } from '../lib/authToken.js';
@@ -357,7 +358,7 @@ export default async function handler(req, res) {
                     ? (parsed?.type === 'content_block_delta' ? parsed?.delta?.text : undefined)
                     : provider === 'cerebras'
                     ? parsed?.choices?.[0]?.delta?.content
-                    : parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
+                    : geminiChunkText(parsed);
                 if (text) res.write(text);
             } catch { /* skip malformed SSE lines */ }
         };

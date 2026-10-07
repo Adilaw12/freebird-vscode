@@ -47,8 +47,43 @@ if (model === 'fast') {
     CloudProvider.prototype.stream = function (m, c, opts) { return original.call(this, m, c, { ...opts, premium: false }); };
 }
 
+// The backend falls back across providers (Sonnet -> Haiku -> Gemini) without telling the caller, so a run
+// can be measuring a different model than the flag asked for. Record what really answered.
+let served = {};
+const realFetch = global.fetch;
+global.fetch = async (url, init) => {
+    const res = await realFetch(url, init);
+    if (String(url).includes('/api/chat')) { const m = res.headers.get('x-model-used') || 'unknown'; served[m] = (served[m] || 0) + 1; }
+    return res;
+};
+const wanted = model === 'pro' ? /^claude-sonnet/ : /^claude-haiku|^gemini/;
+
 const briefs = JSON.parse(fs.readFileSync(path.join(__dirname, 'briefs.json'), 'utf8')).filter(b => !only || only.includes(b.id));
 if (!briefs.length) { console.error('No briefs matched --only.'); process.exit(1); }
+
+// Buckets the validator's error lines so a run shows WHY plans were rejected, not just how many.
+const REASONS = [
+    ['unreadable spec', /could not be read/i], ['rooms overlap', /overlap/i], ['room too small', /too small for/i],
+    ['room too large', /far too large/i], ['no outside wall / enclosed room', /no outside wall|exterior sides: none/i],
+    ['room unreachable', /can only be reached|has no door/i], ['no front door', /no front door/i],
+    ['bedroom count', /brief asks for \d+ bedroom/i], ['door/wall too short', /too short for even/i],
+    ['layout sizes', /widths add up|heights add up|leave no room|overall size/i]
+];
+const otherSamples = [];
+function classify(output) {
+    const text = String(output);
+    // Only the ERRORS section: the same message also lists warnings and notes, which are not why a plan was rejected.
+    const m = text.match(/ERRORS \(fix these\):\n([\s\S]*?)(?:\nWARNINGS|\nNOTES|\n\nFix exactly)/);
+    const lines = m ? m[1].split('\n').filter(l => /^\s*-\s/.test(l)) : (/could not be read/.test(text) ? text.split('\n').filter(l => /^\s*-\s/.test(l)) : []);
+    const out = {};
+    for (const line of lines.length ? lines : [text.slice(0, 80)]) {
+        const hit = REASONS.find(([, re]) => re.test(line));
+        const key = hit ? hit[0] : 'other';
+        out[key] = (out[key] || 0) + 1;
+        if (!hit && otherSamples.length < 12) otherSamples.push(line.trim().slice(0, 160));
+    }
+    return out;
+}
 
 const countType = (plan, types) => plan.rooms.filter(r => types.includes(r.type)).length;
 
@@ -80,18 +115,22 @@ async function runBrief(brief) {
     ctx.extension = { packageJSON: { version: 'eval' } };
     const provider = new CloudProvider(ctx, 'eval-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6));
 
+    served = {};
     const t0 = Date.now();
+    const reasons = {};
+    let lastText = '';
     let attempts = 0, rejected = 0, requests = 0, error = null, firstPlanAt = null, savedAt = null, toolErrors = 0;
     const loop = runAgentLoop({
         userMessage: brief.prompt, history: [], provider, git: {}, context: ctx, sessionId: 'eval', maxIterations: 14,
         onApprovalNeeded: async () => true,
         onEvent: e => {
             if (e.type === 'iteration-start') requests++;
+            else if (e.type === 'response-complete') lastText = String(e.rawText);
             else if (e.type === 'tool-start' && e.tool.action === 'create_floor_plan') { attempts++; if (firstPlanAt === null) firstPlanAt = (Date.now() - t0) / 1000; }
             else if (e.type === 'tool-result') {
                 if (!e.success) toolErrors++;
                 if (e.tool.action === 'create_floor_plan') {
-                    if (String(e.output).startsWith('NOT DRAWN')) rejected++;
+                    if (String(e.output).startsWith('NOT DRAWN')) { rejected++; for (const [k, v] of Object.entries(classify(e.output))) reasons[k] = (reasons[k] || 0) + v; }
                     else if (e.success && savedAt === null) savedAt = (Date.now() - t0) / 1000;
                 }
             }
@@ -106,7 +145,7 @@ async function runBrief(brief) {
     // Read back the plan that was actually saved and judge it independently of the model's say-so.
     const result = { id: brief.id, model, success: false, seconds: +seconds.toFixed(1), requests, attempts, rejected, toolErrors, error,
         timeToFirstPlan: firstPlanAt === null ? null : +firstPlanAt.toFixed(1), timeToValidPlan: savedAt === null ? null : +savedAt.toFixed(1),
-        warnings: [], notes: 0, problems: [], rooms: 0, internalArea: 0 };
+        reasons, lastText: '', models: {}, warnings: [], notes: 0, problems: [], rooms: 0, internalArea: 0 };
     try {
         const dir = path.join(workspace, 'diagrams');
         const file = fs.existsSync(dir) ? fs.readdirSync(dir).find(f => f.endsWith('.plan.json')) : undefined;
@@ -123,6 +162,9 @@ async function runBrief(brief) {
             }
         }
     } catch (err) { result.error = (result.error ? result.error + '; ' : '') + 'could not read saved plan: ' + err.message; }
+    // A run that never submitted a plan: keep what the model said last, to see why it stopped.
+    if (attempts === 0) result.lastText = lastText.replace(/\s+/g, ' ').slice(0, 400);
+    result.models = { ...served };
     result.pass = result.success && result.problems.length === 0;
     return result;
 }
@@ -136,7 +178,9 @@ async function runBrief(brief) {
             results.push(res);
             const status = res.pass ? 'PASS' : res.success ? 'WEAK' : 'FAIL';
             console.log(`${status}  ${brief.id.padEnd(20)} ${String(res.seconds).padStart(6)}s  req ${String(res.requests).padStart(2)}  plans ${res.attempts} (${res.rejected} rejected)  warnings ${res.warnings.length}` +
-                (res.problems.length ? `\n      brief: ${res.problems.join('; ')}` : '') + (res.error ? `\n      error: ${res.error}` : ''));
+                (res.problems.length ? `\n      brief: ${res.problems.join('; ')}` : '') + (res.error ? `\n      error: ${res.error}` : '') + (res.lastText ? `\n      stopped after: ${res.lastText}` : '') +
+                `\n      served by: ${Object.entries(res.models).map(([k, v]) => `${k} ×${v}`).join(', ') || 'nothing'}` +
+                (model === 'pro' && !Object.keys(res.models).some(k => wanted.test(k)) ? '   ⚠ NOT SERVED BY SONNET — the Pro path fell back; this result is not a Sonnet result' : ''));
         }
     }
     const n = results.length, pass = results.filter(r => r.pass).length, ok = results.filter(r => r.success).length;
@@ -147,6 +191,12 @@ async function runBrief(brief) {
         meanSecondsToValidPlan: +mean(times).toFixed(1), meanRequests: +mean(results.map(r => r.requests)).toFixed(1),
         meanRejectedPlans: +mean(results.map(r => r.rejected)).toFixed(1), meanWarnings: +mean(results.map(r => r.warnings.length)).toFixed(1)
     };
+    const totals = {};
+    for (const r of results) for (const [k, v] of Object.entries(r.reasons || {})) totals[k] = (totals[k] || 0) + v;
+    summary.modelsServed = {};
+    for (const r of results) for (const [k, v] of Object.entries(r.models || {})) summary.modelsServed[k] = (summary.modelsServed[k] || 0) + v;
+    summary.unclassifiedSamples = otherSamples;
+    summary.rejectionReasons = Object.fromEntries(Object.entries(totals).sort((a, b) => b[1] - a[1]));
     console.log('\nSummary:', JSON.stringify(summary));
     const outFile = opt('out', path.join(__dirname, 'results', `${new Date().toISOString().replace(/[:.]/g, '-')}-${model}.json`));
     fs.mkdirSync(path.dirname(outFile), { recursive: true });
