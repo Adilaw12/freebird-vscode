@@ -1,0 +1,62 @@
+[
+  {
+    "id": "house-3bed",
+    "prompt": "Design a 3-bedroom single-storey house for a young family. Open-plan living, a family bathroom and an ensuite to the main bedroom.",
+    "expect": { "bedrooms": 3, "buildingType": "residential", "area": [120, 230] }
+  },
+  {
+    "id": "house-4bed-garage",
+    "prompt": "Design a 4-bedroom single-storey house for a 20 x 16 m plot, with a double garage.",
+    "expect": { "bedrooms": 4, "buildingType": "residential", "mustInclude": ["garage"], "area": [170, 300] }
+  },
+  {
+    "id": "house-5bed-office",
+    "prompt": "Design a 5-bedroom single-storey family home with a home office, two living areas and a laundry.",
+    "expect": { "bedrooms": 5, "buildingType": "residential", "mustInclude": ["study", "laundry"], "area": [220, 380] }
+  },
+  {
+    "id": "unit-2bed",
+    "prompt": "Design a 2-bedroom apartment of about 80 square metres with one bathroom.",
+    "expect": { "bedrooms": 2, "buildingType": "residential", "area": [60, 110] }
+  },
+  {
+    "id": "studio",
+    "prompt": "Design a compact studio apartment of about 35 square metres with a kitchenette and a bathroom.",
+    "expect": { "buildingType": "residential", "area": [25, 48] }
+  },
+  {
+    "id": "granny-flat",
+    "prompt": "Design a 1-bedroom granny flat of about 50 square metres with a living area, kitchen and bathroom.",
+    "expect": { "bedrooms": 1, "buildingType": "residential", "area": [38, 68] }
+  },
+  {
+    "id": "office-small",
+    "prompt": "Design a small office for 15 staff with a reception, a meeting room, a kitchenette and an accessible toilet.",
+    "expect": { "buildingType": "office", "mustInclude": ["reception", "meeting", "kitchenette", "accessible_wc"], "area": [120, 260] }
+  },
+  {
+    "id": "gp-clinic",
+    "prompt": "Design a GP clinic with 3 consulting rooms, a waiting room, a reception, a treatment room, a staff room and an accessible toilet.",
+    "expect": { "buildingType": "healthcare", "roomCounts": { "consult": 3 }, "mustInclude": ["waiting", "reception", "treatment", "accessible_wc"], "area": [110, 260] }
+  },
+  {
+    "id": "school-wing",
+    "prompt": "Design a primary school wing with 4 classrooms, a staff room, an admin office and student toilets.",
+    "expect": { "buildingType": "education", "roomCounts": { "classroom": 4 }, "mustInclude": ["staffroom", "admin"], "area": [300, 600] }
+  },
+  {
+    "id": "cafe-40",
+    "prompt": "Design a 40-seat cafe with a commercial kitchen, a service counter, a coolroom and customer toilets.",
+    "expect": { "buildingType": "retail", "mustInclude": ["dining_hall", "commercial_kitchen", "coolroom"], "area": [90, 220] }
+  },
+  {
+    "id": "hotel-floor",
+    "prompt": "Design one floor of a small boutique hotel with 8 guest rooms, a lobby and a back-of-house area.",
+    "expect": { "buildingType": "hotel", "roomCounts": { "hotel_room": 8 }, "mustInclude": ["lobby"], "area": [200, 450] }
+  },
+  {
+    "id": "shop-80",
+    "prompt": "Design a small retail shop of about 80 square metres with a stockroom, a fitting room and a staff toilet.",
+    "expect": { "buildingType": "retail", "mustInclude": ["shopfloor", "stockroom"], "area": [60, 110] }
+  }
+]

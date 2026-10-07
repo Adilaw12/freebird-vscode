@@ -285,6 +285,16 @@ function run() {
     check('a follow-up in a design conversation is detected from history', isDesignConversation('make the kitchen bigger', [{ content: 'Here is your floor plan' }, { content: 'ok' }]));
     check('history that is not about design does not trigger it', !isDesignConversation('make it faster', [{ content: 'sorted the array' }]));
 
+    suite('eval briefs are well-formed (eval/floorplan/briefs.json)');
+    {
+        const briefs = JSON.parse(require('fs').readFileSync(path.join(__dirname, '..', 'eval', 'floorplan', 'briefs.json'), 'utf8'));
+        check('there are briefs, with unique ids and prompts', briefs.length >= 10 && new Set(briefs.map(b => b.id)).size === briefs.length && briefs.every(b => b.id && b.prompt && b.prompt.length > 20));
+        check('every brief names a supported building type', briefs.every(b => PACKS[b.expect.buildingType]));
+        check('every expected room type exists in that building type', briefs.every(b => [...(b.expect.mustInclude || []), ...Object.keys(b.expect.roomCounts || {})].every(t => roomTypesFor(b.expect.buildingType).includes(t))));
+        check('every area range is sensible (min < max)', briefs.every(b => !b.expect.area || b.expect.area[0] < b.expect.area[1]));
+        check('the briefs cover every building type', Object.keys(PACKS).every(p => briefs.some(b => b.expect.buildingType === p)));
+    }
+
     suite('reference packs');
     check('all packs resolve room rules that include the common rooms', Object.keys(PACKS).every(p => 'corridor' in rulesFor(p) && 'wc' in rulesFor(p)));
     check('office corridors are wider than residential', rulesFor('office').corridor.hardDim > rulesFor('residential').corridor.hardDim);

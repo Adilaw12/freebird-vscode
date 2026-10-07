@@ -351,6 +351,7 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "dev": "node scripts/dev-host.js",
+    "eval:plans": "node eval/floorplan/run.js",
     "watch": "tsc -watch -p ./",
     "test": "npm run compile && node test/run.js",
     "package": "vsce package",

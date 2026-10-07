@@ -9,3 +9,6 @@ backend/node_modules/
 # running against (project memory notes, write-approval staging files) —
 # user/session-specific, never something to commit.
 .freebird/
+
+# Floor-plan eval output (eval/floorplan/run.js)
+eval/floorplan/results/
