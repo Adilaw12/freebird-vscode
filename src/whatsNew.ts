@@ -23,6 +23,28 @@ interface ReleaseNotes {
 // add an entry here only when a minor/major release has something worth
 // showing. A minor with no entry here is silently skipped.
 const RELEASE_NOTES: Record<string, ReleaseNotes> = {
+    '0.15': {
+        heading: 'What’s new in Freebird 0.15',
+        highlights: [
+            {
+                title: 'Floor plans and building layouts',
+                body: 'Ask for a house, office, school, clinic, shop or hotel plan. Freebird works from a structured brief, checks the design like a reviewer would — every room reachable by door, windows on every living space, sensible room sizes — then draws it with measured dimensions, door swings and a scale bar. It is a concept sketch, not a construction drawing.',
+            },
+            {
+                title: 'Cleaner diagrams you can zoom',
+                body: 'Mermaid diagrams have a new, more readable style that follows your light or dark theme. Diagram and drawing previews fit to the window and zoom with the scroll wheel, drag to pan, double-click to fit. A new drawing tool handles wireframes, maps and other layouts.',
+            },
+            {
+                title: 'Tell us what works',
+                body: 'A quick thumbs-up or down appears after a finished task, and a short note box after something fails — at most once a day, and you can turn it off. The feedback button is always in the chat header. No email is collected.',
+                command: { id: 'freebird.sendFeedback', label: 'Send feedback' },
+            },
+            {
+                title: 'Fewer timeouts on big answers',
+                body: 'Large answers — whole files, detailed drawings — no longer get cut off or fail with a bare gateway error, and when the cloud does take too long you now get a clear message about what to try.',
+            },
+        ],
+    },
     '0.14': {
         heading: 'What’s new in Freebird 0.14',
         highlights: [

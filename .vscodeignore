@@ -14,3 +14,5 @@ backend/**
 test/**
 .freebird/**
 diagrams/**
+scripts/**
+docs/**

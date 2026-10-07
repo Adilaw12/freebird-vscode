@@ -1,5 +1,24 @@
 # Changelog
 
+## \[0.15.0] — 2026-10-07
+
+### Added
+
+* **Floor plans and building layouts.** `create_floor_plan` designs a plan from a structured spec instead of hand-written SVG. A validator reviews it like a design check — every room reachable by a door without crossing a private room, windows on habitable rooms, room sizes, bedroom count against the brief, circulation share — and a deterministic renderer draws it with computed dimensions, door swings, windows, scale bar and north arrow. Rule packs for residential, office, education, healthcare, retail and hotel buildings.
+* **`architecture_reference`.** Design guidance (spec format, process, room sizes, stairs, accessibility, building-type notes) the agent can consult. It also searches your own notes in `.freebird/references/`, so licensed material you keep (for example excerpts from Neufert) can be used for any building type. See docs/architecture-references.md.
+* **`create_drawing`.** Draws wireframes, maps and other spatial pictures as SVG, shows them on white paper, and returns a rendered image to the model so it can check and fix its own output.
+* **In-product feedback.** A thumbs-up/down after a finished task, a short note after a failure, and a Send Feedback button and command. Unprompted asks are limited to once a day, wait until you have had a few results, and stop after you dismiss them three times; turn them off with `freebird.feedbackPrompts`. No email is collected.
+
+### Changed
+
+* **Diagram previews fit to the window and zoom.** Scroll to zoom, drag to pan, double-click to fit. Mermaid diagrams have a new readable style that follows your VS Code light or dark theme (the chat view was always dark before).
+* The agent chooses the right tool: Mermaid for flows and relationships, `create_floor_plan` for building layouts, `create_drawing` for other spatial pictures.
+
+### Fixed
+
+* **Large answers failed or were cut off.** Agent-mode requests to Freebird Cloud asked for only 2,048 tokens, truncating whole files and drawings, and a gateway timeout surfaced as a bare "Cloud AI error (504)". They now ask for more, and a timeout gives a clear message with what to try.
+* **Ollama tab completion never used Ollama's fill-in-the-middle endpoint**, and completions you had already typed past kept running to completion. FIM is now used (with the cloud as fallback), cancelled requests are aborted, and the "Ollama is unreachable" cooldown survives a window reload.
+
 ## \[0.14.3] — 2026-10-07
 
 ### Fixed
