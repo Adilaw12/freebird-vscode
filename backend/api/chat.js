@@ -74,7 +74,9 @@ const PREMIUM_MONTHLY_LIMITS = { pro: 100, team: 100, enterprise: 100, trial: 25
 const PREMIUM_TTL = 35 * 24 * 60 * 60;
 // Sonnet 5 thinks by default and thinking tokens count against max_tokens, so
 // the agent loop's default 2048 would truncate real output.
-const SONNET_MIN_MAX_TOKENS = 8192;
+// 16k leaves room for a whole file or deck after thinking. The real ceiling is time, not tokens: at ~60-80
+// tokens/s a 120s function limit cut answers off near 8k, so vercel.json now allows 300s.
+const SONNET_MIN_MAX_TOKENS = 16000;
 // Effort bounds how long Sonnet thinks before it writes. The client may ask for less on tasks where
 // something else does the checking (floor plans are validated in code); anything unrecognised is ignored.
 const SONNET_EFFORTS = ['low', 'medium', 'high'];
