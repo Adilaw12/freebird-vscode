@@ -744,6 +744,43 @@ em { font-style: italic; }
 #send:disabled { opacity: 0.15; cursor: not-allowed; }
 #send svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
+/* ── live status, attachments, stop ── */
+#live-status {
+  display: none; align-items: center; gap: 8px;
+  font-size: 0.78em; padding: 0 4px 8px; opacity: 0.8;
+}
+#live-status.on { display: flex; }
+#live-status .ls-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#live-status.warn { color: var(--vscode-errorForeground, #f48771); opacity: 1; }
+#live-status .ls-spin { display: inline-block; width: 12px; height: 12px; opacity: 0.6; }
+#live-status .ls-spin svg { width: 100%; height: 100%; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; }
+#chips { display: none; flex-wrap: wrap; gap: 6px; padding: 8px 12px 0; }
+#chips.has { display: flex; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  padding: 3px 4px 3px 10px; border-radius: 999px; font-size: 0.76em;
+  background: var(--vscode-badge-background, rgba(255,255,255,0.08));
+  color: var(--vscode-badge-foreground, inherit);
+}
+.chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+.chip button { background: none; border: none; color: inherit; cursor: pointer; padding: 0 6px; opacity: 0.7; font-size: 1.1em; line-height: 1; }
+.chip button:hover { opacity: 1; }
+#input-btns { display: flex; align-items: center; gap: 4px; }
+#attach {
+  background: none; border: none; color: var(--vscode-editor-foreground);
+  opacity: 0.5; cursor: pointer; padding: 6px; border-radius: 8px; display: flex;
+}
+#attach:hover { opacity: 1; background: rgba(255,255,255,0.06); }
+#attach svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+#input-container.drag { border-color: var(--vscode-focusBorder, #d97757); box-shadow: 0 0 0 2px rgba(217,119,87,0.35); }
+#send.stop { opacity: 1; background: #d9534f; color: #fff; }
+.approve-all-btn {
+  border: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.1)); border-radius: 6px; padding: 6px 14px;
+  cursor: pointer; font-size: 0.82em; font-family: inherit; font-weight: 500;
+  background: transparent; color: var(--vscode-editor-foreground);
+}
+.approve-all-btn:hover { background: rgba(255,255,255,0.06); }
+
 /* ── autocomplete ── */
 #autocomplete {
   display: none; position: fixed;
@@ -935,17 +972,27 @@ em { font-style: italic; }
 
 <!-- Input (Claude-style container) -->
 <div id="input-row">
+  <div id="live-status" role="status" aria-live="polite">
+    <span class="ls-spin spinning"><svg viewBox="0 0 12 12"><path d="M6 1v3M6 8v3M1 6h3M8 6h3"/></svg></span>
+    <span class="ls-text"></span>
+  </div>
   <div id="input-container">
-    <textarea id="input" rows="1" placeholder="Message Freebird..."></textarea>
+    <div id="chips"></div>
+    <textarea id="input" rows="1" placeholder="Message Freebird... (drop or paste files to attach)"></textarea>
     <div id="input-bottom">
       <div id="input-hints">
         <span>/ commands</span>
         <span>@ files</span>
         <span>Shift+Enter for newline</span>
       </div>
-      <button id="send" title="Send message">
-        <svg viewBox="0 0 16 16"><path d="M3 13V3l10 5z"/></svg>
-      </button>
+      <div id="input-btns">
+        <button id="attach" title="Attach files - images, PDF, Word, PowerPoint, Excel, code (or drop / paste them here)">
+          <svg viewBox="0 0 16 16"><path d="M13.5 7.5l-5.3 5.3a3.2 3.2 0 01-4.5-4.5l5.6-5.6a2.1 2.1 0 013 3L6.6 11.4a1 1 0 01-1.5-1.5l4.9-4.9"/></svg>
+        </button>
+        <button id="send" title="Send message">
+          <svg viewBox="0 0 16 16"><path d="M3 13V3l10 5z"/></svg>
+        </button>
+      </div>
     </div>
   </div>
 </div>
@@ -1213,7 +1260,8 @@ function updateToolStatus(id, state, output, image) {
   scroll();
 }
 
-function addApprovalCard(id, desc, preview) {
+function addApprovalCard(id, desc, preview, canAll) {
+  setLiveStatus('Waiting for your approval (the card is at the bottom of the chat)');
   var card=document.createElement('div'); card.className='approval-card'; card.id='approval-'+id;
   var dv=document.createElement('div'); dv.className='approval-desc'; dv.textContent=desc;
   var pre=document.createElement('pre'); pre.className='approval-preview'; pre.textContent=preview;
@@ -1221,17 +1269,24 @@ function addApprovalCard(id, desc, preview) {
   var ab=document.createElement('button'); ab.className='approve-btn'; ab.textContent='Approve'; ab.onclick=function(){respondApproval(id,true);};
   var rb=document.createElement('button'); rb.className='reject-btn'; rb.textContent='Reject'; rb.onclick=function(){respondApproval(id,false);};
   acts.appendChild(ab); acts.appendChild(rb);
+  if (canAll) {
+    var aa=document.createElement('button'); aa.className='approve-all-btn'; aa.textContent='Approve all edits this chat';
+    aa.title='Stop asking before writing or editing files in this chat. Commands, downloads and git pushes still ask.';
+    aa.onclick=function(){respondApproval(id,true,true);};
+    acts.appendChild(aa);
+  }
   card.appendChild(dv); card.appendChild(pre); card.appendChild(acts);
   msgsEl.appendChild(card); scroll();
 }
 
-function respondApproval(id, approved) {
+function respondApproval(id, approved, always) {
   var acts=document.getElementById('approval-actions-'+id);
   if (acts) {
     var r=document.createElement('span'); r.className='approval-result';
-    r.textContent=approved?'Approved':'Rejected'; acts.replaceWith(r);
+    r.textContent=approved?(always?'Approved - and future edits in this chat':'Approved'):'Rejected'; acts.replaceWith(r);
   }
-  vscode.postMessage({type:'approval-response',id:id,approved:approved});
+  setLiveStatus(approved ? 'Approved - continuing' : 'Rejected - telling the model');
+  vscode.postMessage({type:'approval-response',id:id,approved:approved,always:always===true});
 }
 
 function addCheckpointCard(id, files, unrevertable, isFirstEver) {
@@ -1298,7 +1353,43 @@ function endMsg() {
   currentAssistantText = '';
   stopThinkingAnimation(); currentBubble=null; setBusy(false);
 }
-function setBusy(v) { busy=v; sendBtn.disabled=v; inputEl.disabled=v; if(!v) inputEl.focus(); }
+var SEND_ICON = '<svg viewBox="0 0 16 16"><path d="M3 13V3l10 5z"/></svg>';
+var STOP_ICON = '<svg viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8" rx="1" fill="currentColor" stroke="none"/></svg>';
+function setBusy(v) {
+  busy=v;
+  // The box stays editable while a task runs so you can line up your next message; the send button becomes Stop.
+  sendBtn.disabled=false;
+  sendBtn.classList.toggle('stop', v);
+  sendBtn.title = v ? 'Stop (cancel this task)' : 'Send message';
+  sendBtn.innerHTML = v ? STOP_ICON : SEND_ICON;
+  if (v) liveStatusOn(); else { liveStatusOff(); inputEl.focus(); }
+}
+
+// Always-visible progress line: what Freebird is doing right now, and for how long.
+var liveEl = document.getElementById('live-status');
+var liveTimer = null, liveStart = 0, liveMsg = '', liveFlashTimer = null;
+function renderLive() {
+  var s = Math.floor((Date.now() - liveStart) / 1000);
+  var hint = (s >= 30 && /^(Sending|Reading|Thinking)/.test(liveMsg)) ? ' (large requests can take a minute or two)' : '';
+  liveEl.querySelector('.ls-text').textContent = liveMsg + ' \u00b7 ' + s + 's' + hint;
+}
+function liveStatusOn() {
+  if (liveFlashTimer) { clearTimeout(liveFlashTimer); liveFlashTimer = null; }
+  liveStart = Date.now(); liveMsg = 'Working';
+  liveEl.className = 'on'; renderLive();
+  if (!liveTimer) liveTimer = setInterval(renderLive, 1000);
+}
+function liveStatusOff() {
+  if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+  if (!liveFlashTimer) liveEl.className = '';
+}
+function setLiveStatus(t) { if (!busy || !t) return; liveMsg = t; renderLive(); }
+function flashNote(t) {
+  if (busy) { setLiveStatus(t); return; }
+  liveEl.className = 'on warn'; liveEl.querySelector('.ls-text').textContent = t;
+  if (liveFlashTimer) clearTimeout(liveFlashTimer);
+  liveFlashTimer = setTimeout(function(){ liveFlashTimer = null; if (!busy) liveEl.className = ''; }, 7000);
+}
 function scroll() { msgsEl.scrollTop=msgsEl.scrollHeight; }
 
 // ── Quota tracking ───────────────────────────────────────────────────────────
@@ -1705,11 +1796,71 @@ function updateAC() {
 }
 
 // ── Send ──────────────────────────────────────────────────────────────────────
+// ── Attachments ───────────────────────────────────────────────────────────────
+var attachments = [];           // { name, path } — already copied into .freebird/uploads/ by the extension
+var chipsEl   = document.getElementById('chips');
+var attachBtn = document.getElementById('attach');
+var inputBox  = document.getElementById('input-container');
+function renderChips() {
+  chipsEl.innerHTML = '';
+  attachments.forEach(function(a, i) {
+    var c = document.createElement('span'); c.className = 'chip';
+    var t = document.createElement('span'); t.textContent = a.name; t.title = a.path;
+    var x = document.createElement('button'); x.textContent = '\u00d7'; x.title = 'Remove';
+    x.onclick = function() { attachments.splice(i, 1); renderChips(); };
+    c.appendChild(t); c.appendChild(x); chipsEl.appendChild(c);
+  });
+  chipsEl.className = attachments.length ? 'has' : '';
+}
+function uploadFiles(fileList) {
+  var files = Array.prototype.slice.call(fileList || []).slice(0, 8);
+  if (!files.length) return;
+  var out = [], pending = files.length;
+  flashNote('Attaching ' + files.length + ' file' + (files.length === 1 ? '' : 's') + '...');
+  function done() { if (--pending === 0 && out.length) vscode.postMessage({ type: 'attach-upload', files: out }); }
+  files.forEach(function(f, i) {
+    if (f.size > 25 * 1024 * 1024) { flashNote(f.name + ' is over 25 MB - too large to attach.'); done(); return; }
+    var r = new FileReader();
+    r.onload = function() {
+      var s = String(r.result);
+      var name = f.name && f.name !== 'image.png' ? f.name : 'pasted-image-' + Date.now() + (files.length > 1 ? '-' + i : '') + '.png';
+      out.push({ name: name, data: s.slice(s.indexOf(',') + 1) });
+      done();
+    };
+    r.onerror = function() { flashNote('Could not read ' + f.name); done(); };
+    r.readAsDataURL(f);
+  });
+}
+attachBtn.addEventListener('click', function() { vscode.postMessage({ type: 'attach-pick' }); });
+['dragenter', 'dragover'].forEach(function(ev) {
+  inputBox.addEventListener(ev, function(e) { e.preventDefault(); inputBox.classList.add('drag'); });
+});
+['dragleave', 'drop'].forEach(function(ev) {
+  inputBox.addEventListener(ev, function() { inputBox.classList.remove('drag'); });
+});
+inputBox.addEventListener('drop', function(e) {
+  e.preventDefault();
+  var dt = e.dataTransfer; if (!dt) return;
+  if (dt.files && dt.files.length) { uploadFiles(dt.files); return; }
+  // Dragged from the VS Code Explorer: no File objects, only resource URIs.
+  var uris = (dt.getData('text/uri-list') || dt.getData('text/plain') || '').split(/\r?\n/).filter(function(u) { return /^file:/i.test(u.trim()); });
+  if (uris.length) vscode.postMessage({ type: 'attach-uris', uris: uris.map(function(u) { return u.trim(); }) });
+});
+inputEl.addEventListener('paste', function(e) {
+  var files = e.clipboardData && e.clipboardData.files;
+  if (files && files.length) { e.preventDefault(); uploadFiles(files); }
+});
+
 function send() {
-  var t=inputEl.value.trim(); if (!t||busy) return;
+  if (busy) { setLiveStatus('Stopping...'); vscode.postMessage({type:'stop'}); return; }
+  var t=inputEl.value.trim();
+  if (!t && !attachments.length) return;
+  if (!t) t = 'Please look at the attached file' + (attachments.length === 1 ? '' : 's') + '.';
+  var sending = attachments.map(function(a) { return a.path; });
   inputEl.value=''; inputEl.style.height='';
+  attachments = []; renderChips();
   hideAC(); setBusy(true);
-  vscode.postMessage({type:'send',text:t});
+  vscode.postMessage({type:'send',text:t,attachments:sending});
 }
 
 sendBtn.addEventListener('click',send);
@@ -1723,7 +1874,7 @@ inputEl.addEventListener('keydown',function(e){
     if ((e.key==='Tab')||(e.key==='Enter'&&acIndex>=0)){e.preventDefault();selectAC(acIndex>=0?acIndex:0);return;}
     if (e.key==='Escape'){hideAC();return;}
   }
-  if (e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}
+  if (e.key==='Enter'&&!e.shiftKey){e.preventDefault(); if (!busy) send();}
 });
 inputEl.addEventListener('input',function(){
   inputEl.style.height='';
@@ -1745,7 +1896,22 @@ window.addEventListener('message',function(e){
     case 'set-text':         setCurrentText(m.text); break;
     case 'tool-status':      addToolStatus(m.id,m.state,m.label); break;
     case 'tool-update':      updateToolStatus(m.id,m.state,m.output,m.image); break;
-    case 'approval-request': addApprovalCard(m.id,m.description,m.preview); break;
+    case 'approval-request': addApprovalCard(m.id,m.description,m.preview,m.canApproveAll); break;
+    case 'status':           setLiveStatus(m.text); break;
+    case 'restore': {
+      if (msgsEl.querySelector('.msg')) break; // already showing a conversation — don't draw it twice
+      (m.items || []).forEach(function(it) {
+        if (it.role === 'user') { addUserMsg(it.text); }
+        else { startAssistantMsg(); setCurrentText(it.text); stopThinkingAnimation(); if (currentBubble) currentBubble.classList.remove('typing'); currentBubble = null; }
+      });
+      currentAssistantText = '';
+      addDivider('previous conversation restored');
+      scroll();
+      break;
+    }
+    case 'attachments-added': attachments = attachments.concat(m.files || []); renderChips(); liveEl.className = busy ? 'on' : ''; inputEl.focus(); break;
+    case 'attach-error':     flashNote(m.message); break;
+    case 'notice':           flashNote(m.text); break;
     case 'checkpoint-ready':    addCheckpointCard(m.id,m.files,m.unrevertable,m.isFirstEver); break;
     case 'multifile-cta':       addMultiFileCtaCard(m.fileCount, m.agentRunsLeft); break;
     case 'agent-trial-nudge':   showAgentTrialNudge(m.runsLeft); break;
@@ -1792,6 +1958,10 @@ window.addEventListener('message',function(e){
     }
   }
 });
+
+// Tell the extension the page is listening. Anything it posted before this point (the licence status above all)
+// was dropped, which left a Pro user looking at the Free screen with an "Enter license key" link.
+vscode.postMessage({type:'ready'});
 </script>
 </body>
 </html>

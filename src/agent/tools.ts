@@ -16,6 +16,9 @@ import { ToolSchema } from '../ai/provider';
 import { searchCodebaseSemantic } from '../index/indexer';
 import * as checkpoint from './checkpoint';
 import { isPathIgnored, ignoreBlockMessage } from './ignoreCheck';
+import { isSpecialDocument, readDocument, looksBinary } from './documents';
+import { buildPptx, DeckSpec, SlideSpec } from './pptx';
+import { appendProjectMemory } from './memory';
 
 export interface ToolCall {
     action: string;
@@ -35,10 +38,14 @@ export interface ToolResult {
 export const NATIVE_TOOL_SCHEMAS: ToolSchema[] = [
     {
         name: 'read_file',
-        description: 'Read the contents of a file in the workspace.',
+        description: 'Read a file in the workspace. Handles source/text files, and also IMAGES (png, jpg, gif, webp - the picture is attached so you can look at it and read any text in it), Word (.docx), PowerPoint (.pptx), Excel (.xlsx) and PDF files (text is extracted). Use startLine/endLine to read part of a large text file. Files the user attaches in chat are saved under .freebird/uploads/ - read them from there.',
         input_schema: {
             type: 'object',
-            properties: { path: { type: 'string', description: 'Workspace-relative file path' } },
+            properties: {
+                path: { type: 'string', description: 'Workspace-relative file path' },
+                startLine: { type: 'number', description: 'Optional 1-based first line to return (text files)' },
+                endLine: { type: 'number', description: 'Optional 1-based last line to return (text files)' }
+            },
             required: ['path']
         }
     },
@@ -234,6 +241,34 @@ export const NATIVE_TOOL_SCHEMAS: ToolSchema[] = [
         }
     },
     {
+        name: 'remember',
+        description: 'Save one durable note to the project memory file (.freebird/memory.md) so you still know it in future sessions. Needs NO approval and is instant - call it yourself, without being asked, whenever the user states a lasting preference, convention, decision, fact about the project or audience, or when you finish a meaningful chunk of work that a later session would need to continue (what was done, where files are, what is left). One short, self-contained line per note. Do not save secrets, passwords or API keys.',
+        input_schema: {
+            type: 'object',
+            properties: { note: { type: 'string', description: 'One short, self-contained line, e.g. "Conference deck for TOMRG 2026 lives in decks/tomrg-2026.pptx; audience is transport academics"' } },
+            required: ['note']
+        }
+    },
+    {
+        name: 'create_presentation',
+        description: 'Build a real, editable PowerPoint (.pptx) slide deck from structured content. You supply WHAT goes on each slide; layout, font sizing, colours and the file format are handled for you, so a whole deck is ONE short call (do not write the file by hand with write_file/run_command). Slide layouts: "title" (opening), "section" (divider), "bullets" (title + bullet points; indent a sub-point with two leading spaces; **bold** works inline), "two-column" (leftTitle/left + rightTitle/right), "image" (image path + caption; a workspace image such as one the user attached), "quote" (quote + attribution), "stats" (up to 4 {value,label} big numbers), "closing" (thank-you / contact). Keep slides sparse: 3-5 bullets of under ~12 words, one idea per slide, and put the full explanation in "notes" (speaker notes). Typical talk: title, agenda, 1-3 slides per major point, a stats or quote slide for emphasis, a section divider between parts, a closing slide. Theme colours are hex without #. Requires user approval; shows the slide outline.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                path: { type: 'string', description: 'Workspace-relative output path ending in .pptx, e.g. decks/conference-talk.pptx' },
+                title: { type: 'string', description: 'Deck title (file metadata)' },
+                author: { type: 'string', description: 'Optional author name' },
+                theme: { type: 'object', description: '{ primary?: "1F3A5F", accent?: "E8821E", text?: "1E2933", font?: "Calibri" } - choose colours that suit the topic (primary is the dark title-slide colour)' },
+                slides: {
+                    type: 'array',
+                    description: 'Slides in order. Each: { layout?, title?, subtitle?, bullets?: string[], leftTitle?, left?: string[], rightTitle?, right?: string[], image?: "path", caption?, quote?, attribution?, stats?: [{value,label}], notes? }',
+                    items: { type: 'object' }
+                }
+            },
+            required: ['path', 'title', 'slides']
+        }
+    },
+    {
         name: 'flag_related_locations',
         description: 'Call this once, near the end of a turn where you edited files, ONLY if you noticed other specific places in the codebase that likely need a matching change but that you did NOT edit (e.g. another call site of a function you changed, a test asserting the old behavior, a doc/comment describing it, a duplicated implementation elsewhere). Skip it entirely if there\'s nothing genuinely related left unaddressed — do not call this just to say "no related locations found". Not a substitute for editing files you were actually asked to change.',
         input_schema: {
@@ -268,7 +303,9 @@ You have access to tools to read and modify the codebase. To invoke a tool write
 \`\`\`
 
 AVAILABLE TOOLS:
-- read_file     {"action":"read_file","path":"src/main.ts"}                                       read a file
+- read_file     {"action":"read_file","path":"src/main.ts"}                                       read a file — also opens images (you SEE them), .docx, .pptx, .xlsx and .pdf (text extracted); optional "startLine"/"endLine"; user attachments are in .freebird/uploads/
+- remember      {"action":"remember","note":"Audience is transport academics; deck lives in decks/talk.pptx"}   save one durable line to project memory — no approval, call it yourself
+- create_presentation {"action":"create_presentation","path":"decks/talk.pptx","title":"Talk title","theme":{"primary":"0B1F4D","accent":"F28C28"},"slides":[{"layout":"title","title":"Big idea","subtitle":"Speaker · Venue · Date","notes":"what to say"},{"layout":"bullets","title":"Point","bullets":["Short line","**Bold** key term","  sub-point"],"notes":"..."},{"layout":"two-column","title":"A vs B","leftTitle":"A","left":["..."],"rightTitle":"B","right":["..."]},{"layout":"stats","title":"In numbers","stats":[{"value":"1.19M","label":"deaths a year"}]},{"layout":"quote","quote":"...","attribution":"..."},{"layout":"image","title":"Photo","image":".freebird/uploads/pic.png","caption":"..."},{"layout":"section","title":"Part 2"},{"layout":"closing","title":"Thank you","subtitle":"contact details"}]}   build a real editable PowerPoint deck in ONE call — use this for ANY slide deck, never hand-write a .pptx
 - list_files    {"action":"list_files","pattern":"**/*.ts"}                                       list files by glob
 - search_code   {"action":"search_code","query":"myFunc","filePattern":"*.ts"}                    grep across files (exact text/regex)
 - search_codebase_semantic {"action":"search_codebase_semantic","query":"how does auth expiry work"}  search by meaning, not exact text — use for concepts/behavior, not known symbol names
@@ -301,10 +338,16 @@ GUIDELINES:
 - All paths are relative to the workspace root
 - When the user asks you to build, create, make, scaffold, or set up something (e.g. "make a website", "create a script that..."), use write_file to create the actual files in their workspace — don't just print example code in chat. Only show inline snippets when they ask for an explanation, example, or something not meant to be saved.
 - When creating a website, write every file the HTML references (e.g. style.css, script.js, image placeholders) — never leave a <link> or <script> pointing at a file you didn't create
-- To remember things across sessions (project conventions, architecture decisions, user preferences, in-progress work), write short bullet notes to .freebird/memory.md using write_file or edit_file. It's automatically loaded into your context next time — keep it concise and up to date, don't let it grow unbounded.
+- To remember things across sessions (project conventions, architecture decisions, user preferences, in-progress work), call the remember tool with one short line. It's saved instantly with no approval and automatically loaded into your context next time. Never hand-edit .freebird/memory.md.
 - .freebird/rules.md, if present, is already loaded into your system prompt as "Project rules" — it's the user's own conventions file. Never write to or edit it yourself, even if asked to "remember" something; that goes in memory.md instead.
 - Before your final summary, briefly consider whether the edit you made has unedited siblings elsewhere (another call site, a test, a doc) — if you're genuinely unsure, a quick search_code/search_codebase_semantic call is worth it. Call flag_related_locations once if you find real ones; otherwise say nothing about it.
 - After all changes are done, write a short summary of what you did
+- NEVER go silent. Before a multi-step task, reply with one or two plain sentences on what you are about to do, and after each major step add a one-line progress note. If a step will take a while (a big file, a whole deck), say so first.
+- Never ask "shall I proceed?" or "do you approve?" in text. Writes, edits and commands already show the user an approval card — just make the tool call and let the card ask.
+- Keep each tool call small: a single reply can only hold a limited amount of output, and a call cut off mid-way is lost. Split big files into several write_file/edit_file calls of under ~150 lines; for slide decks use create_presentation.
+- When the user attaches files (listed as "[The user attached …]"), open each with read_file FIRST. For a conference flyer, poster, brief or similar, extract the real details (title, theme, dates, venue, speakers, sub-themes) and build from them rather than inventing.
+- Use remember on your own — without being asked — whenever the user states a lasting preference, decision or fact about the project/audience, and when you finish a meaningful piece of work (what exists, where it is, what remains). One short line per note; never save secrets.
+- For a presentation: read any attached brief, plan the story in a short numbered outline (message it to the user), then call create_presentation once, then summarise the slides and offer specific tweaks. Put the detailed talking points in each slide's "notes".
 `;
 
 export const NATIVE_TOOL_GUIDELINES = `GUIDELINES:
@@ -318,10 +361,16 @@ export const NATIVE_TOOL_GUIDELINES = `GUIDELINES:
 - All paths are relative to the workspace root.
 - When the user asks you to build/create something, use write_file to create actual files — don't just print code.
 - When creating a website, write every file the HTML references.
-- To remember things across sessions, write notes to .freebird/memory.md.
+- To remember things across sessions, call the remember tool (no approval needed); never hand-edit .freebird/memory.md.
 - .freebird/rules.md, if present, is already loaded as "Project rules" — the user's own file. Never write to it; use memory.md instead.
 - If your edit has real unedited siblings elsewhere (another call site, a test, a doc), call flag_related_locations once before your summary. Don't call it just to say nothing was found.
-- After all changes, write a short summary.`;
+- After all changes, write a short summary.
+- NEVER go silent. Before a multi-step task, say in a sentence or two what you are about to do, and after each major step add a one-line progress note. If a step will take a while, say so first.
+- Never ask "shall I proceed?" in text — writes, edits and commands already show the user an approval card. Just make the tool call.
+- Keep each tool call small (a call cut off by the output limit is lost): split big files into several calls; for slide decks use create_presentation.
+- read_file opens images (you see them), .docx, .pptx, .xlsx and .pdf. Files the user attaches are saved under .freebird/uploads/ — open each one with read_file first and build from the real details in it.
+- Use remember on your own, without being asked, for lasting preferences, decisions and project facts, and when you finish a meaningful piece of work. One short line per note; never save secrets.
+- For a presentation: read any attached brief, outline the story in a short numbered list, then call create_presentation once and offer specific tweaks.`;
 
 export function parseToolCalls(text: string): ToolCall[] {
     const results: ToolCall[] = [];
@@ -443,6 +492,8 @@ export async function executeToolCall(
             case 'copy_file':      return await copyFileTool(tool, onApprovalNeeded, turnId);
             case 'git_status':     return { success: true, output: await git.getStatus() };
             case 'git_push':       return await gitPushTool(git, onApprovalNeeded, turnId);
+            case 'remember':       return rememberTool(tool);
+            case 'create_presentation': return await createPresentationTool(tool, onApprovalNeeded, turnId);
             case 'flag_related_locations': return flagRelatedLocationsTool(tool);
             default:
                 return { success: false, output: `Unknown tool action: "${tool.action}"` };
@@ -460,7 +511,35 @@ async function readFileTool(tool: ToolCall): Promise<ToolResult> {
     }
 
     const full = resolveWorkspacePath(relPath);
-    const content = fs.readFileSync(full, 'utf8');
+    if (!fs.existsSync(full)) {
+        return { success: false, output: `File not found: ${relPath}. Use list_files to find the right path (attachments are under .freebird/uploads/).` };
+    }
+    if (fs.statSync(full).isDirectory()) {
+        return { success: false, output: `${relPath} is a folder, not a file. Use list_files to see what is inside.` };
+    }
+
+    if (isSpecialDocument(full)) {
+        const doc = readDocument(full);
+        if (doc.kind === 'image') {
+            return { success: true, output: doc.note, image: { mimeType: doc.mimeType, base64: doc.base64 } };
+        }
+        return { success: true, output: truncate(doc.text, MAX_READ_CHARS) + (doc.note ? `\n\n(${doc.note})` : '') };
+    }
+
+    const raw = fs.readFileSync(full);
+    if (looksBinary(raw)) {
+        return { success: false, output: `${relPath} is a binary file (not text), so it can't be read as text. If it is a document or image type, ask the user to convert it to .docx, .pptx, .xlsx, .pdf, .png or .jpg.` };
+    }
+    let content = raw.toString('utf8');
+
+    const start = Number(tool.startLine), end = Number(tool.endLine);
+    if (Number.isFinite(start) || Number.isFinite(end)) {
+        const lines = content.split('\n');
+        const from = Math.max(1, Number.isFinite(start) ? start : 1);
+        const to = Math.min(lines.length, Number.isFinite(end) ? end : lines.length);
+        content = lines.slice(from - 1, to).map((l, i) => `${from + i}\t${l}`).join('\n');
+        return { success: true, output: truncate(content, MAX_READ_CHARS) + `\n\n(lines ${from}-${to} of ${lines.length})` };
+    }
     return { success: true, output: truncate(content, MAX_READ_CHARS) };
 }
 
@@ -1245,6 +1324,97 @@ async function gitPushTool(git: GitService, onApprovalNeeded: ApprovalFn, turnId
 
     await git.push();
     return { success: true, output: 'Pushed to remote.' };
+}
+
+function rememberTool(tool: ToolCall): ToolResult {
+    const r = appendProjectMemory(String(tool.note ?? ''));
+    return { success: r.ok, output: r.message };
+}
+
+const IMAGE_EXT_KIND: Record<string, 'png' | 'jpeg' | 'gif'> = { '.png': 'png', '.jpg': 'jpeg', '.jpeg': 'jpeg', '.gif': 'gif' };
+
+function asStrings(v: unknown): string[] | undefined {
+    if (typeof v === 'string') return v.split('\n').filter(l => l.trim());
+    return Array.isArray(v) ? v.map(x => String(x)).filter(l => l.trim()) : undefined;
+}
+
+async function createPresentationTool(tool: ToolCall, onApprovalNeeded: ApprovalFn, turnId: string): Promise<ToolResult> {
+    let relPath = String(tool.path ?? '').trim();
+    if (!relPath) return { success: false, output: 'create_presentation requires "path" (e.g. decks/talk.pptx).' };
+    if (!/\.pptx$/i.test(relPath)) relPath += '.pptx';
+    if (isPathIgnored(getWorkspaceRoot(), relPath)) return { success: false, output: ignoreBlockMessage(relPath, 'write') };
+    if (!Array.isArray(tool.slides) || tool.slides.length === 0) {
+        return { success: false, output: 'create_presentation requires a non-empty "slides" array.' };
+    }
+    if (tool.slides.length > 80) return { success: false, output: 'Too many slides (max 80). Build the deck in parts or tighten it.' };
+
+    const slides: SlideSpec[] = [];
+    const problems: string[] = [];
+    (tool.slides as Record<string, unknown>[]).forEach((raw, i) => {
+        if (!raw || typeof raw !== 'object') { problems.push(`slide ${i + 1} is not an object`); return; }
+        const slide: SlideSpec = {
+            layout: typeof raw.layout === 'string' ? raw.layout as SlideSpec['layout'] : undefined,
+            title: raw.title !== undefined ? String(raw.title) : undefined,
+            subtitle: raw.subtitle !== undefined ? String(raw.subtitle) : undefined,
+            bullets: asStrings(raw.bullets),
+            leftTitle: raw.leftTitle !== undefined ? String(raw.leftTitle) : undefined,
+            left: asStrings(raw.left),
+            rightTitle: raw.rightTitle !== undefined ? String(raw.rightTitle) : undefined,
+            right: asStrings(raw.right),
+            caption: raw.caption !== undefined ? String(raw.caption) : undefined,
+            quote: raw.quote !== undefined ? String(raw.quote) : undefined,
+            attribution: raw.attribution !== undefined ? String(raw.attribution) : undefined,
+            notes: raw.notes !== undefined ? String(raw.notes) : undefined,
+            stats: Array.isArray(raw.stats)
+                ? (raw.stats as Record<string, unknown>[]).map(st => ({ value: String(st?.value ?? ''), label: String(st?.label ?? '') }))
+                : undefined
+        };
+        if (typeof raw.image === 'string' && raw.image.trim()) {
+            const imgPath = raw.image.trim();
+            try {
+                if (isPathIgnored(getWorkspaceRoot(), imgPath)) throw new Error('that path is blocked by .freebirdignore');
+                const imgFull = resolveWorkspacePath(imgPath);
+                const kind = IMAGE_EXT_KIND[path.extname(imgFull).toLowerCase()];
+                if (!kind) throw new Error('only png, jpg and gif images can be placed on slides');
+                slide.image = { data: fs.readFileSync(imgFull), ext: kind };
+                slide.layout = slide.layout ?? 'image';
+            } catch (err: any) {
+                problems.push(`slide ${i + 1}: image "${imgPath}" not used (${err?.message ?? err})`);
+            }
+        }
+        slides.push(slide);
+    });
+
+    const full = resolveWorkspacePath(relPath);
+    const exists = fs.existsSync(full);
+    const outline = slides.map((s, i) => `${i + 1}. [${s.layout ?? 'auto'}] ${s.title ?? s.quote?.slice(0, 60) ?? '(untitled)'}`).join('\n');
+    const approved = await onApprovalNeeded(
+        approvalId('create_presentation'),
+        `${exists ? 'Overwrite' : 'Create'} presentation ${relPath} (${slides.length} slides)`,
+        truncate(outline, 2000)
+    );
+    if (!approved) return { success: false, output: 'User rejected this presentation.' };
+
+    const deck: DeckSpec = {
+        title: String(tool.title ?? 'Presentation'),
+        author: tool.author !== undefined ? String(tool.author) : undefined,
+        theme: tool.theme && typeof tool.theme === 'object' ? tool.theme as DeckSpec['theme'] : undefined,
+        slides
+    };
+    const bytes = buildPptx(deck);
+
+    checkpoint.recordPreState(turnId, relPath, {
+        existed: exists,
+        content: exists ? fs.readFileSync(full).toString('base64') : undefined
+    });
+    fs.mkdirSync(path.dirname(full), { recursive: true });
+    fs.writeFileSync(full, bytes);
+
+    return {
+        success: true,
+        output: `Created ${relPath}: ${slides.length} slides, ${Math.round(bytes.length / 1024)} KB. Open it in PowerPoint, Keynote or Google Slides to edit.` +
+            (problems.length ? `\nNote: ${problems.join('; ')}` : '')
+    };
 }
 
 // Not a full Cursor-style "jump to next edit" (that needs a custom-trained

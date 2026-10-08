@@ -46,7 +46,8 @@ const suites = [
     require('./agent-trial.test.js'),
     require('./template-welcome.test.js'),
     require('./api-keys.test.js'),
-    require('./usage-stats.test.js')
+    require('./usage-stats.test.js'),
+    require('./documents.test.js')
 ];
 
 (async () => {

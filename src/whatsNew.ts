@@ -27,6 +27,18 @@ const RELEASE_NOTES: Record<string, ReleaseNotes> = {
         heading: 'What’s new in Freebird 0.15',
         highlights: [
             {
+                title: 'Attach files — and Freebird can read them',
+                body: 'Click the paperclip, drop files onto the chat, or paste a screenshot. Freebird looks at images (a flyer, a whiteboard photo, a UI mock-up) and reads PDF, Word, PowerPoint and Excel files, so you can say “build a talk from this brief” without copying text out first.',
+            },
+            {
+                title: 'Build PowerPoint decks',
+                body: 'Ask for a slide deck and Freebird creates a real, editable .pptx — title, section, bullet, two-column, image, quote and statistics slides, with speaker notes — in one step instead of a long wait.',
+            },
+            {
+                title: 'Always see what it is doing — and stop it',
+                body: 'A live line above the box shows the current step and how long it has run. The send button becomes Stop during a task, “Approve all edits this chat” ends repeated prompts, and your conversation is now restored when you reopen the project. Freebird also saves lasting notes to project memory by itself.',
+            },
+            {
                 title: 'Floor plans and building layouts',
                 body: 'Ask for a house, office, school, clinic, shop or hotel plan. Freebird works from a structured brief, checks the design like a reviewer would — every room reachable by door, windows on every living space, sensible room sizes — then draws it with measured dimensions, door swings and a scale bar. It is a concept sketch, not a construction drawing.',
             },
@@ -115,6 +127,9 @@ export function maybeShowWhatsNew(context: vscode.ExtensionContext): void {
     if (lastSeen === undefined && !isExistingUser) return; // fresh install
     if (lastSeen !== undefined && minorOf(lastSeen) === minorOf(current)) return;
     if (!vscode.workspace.getConfiguration('freebird').get<boolean>('showWhatsNew', true)) return;
+    // The dev host records the version on its first launch, so by the time anyone looks the page is already
+    // "seen", and auto-showing on every rebuild would be noise. Preview it with "Freebird: Show What's New".
+    if (context.extensionMode === vscode.ExtensionMode.Development) return;
 
     showWhatsNew(context, true);
 }

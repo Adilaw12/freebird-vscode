@@ -16,7 +16,8 @@ import { recordEditUsed, recordAgentRun, getUsageStats } from '../license/stats'
 import {
     getAgentTrialRunsLeft, recordAgentTrialRun, markAgentTrialExhausted, AGENT_TRIAL_MAX_ITERATIONS
 } from '../license/agentTrial';
-import { readProjectMemory, clearProjectMemory, MEMORY_RELATIVE_PATH } from '../agent/memory';
+import { readProjectMemory, clearProjectMemory, appendProjectMemory, MEMORY_RELATIVE_PATH } from '../agent/memory';
+import { readDocument, isSpecialDocument } from '../agent/documents';
 import { readProjectRules, RULES_RELATIVE_PATH } from '../agent/rules';
 import { finalizeTurn, restoreCheckpoint, checkpointsRootFor } from '../agent/checkpoint';
 import { trackEvent, getMachineId } from '../telemetry';
@@ -103,6 +104,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     // existing loose trust level (e.g. quota is trusted from server headers).
     private pendingTemplateId: string | undefined;
     private readonly toolStartedAt = new Map<string, number>();
+    /** Aborts the running turn when the Stop button is pressed. */
+    private abortCtl: AbortController | undefined;
+    /** "Approve all edits this chat" — file writes only; commands, pushes and downloads still ask. */
+    private autoApproveEdits = false;
+    private lastProgressLen = 0;
+    /** What the transcript shows (user messages and assistant text) — kept so a reload can redraw the conversation. */
+    private displayLog: { role: 'user' | 'assistant'; text: string }[] = [];
+    private static readonly CHAT_KEY = 'freebird.savedChat';
+    private static readonly CHAT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
     constructor(context: vscode.ExtensionContext, git: GitService) {
         this.context = context;
@@ -116,6 +126,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         _token: vscode.CancellationToken
     ): void {
         this.view = webviewView;
+        this.loadSavedChat();
         const mediaRoot = vscode.Uri.joinPath(this.context.extensionUri, 'media');
         webviewView.webview.options = { enableScripts: true, localResourceRoots: [mediaRoot] };
 
@@ -142,14 +153,43 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             switch (msg.type) {
                 case 'send':
                     trackEvent('message_sent');
-                    await this.handleMessage(msg.text);
+                    await this.handleMessage(msg.text, Array.isArray(msg.attachments) ? msg.attachments.map(String) : []);
+                    break;
+                case 'ready':
+                    // The webview is now listening: resend what was posted before it could hear.
+                    if (this.displayLog.length) this.post({ type: 'restore', items: this.displayLog });
+                    this.showLicenseStatus();
+                    this.sendWorkspaceFiles();
+                    break;
+                case 'stop':
+                    trackEvent('stop_clicked');
+                    this.abortCtl?.abort();
+                    // A pending approval card would otherwise keep the turn waiting forever.
+                    for (const resolve of this.pendingApprovals.values()) resolve(false);
+                    this.pendingApprovals.clear();
+                    break;
+                case 'attach-pick':
+                    await this.pickAttachments();
+                    break;
+                case 'attach-uris':
+                    this.attachUris(Array.isArray(msg.uris) ? msg.uris.map(String) : []);
+                    break;
+                case 'attach-upload':
+                    this.saveUploadedFiles(Array.isArray(msg.files) ? msg.files : []);
                     break;
                 case 'clear':
                     this.history = [];
+                    this.displayLog = [];
+                    this.autoApproveEdits = false;
+                    this.persistChat();
                     this.post({ type: 'cleared' });
                     break;
                 case 'approval-response': {
                     const resolve = this.pendingApprovals.get(msg.id);
+                    if (msg.always === true) {
+                        this.autoApproveEdits = true;
+                        trackEvent('approve_all_edits');
+                    }
                     if (resolve) {
                         resolve(msg.approved as boolean);
                         this.pendingApprovals.delete(msg.id);
@@ -277,6 +317,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         });
         if (status.isPro) {
             this.post({ type: 'usage-stats', ...getUsageStats(this.context) });
+        } else if (licenseKey && status.reason) {
+            // A key is saved but not granting Pro. Say why — silently showing Free reads as "it forgot my licence".
+            this.post({
+                type: 'notice',
+                text: status.reason === 'offline'
+                    ? 'Could not reach the Freebird license server, so Pro is paused until you are back online. Your key is still saved.'
+                    : 'Your saved license key is not active (it may have expired or been cancelled). Use "Freebird: Activate License" to enter a new key, or email support@ten-labs.com.au.'
+            });
         }
     }
 
@@ -323,7 +371,143 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         } catch { /* no workspace open */ }
     }
 
-    private async handleMessage(text: string) {
+    // ── Conversation persistence ─────────────────────────────────────────────
+    // Per project (workspaceState), so reopening a folder or reloading the window brings the conversation
+    // back instead of an empty chat. Stored text is capped so a long session cannot bloat VS Code's state.
+
+    private loadSavedChat(): void {
+        if (this.displayLog.length || this.history.length) return;
+        const saved = this.context.workspaceState.get<{ history: Message[]; log: { role: 'user' | 'assistant'; text: string }[]; savedAt: number }>(ChatViewProvider.CHAT_KEY);
+        if (!saved || Date.now() - saved.savedAt > ChatViewProvider.CHAT_MAX_AGE_MS) return;
+        this.history = Array.isArray(saved.history) ? saved.history : [];
+        this.displayLog = Array.isArray(saved.log) ? saved.log : [];
+    }
+
+    private persistChat(): void {
+        const cap = (s: string, n: number) => (s.length > n ? s.slice(0, n) + '\n… (shortened)' : s);
+        let log = this.displayLog.slice(-60).map(m => ({ role: m.role, text: cap(m.text, 8000) }));
+        this.displayLog = log;
+        const history = this.history.map(m => ({ role: m.role, content: cap(m.content, 6000) }));
+        if (!log.length && !history.length) {
+            void this.context.workspaceState.update(ChatViewProvider.CHAT_KEY, undefined);
+            return;
+        }
+        while (log.length > 4 && JSON.stringify({ history, log }).length > 250_000) log = log.slice(2);
+        void this.context.workspaceState.update(ChatViewProvider.CHAT_KEY, { history, log, savedAt: Date.now() });
+    }
+
+    // ── Attachments ──────────────────────────────────────────────────────────
+    // Files the user attaches are copied into <workspace>/.freebird/uploads/ so the agent can open them with
+    // read_file (images are shown to the model, Office/PDF files are text-extracted). Copying also fixes the
+    // old failure where a file outside the workspace simply could not be read.
+
+    private uploadsDir(): string | undefined {
+        const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        return root ? path.join(root, '.freebird', 'uploads') : undefined;
+    }
+
+    private uniqueUploadName(dir: string, name: string): string {
+        const safe = path.basename(name).replace(/[^\w.\- ()]/g, '_') || 'file';
+        const ext = path.extname(safe);
+        const stem = safe.slice(0, safe.length - ext.length);
+        let candidate = safe;
+        for (let n = 2; fs.existsSync(path.join(dir, candidate)); n++) candidate = `${stem}-${n}${ext}`;
+        return candidate;
+    }
+
+    private reportAttachError(message: string) {
+        this.post({ type: 'attach-error', message });
+    }
+
+    private async pickAttachments(): Promise<void> {
+        if (!this.uploadsDir()) { this.reportAttachError('Open a folder first - Freebird saves attachments inside your workspace.'); return; }
+        const picked = await vscode.window.showOpenDialog({
+            canSelectMany: true,
+            openLabel: 'Attach',
+            title: 'Attach files for Freebird (images, PDF, Word, PowerPoint, Excel, text, code)'
+        });
+        if (picked?.length) this.copyIntoUploads(picked.map(u => u.fsPath));
+    }
+
+    /** Files dragged in from the VS Code Explorer arrive as file:// URIs rather than File objects. */
+    private attachUris(uris: string[]): void {
+        const paths: string[] = [];
+        for (const u of uris.slice(0, 8)) {
+            try { paths.push(vscode.Uri.parse(u).fsPath); } catch { /* skip unparsable */ }
+        }
+        this.copyIntoUploads(paths);
+    }
+
+    private copyIntoUploads(sources: string[]): void {
+        const dir = this.uploadsDir();
+        if (!dir) { this.reportAttachError('Open a folder first - Freebird saves attachments inside your workspace.'); return; }
+        fs.mkdirSync(dir, { recursive: true });
+        const added: { name: string; path: string }[] = [];
+        for (const src of sources.slice(0, 8)) {
+            try {
+                const stat = fs.statSync(src);
+                if (!stat.isFile()) { this.reportAttachError(`${path.basename(src)} is a folder - attach files, or mention a folder with @.`); continue; }
+                if (stat.size > 25 * 1024 * 1024) { this.reportAttachError(`${path.basename(src)} is over 25 MB - too large to attach.`); continue; }
+                const name = this.uniqueUploadName(dir, src);
+                fs.copyFileSync(src, path.join(dir, name));
+                added.push({ name, path: `.freebird/uploads/${name}` });
+            } catch (err: any) {
+                this.reportAttachError(`Could not attach ${path.basename(src)}: ${err?.message ?? err}`);
+            }
+        }
+        if (added.length) { trackEvent('files_attached', String(added.length)); this.post({ type: 'attachments-added', files: added }); }
+    }
+
+    private saveUploadedFiles(files: { name?: string; data?: string }[]): void {
+        const dir = this.uploadsDir();
+        if (!dir) { this.reportAttachError('Open a folder first - Freebird saves attachments inside your workspace.'); return; }
+        fs.mkdirSync(dir, { recursive: true });
+        const added: { name: string; path: string }[] = [];
+        for (const f of files.slice(0, 8)) {
+            try {
+                if (typeof f?.data !== 'string' || !f.data) continue;
+                const buf = Buffer.from(f.data, 'base64');
+                if (buf.length > 25 * 1024 * 1024) { this.reportAttachError(`${f.name ?? 'file'} is over 25 MB - too large to attach.`); continue; }
+                const name = this.uniqueUploadName(dir, f.name || 'pasted-image.png');
+                fs.writeFileSync(path.join(dir, name), buf);
+                added.push({ name, path: `.freebird/uploads/${name}` });
+            } catch (err: any) {
+                this.reportAttachError(`Could not attach ${f?.name ?? 'file'}: ${err?.message ?? err}`);
+            }
+        }
+        if (added.length) { trackEvent('files_attached', String(added.length)); this.post({ type: 'attachments-added', files: added }); }
+    }
+
+    /** Text appended to the user's message so the model knows what was attached and how to open it. */
+    private describeAttachments(paths: string[], isPro: boolean): string {
+        if (!paths.length) return '';
+        const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (isPro) {
+            return `\n\n[The user attached ${paths.length === 1 ? 'a file' : paths.length + ' files'}: ${paths.join(', ')}. ` +
+                `Open ${paths.length === 1 ? 'it' : 'them'} with read_file first - images are shown to you directly, PDF/Word/PowerPoint/Excel files are text-extracted.]`;
+        }
+        // Free chat has no tools: inline what can be read as text, say plainly what cannot.
+        let out = '';
+        for (const p of paths) {
+            const name = path.basename(p);
+            try {
+                const full = root ? path.join(root, p) : p;
+                if (isSpecialDocument(full)) {
+                    const doc = readDocument(full);
+                    out += doc.kind === 'text'
+                        ? `\n\n--- Attached file: ${name} ---\n${doc.text.slice(0, 12_000)}${doc.text.length > 12_000 ? '\n... (truncated)' : ''}`
+                        : `\n\n[Attached image ${name}: looking at images needs Agent mode (Pro, or a free Agent run with /agent).]`;
+                } else {
+                    out += `\n\n--- Attached file: ${name} ---\n${fs.readFileSync(full, 'utf8').slice(0, 12_000)}`;
+                }
+            } catch (err: any) {
+                out += `\n\n[Attached file ${name} could not be read: ${err?.message ?? err}]`;
+            }
+        }
+        return out;
+    }
+
+    private async handleMessage(text: string, attachments: string[] = []) {
         const trimmed = text.trim();
         // Consumed exactly once per call, regardless of which branch below
         // actually runs — see the field's own comment for why.
@@ -335,7 +519,19 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         if (trimmed === '/status') { await this.handleStatus(); return; }
         if (trimmed === '/clear')  {
             this.history = [];
+            this.displayLog = [];
+            this.autoApproveEdits = false;
+            this.persistChat();
             this.post({ type: 'cleared' });
+            return;
+        }
+        if (/^\/remember\b/i.test(trimmed)) {
+            const note = trimmed.replace(/^\/remember\s*/i, '');
+            this.post({ type: 'user', text: trimmed });
+            this.post({ type: 'assistant-start' });
+            const r = note ? appendProjectMemory(note) : { ok: false, message: 'Usage: `/remember <something to keep across sessions>`' };
+            this.post({ type: 'set-text', text: r.ok ? `Remembered. ${r.message}` : r.message });
+            this.post({ type: 'assistant-end' });
             return;
         }
         if (trimmed === '/memory') {
@@ -392,6 +588,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 '`/push` — push current branch to remote',
                 '`/status` — show git status',
                 '`/rules` — show your project conventions from .freebird/rules.md',
+                '`/remember <note>` — save a note to project memory right now',
                 '`/memory` — show what Freebird remembers about this project',
                 '`/forget` — clear project memory',
                 '`/agent <request>` — run a task in Agent mode (free users get a few free runs)',
@@ -436,10 +633,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             return;
         }
 
-        const { cleanText, mentionContext, resolvedCount } = await resolveMentions(trimmed);
-        this.post({ type: 'user', text: trimmed });
-
+        // Echo the message first: the license check below can take seconds on a stale cache, and a chat that
+        // doesn't acknowledge what you sent looks dead.
+        const shownText = attachments.length ? `${trimmed}\n\nAttached: ${attachments.map(a => path.basename(a)).join(', ')}` : trimmed;
+        this.post({ type: 'user', text: shownText });
+        this.displayLog.push({ role: 'user', text: shownText });
+        this.post({ type: 'status', text: 'Checking your plan…' });
+        const mentioned = await resolveMentions(trimmed);
         const license = await getLicenseStatus(this.context);
+        const cleanText = mentioned.cleanText + this.describeAttachments(attachments, license.isPro);
+        const { mentionContext, resolvedCount } = mentioned;
+
         this.sessionMessageCount++;
 
         // "/agent <request>" — explicit Agent-mode request. Pro users already
@@ -550,6 +754,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         let changedFiles = false;
         let failureCode: string | undefined;
+        this.abortCtl = new AbortController();
+        this.lastProgressLen = 0;
         try {
             const newHistory = await runAgentLoop({
                 userMessage: fullText,
@@ -561,12 +767,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 // Free trial runs bill the capped server-side trial budget (cloud
                 // only — BYOK runs are on the user's own key) and stop earlier.
                 ...(trial && { agentTrial: !trial.byok, maxIterations: AGENT_TRIAL_MAX_ITERATIONS }),
+                signal: this.abortCtl.signal,
                 onEvent: (event: AgentEvent) => this.handleAgentEvent(event),
-                onApprovalNeeded: (id, description, preview) =>
-                    new Promise<boolean>(resolve => {
-                        this.pendingApprovals.set(id, resolve);
-                        this.post({ type: 'approval-request', id, description, preview });
-                    })
+                onApprovalNeeded: (id, description, preview) => this.requestApproval(id, description, preview)
             });
             this.history = this.trimHistory(newHistory);
 
@@ -599,6 +802,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 text: `**Error:** ${err.message}\n\nRun \`Freebird: Configure AI Backend\` to check your settings.`
             });
         }
+        this.abortCtl = undefined;
+        this.persistChat();
+        this.post({ type: 'status', text: '' });
         this.post({ type: 'assistant-end' });
         // After the turn, not during it: a finished task that changed files is a real success.
         if (failureCode) await this.maybePromptFeedback('failure', failureCode);
@@ -783,6 +989,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             { role: 'user', content: text },
             { role: 'assistant', content: response }
         ]);
+        if (response.trim()) this.displayLog.push({ role: 'assistant', text: response });
+        this.persistChat();
 
         this.post({ type: 'assistant-end' });
         if (failureCode) await this.maybePromptFeedback('failure', failureCode);
@@ -809,8 +1017,50 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
     }
 
+    private static readonly EDIT_APPROVALS = new Set(['write_file', 'edit_file', 'copy_file', 'create_presentation']);
+
+    private requestApproval(id: string, description: string, preview: string): Promise<boolean> {
+        const kind = id.slice(0, id.indexOf('-'));
+        if (this.autoApproveEdits && ChatViewProvider.EDIT_APPROVALS.has(kind)) {
+            this.post({ type: 'status', text: `Auto-approved: ${description}` });
+            return Promise.resolve(true);
+        }
+        return new Promise<boolean>(resolve => {
+            this.pendingApprovals.set(id, resolve);
+            this.post({
+                type: 'approval-request', id, description, preview,
+                canApproveAll: ChatViewProvider.EDIT_APPROVALS.has(kind)
+            });
+            // The card sits at the bottom of the chat. If the sidebar is hidden or scrolled away the run looks
+            // frozen, so say so outside the panel too.
+            if (!this.view?.visible) {
+                vscode.window.showInformationMessage(`Freebird is waiting for your approval: ${description}`, 'Open Freebird')
+                    .then(choice => { if (choice) this.focus(); });
+            }
+        });
+    }
+
+    /** What a half-written tool call is doing, so a long file/deck write doesn't look like silence. */
+    private progressFromPartialToolCall(buffer: string): string | undefined {
+        const open = buffer.lastIndexOf('```tool');
+        if (open < 0) return undefined;
+        const tail = buffer.slice(open + 7);
+        if (tail.includes('```')) return undefined; // already closed
+        const action = tail.match(/"action"\s*:\s*"([a-z_]+)"/)?.[1];
+        const target = tail.match(/"(?:path|title)"\s*:\s*"([^"]{1,80})"/)?.[1];
+        const verb: Record<string, string> = {
+            write_file: 'Writing', edit_file: 'Editing', create_presentation: 'Building presentation',
+            create_drawing: 'Drawing', create_diagram: 'Creating diagram', create_floor_plan: 'Designing floor plan'
+        };
+        const size = tail.length >= 1000 ? ` - ${(tail.length / 1000).toFixed(1)}k characters so far` : '';
+        return `${action ? (verb[action] ?? 'Preparing ' + action.replace(/_/g, ' ')) : 'Preparing a step'}${target ? ' ' + target : ''}${size}`;
+    }
+
     private handleAgentEvent(event: AgentEvent) {
         switch (event.type) {
+            case 'status':
+                this.post({ type: 'status', text: event.text });
+                break;
             case 'turn-start':
                 this.currentTurnId = event.turnId;
                 break;
@@ -818,14 +1068,25 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 this.rawBuffer = '';
                 this.post({ type: 'assistant-start' });
                 break;
-            case 'text-chunk':
+            case 'text-chunk': {
                 this.rawBuffer += event.text;
                 this.post({ type: 'set-text', text: stripToolBlocks(this.rawBuffer) });
+                const progress = this.progressFromPartialToolCall(this.rawBuffer);
+                if (progress && this.rawBuffer.length - this.lastProgressLen >= 400) {
+                    this.lastProgressLen = this.rawBuffer.length;
+                    this.post({ type: 'status', text: progress });
+                }
                 break;
-            case 'response-complete':
+            }
+            case 'response-complete': {
+                const shown = stripToolBlocks(this.rawBuffer || event.rawText).trim();
+                if (shown) this.displayLog.push({ role: 'assistant', text: shown });
                 this.rawBuffer = '';
                 break;
+            }
             case 'tool-start':
+                this.lastProgressLen = 0;
+                this.post({ type: 'status', text: toolLabel(event.tool) });
                 this.toolStartedAt.set(event.id, Date.now());
                 this.toolCallsThisRound++;
                 trackEvent(`tool_used_${event.tool.action}`);
@@ -977,6 +1238,8 @@ function toolLabel(tool: { action: string; [key: string]: unknown }): string {
         case 'create_floor_plan': return `Designing floor plan: ${tool.title}`;
         case 'architecture_reference': return `Consulting design references${tool.query ? `: ${tool.query}` : ''}`;
         case 'copy_file':      return `Copying ${tool.source} → ${tool.destination}`;
+        case 'create_presentation': return `Building presentation: ${tool.path ?? tool.title}`;
+        case 'remember':       return `Saving to memory: ${String(tool.note ?? '').slice(0, 80)}`;
         case 'git_status':     return 'Checking git status';
         case 'git_push':       return 'Pushing to remote';
         case 'flag_related_locations': return 'Checking for related locations';

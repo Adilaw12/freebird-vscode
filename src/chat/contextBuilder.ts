@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { isSpecialDocument, readDocument } from '../agent/documents';
 import * as fs from 'fs';
 import * as path from 'path';
 import { isPathIgnored } from '../agent/ignoreCheck';
@@ -78,7 +79,17 @@ export async function resolveMentions(text: string): Promise<MentionResult> {
                 continue;
             }
 
-            const content = fs.readFileSync(fullPath, 'utf8');
+            let content: string;
+            if (isSpecialDocument(fullPath)) {
+                try {
+                    const doc = readDocument(fullPath);
+                    content = doc.kind === 'text' ? doc.text : '(image file - Freebird opens it with read_file so it can actually look at it)';
+                } catch (err: any) {
+                    content = `(${err?.message ?? 'could not read this file'})`;
+                }
+            } else {
+                content = fs.readFileSync(fullPath, 'utf8');
+            }
             const ext     = path.extname(fullPath).slice(1) || 'text';
             const budget  = Math.min(MAX_FILE_CHARS, MAX_MENTION_CHARS - totalChars);
 

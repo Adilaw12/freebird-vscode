@@ -29,7 +29,7 @@ export function getPremiumAllowance(context: vscode.ExtensionContext): { remaini
  *                                     daily quota (shared keys) plus an hourly
  *                                     IP burst limit to prevent abuse
  */
-const STREAM_TIMEOUT_MS = 150_000;
+const STREAM_TIMEOUT_MS = 330_000; // above the backend's 300s function limit, so the server ends a stuck request first
 
 /** Combines an optional caller signal with a timeout (AbortSignal.any needs Node 20+). */
 function withTimeout(signal: AbortSignal | undefined, ms: number): AbortSignal {
@@ -140,7 +140,7 @@ export class CloudProvider implements AIProvider {
             // Agent-mode requests (premium flag) produce whole files and drawings in one
             // answer; the chat default of 2048 truncated them mid-file. The backend still
             // caps each tier (free trial 4096) — this just stops us asking for too little.
-            maxTokens:  opts?.maxTokens ?? (opts?.premium ? 4096 : 2048),
+            maxTokens:  opts?.maxTokens ?? (opts?.premium ? 16000 : 2048),
             isTabCompletion: opts?.isTabCompletion,
             premium: opts?.premium,
             agentTrial: opts?.agentTrial,

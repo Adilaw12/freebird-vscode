@@ -46,6 +46,8 @@ export type AgentEvent =
     | { type: 'iteration-start' }
     | { type: 'text-chunk'; text: string }
     | { type: 'response-complete'; rawText: string }
+    /** Plain-language progress line for the UI ("Waiting for the model…", "Writing deck.pptx…"). */
+    | { type: 'status'; text: string }
     | { type: 'tool-start'; id: string; tool: ToolCall }
     | { type: 'tool-result'; id: string; tool: ToolCall; success: boolean; output: string; image?: { mimeType: string; base64: string } };
 
@@ -62,6 +64,33 @@ export interface AgentRunOptions {
     agentTrial?: boolean;
     /** Overrides MAX_ITERATIONS — free trial runs are capped lower to bound cost. */
     maxIterations?: number;
+    /** Set by the Stop button: ends the run between steps and aborts the in-flight model request. */
+    signal?: AbortSignal;
+}
+
+function limitMessage(max: number): string {
+    return (
+        `⏸ Paused after ${max} steps in a row to keep the run bounded — nothing is lost. ` +
+        `Say **continue** and I'll pick up where I left off.`
+    );
+}
+
+function truncatedToolMessage(): string {
+    return (
+        `Your last reply was cut off by the output limit in the middle of a tool call, so nothing was executed. ` +
+        `Retry with a SMALLER call: split big files into several write_file/edit_file calls of under ~150 lines each, ` +
+        `and for a slide deck use create_presentation (one short structured call) instead of writing the file by hand. ` +
+        `Do not apologise or restate the plan — just make the next call.`
+    );
+}
+
+/** Number of ```tool fences opened in a reply (closed or not) — compared with what parsed to spot a cut-off call. */
+function openedToolBlocks(text: string): number {
+    return (text.match(/```tool\b/g) ?? []).length;
+}
+
+function isAbort(err: any): boolean {
+    return err?.name === 'AbortError' || err?.code === 'ABORT_ERR';
 }
 
 export async function runAgentLoop(opts: AgentRunOptions): Promise<Message[]> {
@@ -121,19 +150,30 @@ async function runNativeToolLoop(opts: AgentRunOptions, turnId: string): Promise
 
     let consecutiveToolFailures = 0;
 
-    for (let i = 0; i < (opts.maxIterations ?? MAX_ITERATIONS); i++) {
+    const nativeMax = opts.maxIterations ?? MAX_ITERATIONS;
+    let nativeEnded = false;
+    for (let i = 0; i < nativeMax; i++) {
+        if (opts.signal?.aborted) { nativeEnded = true; break; }
         onEvent({ type: 'iteration-start' });
+        onEvent({ type: 'status', text: i === 0 ? 'Sending your request to the model…' : 'Reading the result and deciding the next step…' });
 
-        const result = await provider.streamWithTools!(
-            richMessages,
-            NATIVE_TOOL_SCHEMAS,
-            chunk => onEvent({ type: 'text-chunk', text: chunk })
-        );
+        let result;
+        try {
+            result = await provider.streamWithTools!(
+                richMessages,
+                NATIVE_TOOL_SCHEMAS,
+                chunk => onEvent({ type: 'text-chunk', text: chunk }),
+                { signal: opts.signal }
+            );
+        } catch (err: any) {
+            if (opts.signal?.aborted && isAbort(err)) { nativeEnded = true; break; }
+            throw err;
+        }
 
         onEvent({ type: 'response-complete', rawText: result.text });
         newHistory.push({ role: 'assistant', content: result.text });
 
-        if (result.toolCalls.length === 0) break;
+        if (result.toolCalls.length === 0) { nativeEnded = true; break; }
 
         // Add assistant message with tool calls to rich history
         richMessages.push({
@@ -182,8 +222,17 @@ async function runNativeToolLoop(opts: AgentRunOptions, turnId: string): Promise
             onEvent({ type: 'text-chunk', text: message });
             onEvent({ type: 'response-complete', rawText: message });
             newHistory.push({ role: 'assistant', content: message });
+            nativeEnded = true;
             break;
         }
+    }
+
+    if (!nativeEnded) {
+        const message = limitMessage(nativeMax);
+        onEvent({ type: 'iteration-start' });
+        onEvent({ type: 'text-chunk', text: message });
+        onEvent({ type: 'response-complete', rawText: message });
+        newHistory.push({ role: 'assistant', content: message });
     }
 
     return newHistory;
@@ -240,32 +289,85 @@ async function runTextParsedLoop(opts: AgentRunOptions, turnId: string): Promise
     // Layout briefs make the Pro model plan silently for minutes; the floor-plan validator does the checking instead.
     const effort = isDesignConversation(userMessage, history) ? 'low' as const : undefined;
 
-    for (let i = 0; i < (opts.maxIterations ?? MAX_ITERATIONS); i++) {
+    const maxIter = opts.maxIterations ?? MAX_ITERATIONS;
+    let ended = false;                // true once the loop stopped for a reason we already told the user about
+    let truncatedRetries = 0;
+    const say = (message: string) => {
+        onEvent({ type: 'iteration-start' });
+        onEvent({ type: 'text-chunk', text: message });
+        onEvent({ type: 'response-complete', rawText: message });
+        newHistory.push({ role: 'assistant', content: message });
+    };
+
+    for (let i = 0; i < maxIter; i++) {
+        if (opts.signal?.aborted) { say('Stopped.'); ended = true; break; }
+
         let rawText = '';
+        // The first step is where planning pays off; steps that just react to a tool result (read a file,
+        // write the next one) don't need Sonnet to think as long, and thinking time is most of the wait.
+        const stepEffort = i > 0 ? 'low' as const : effort;
 
         onEvent({ type: 'iteration-start' });
+        onEvent({ type: 'status', text: i === 0 ? 'Sending your request to the model…' : 'Reading the result and deciding the next step…' });
 
         // premium: lets Freebird Cloud serve this from the Pro Sonnet allowance;
         // other providers ignore it.
         const onChunk = (chunk: string) => { rawText += chunk; onEvent({ type: 'text-chunk', text: chunk }); };
         try {
-            await provider.stream(messages, onChunk, { premium: true, agentTrial: opts.agentTrial, effort });
+            try {
+                await provider.stream(messages, onChunk, { premium: true, agentTrial: opts.agentTrial, effort: stepEffort, signal: opts.signal });
+            } catch (err: any) {
+                // The Pro model can spend its whole budget planning and write nothing. Rather than end the
+                // run, redo this one step on the fast model — it answers immediately, and the validators
+                // give it concrete fixes to apply.
+                if (err?.code !== 'EMPTY_RESPONSE' || rawText) throw err;
+                await provider.stream(messages, onChunk, { premium: false, agentTrial: opts.agentTrial, effort: stepEffort, signal: opts.signal });
+            }
         } catch (err: any) {
-            // The Pro model can spend its whole budget planning and write nothing. Rather than end the
-            // run, redo this one step on the fast model — it answers immediately, and the validators
-            // give it concrete fixes to apply.
-            if (err?.code !== 'EMPTY_RESPONSE' || rawText) throw err;
-            await provider.stream(messages, onChunk, { premium: false, agentTrial: opts.agentTrial, effort });
+            if (opts.signal?.aborted && (isAbort(err) || err?.name === 'TimeoutError')) {
+                onEvent({ type: 'response-complete', rawText });
+                say('Stopped.');
+                ended = true;
+                break;
+            }
+            throw err;
         }
 
         onEvent({ type: 'response-complete', rawText });
         newHistory.push({ role: 'assistant', content: rawText });
 
         const toolCalls = parseToolCalls(rawText);
-        if (toolCalls.length === 0) break;
+        const cutOff = openedToolBlocks(rawText) - toolCalls.length; // tool blocks that never closed or weren't valid JSON
+
+        // A tool call that was cut off by the output limit used to vanish: the unfinished block is hidden from
+        // the chat, nothing parsed, and the run simply ended with an empty-looking reply. Tell the model and
+        // let it retry smaller instead.
+        if (cutOff > 0 && toolCalls.length === 0 && truncatedRetries < 2) {
+            truncatedRetries++;
+            trackEvent('agent_truncated_tool_call');
+            const brief = rawText.length > 400 ? rawText.slice(0, 400) + '\n… [cut off]' : rawText;
+            const retryMsg = truncatedToolMessage();
+            messages.push({ role: 'assistant', content: brief }, { role: 'user', content: retryMsg });
+            newHistory.push({ role: 'user', content: retryMsg });
+            onEvent({ type: 'status', text: 'The reply was cut off mid-step — asking the model to redo it in smaller pieces…' });
+            continue;
+        }
+
+        if (toolCalls.length === 0) {
+            if (!stripToolBlocks(rawText).trim()) {
+                say(
+                    cutOff > 0
+                        ? 'The model kept running out of room before finishing that step. Try asking for it in smaller pieces (for example one section or one slide group at a time).'
+                        : 'The model returned an empty reply that time. Send the request again, or say **continue**.'
+                );
+            }
+            ended = true;
+            break;
+        }
 
         const toolResultParts: string[] = [];
         let circuitBroken = false;
+        let stopped = false;
         // Last image produced in this batch (e.g. verify_diagram's rendered
         // PNG) — attached to the next turn only if this provider can use it
         // (CloudProvider today; Ollama never sets supportsImageInput, so its
@@ -273,6 +375,7 @@ async function runTextParsedLoop(opts: AgentRunOptions, turnId: string): Promise
         let diagramImage: { mimeType: string; base64: string } | undefined;
 
         for (const tool of toolCalls) {
+            if (opts.signal?.aborted) { stopped = true; break; }
             const id = `${tool.action}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
             onEvent({ type: 'tool-start', id, tool });
             const result = await executeToolCall(tool, git, onApprovalNeeded, context, sessionId, turnId);
@@ -289,25 +392,43 @@ async function runTextParsedLoop(opts: AgentRunOptions, turnId: string): Promise
                 break; // stop this batch — remaining queued tool calls in this response go unexecuted
             }
         }
+        if (cutOff > 0) {
+            toolResultParts.push(`Note: another tool call in your reply was cut off by the output limit and was NOT run. Redo it as a smaller call.`);
+        }
 
         const toolResultMsg = toolResultParts.join('\n\n---\n\n');
+        // Pictures are large and every later step resends the whole conversation: keep only the newest few.
+        if (diagramImage) {
+            const withImage = messages.filter(m => m.image);
+            for (const old of withImage.slice(0, Math.max(0, withImage.length - 2))) delete old.image;
+        }
         messages.push({ role: 'assistant', content: rawText });
         messages.push({
             role: 'user',
-            content: toolResultMsg,
+            content: toolResultMsg || 'Stopped by the user.',
             ...(diagramImage && provider.supportsImageInput && { image: diagramImage })
         });
-        newHistory.push({ role: 'user', content: toolResultMsg });
+        newHistory.push({ role: 'user', content: toolResultMsg || 'Stopped by the user.' });
+
+        if (stopped) {
+            say('Stopped.');
+            ended = true;
+            break;
+        }
 
         if (circuitBroken) {
             trackEvent('agent_circuit_breaker_engaged');
-            const message = circuitBreakerMessage(MAX_CONSECUTIVE_TOOL_FAILURES);
-            onEvent({ type: 'iteration-start' });
-            onEvent({ type: 'text-chunk', text: message });
-            onEvent({ type: 'response-complete', rawText: message });
-            newHistory.push({ role: 'assistant', content: message });
+            say(circuitBreakerMessage(MAX_CONSECUTIVE_TOOL_FAILURES));
+            ended = true;
             break;
         }
+    }
+
+    // The step budget ran out while the model still had work queued. This used to end the turn with no
+    // message at all, which read as the agent going quiet.
+    if (!ended) {
+        trackEvent('agent_step_limit_reached');
+        say(limitMessage(maxIter));
     }
 
     return newHistory;

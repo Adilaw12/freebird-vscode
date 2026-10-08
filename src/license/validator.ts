@@ -25,6 +25,8 @@ export interface LicenseStatus {
     isTeamOwner?: boolean;
     email?: string;
     expiresAt?: string;
+    /** Set when a key is saved but not granting Pro, so the UI can say why instead of silently showing Free. */
+    reason?: 'invalid' | 'offline';
 }
 
 export interface StartTrialResult {
@@ -89,10 +91,12 @@ export async function getLicenseStatus(context: vscode.ExtensionContext): Promis
         if (status.isPro) {
             const entry: CacheEntry = { status, ts: Date.now(), key, everValidated: true };
             await context.globalState.update('licenseCache', entry);
+            await context.globalState.update(KEY_BACKUP, key);
             _memCache = { status, ts: Date.now(), key };
         } else {
             await context.globalState.update('licenseCache', undefined);
             _memCache = null;
+            status.reason = 'invalid';
         }
 
         return status;
@@ -113,7 +117,41 @@ function fallbackToCache(cached: CacheEntry | null | undefined, key: string): Li
         _memCache = { status: cached.status, ts: cached.ts, key };
         return cached.status;
     }
-    return { isPro: false };
+    return { isPro: false, reason: 'offline' };
+}
+
+// ── Key backup ───────────────────────────────────────────────────────────────
+// The key normally lives in the user's settings. If that value ever disappears (a different VS Code profile,
+// a remote/WSL/dev-container window, a settings reset or sync conflict) Pro silently turned into Free and the
+// user had to paste the key again. A copy in the extension's own storage lets activation put it back.
+
+const KEY_BACKUP = 'freebird.licenseKeyBackup';
+
+/** Called at activation, before anything reads the key: restores a key the settings lost. */
+export async function restoreLicenseKeyIfLost(context: vscode.ExtensionContext): Promise<boolean> {
+    const cfg = vscode.workspace.getConfiguration('freebird');
+    if (cfg.get<string>('licenseKey', '').trim()) return false;
+    const backup = context.globalState.get<string>(KEY_BACKUP, '').trim();
+    if (!backup) return false;
+    try {
+        await cfg.update('licenseKey', backup, true);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/** A key the user removes from settings while VS Code is running is a deliberate removal: forget the backup too. */
+export function watchLicenseKeyRemoval(context: vscode.ExtensionContext): vscode.Disposable {
+    return vscode.workspace.onDidChangeConfiguration(e => {
+        if (!e.affectsConfiguration('freebird.licenseKey')) return;
+        const now = vscode.workspace.getConfiguration('freebird').get<string>('licenseKey', '').trim();
+        if (!now) {
+            context.globalState.update(KEY_BACKUP, undefined);
+            context.globalState.update('licenseCache', undefined);
+            _memCache = null;
+        }
+    });
 }
 
 export async function warmLicenseCache(context: vscode.ExtensionContext): Promise<void> {

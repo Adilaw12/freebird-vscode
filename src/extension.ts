@@ -4,7 +4,7 @@ import { GitService } from './git/service';
 import { registerInlineEdit } from './inline/editor';
 import { registerTabCompletion } from './inline/completionProvider';
 import { registerShareSelection } from './share/share';
-import { getLicenseStatus, getPersistedLicenseHint, warmLicenseCache, activateLicense, clearLicenseCache, startTrial, UPGRADE_URL, TEMPLATES_UPGRADE_URL, XENDIT_CHECKOUT_URL, API_BASE } from './license/validator';
+import { restoreLicenseKeyIfLost, watchLicenseKeyRemoval, getLicenseStatus, getPersistedLicenseHint, warmLicenseCache, activateLicense, clearLicenseCache, startTrial, UPGRADE_URL, TEMPLATES_UPGRADE_URL, XENDIT_CHECKOUT_URL, API_BASE } from './license/validator';
 import { getCloudEditsRemaining } from './license/usage';
 import { signInWithGitHub, getStoredSession, clearSession } from './auth/github';
 import { buildIndex, updateFileInIndex, removeFileFromIndex, getIndexStats } from './index/indexer';
@@ -101,6 +101,11 @@ export async function activate(context: vscode.ExtensionContext) {
     // Before anything that can call a provider: load stored API keys into memory
     // and migrate a key still sitting in the old plaintext setting.
     await initApiKeys(context);
+
+    // Put back a licence key the settings lost, before anything reads it — otherwise Pro shows as Free
+    // until the user pastes the key in again. Then watch for a deliberate removal.
+    if (await restoreLicenseKeyIfLost(context)) trackEvent('license_key_restored');
+    context.subscriptions.push(watchLicenseKeyRemoval(context));
 
     // Start the 7-day all-templates window now, at first use — see recordFirstSeen.
     recordFirstSeen(context);

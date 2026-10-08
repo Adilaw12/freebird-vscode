@@ -48,6 +48,11 @@ function buildIgnoreForWorkspace(workspaceRoot: string): Ignore {
 export function isPathIgnored(workspaceRoot: string, relPath: string): boolean {
     const normalized = relPath.split(path.sep).join('/').replace(/^\/+/, '');
     if (!normalized) return false;
+    // Files the user attached in chat are saved under .freebird/uploads/ — a deliberate hand-over, so a
+    // .gitignore that hides .freebird/ must not make them unreadable. Secret-file patterns still win.
+    if (normalized.startsWith('.freebird/uploads/')) {
+        return ignore().add(ALWAYS_EXCLUDE).ignores(normalized);
+    }
     return buildIgnoreForWorkspace(workspaceRoot).ignores(normalized);
 }
 

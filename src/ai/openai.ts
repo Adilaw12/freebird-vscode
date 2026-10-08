@@ -28,6 +28,7 @@ export class OpenAIProvider implements AIProvider {
 
         const response = await fetch(`${this.baseUrl}/chat/completions`, {
             method: 'POST',
+            signal: opts?.signal,
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${this.apiKey}`
@@ -71,6 +72,7 @@ export class OpenAIProvider implements AIProvider {
 
         const response = await fetch(`${this.baseUrl}/chat/completions`, {
             method: 'POST',
+            signal: opts?.signal,
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${this.apiKey}`

@@ -4,6 +4,23 @@
 
 ### Added
 
+* **Attach files to a chat.** A paperclip button, drag-and-drop (from your computer or the VS Code Explorer) and paste (screenshots) copy files into `.freebird/uploads/` so the agent can open them. Before this, a file outside the workspace simply could not be read.
+* **`read_file` understands more than text.** Images are shown to the model (it can read a flyer or screenshot), and Word (.docx), PowerPoint (.pptx), Excel (.xlsx) and PDF files are text-extracted. `startLine`/`endLine` read part of a large file. Scanned PDFs and old .doc/.ppt/.xls say plainly what to do instead.
+* **`create_presentation`.** Builds a real, editable PowerPoint deck (title, section, bullets, two-column, image, quote, stats and closing slides, with speaker notes) from one short structured call instead of thousands of tokens of hand-written XML. No new dependencies.
+* **`remember` tool and `/remember`.** The agent saves durable notes to `.freebird/memory.md` on its own, with no approval step, and drops the oldest notes rather than letting the newest fall off the end of what is loaded.
+* **Stop button, live progress line and "Approve all edits this chat".** The send button becomes Stop during a task; a line above the box shows what Freebird is doing and for how long ("Writing deck.pptx - 4.2k characters so far"); a notification appears if an approval is waiting while the sidebar is hidden.
+
+* **Your conversation comes back.** The chat is saved per project (up to 7 days) and redrawn when you reopen the folder or reload the window; `/clear` removes it.
+
+### Fixed
+
+* **Long Pro answers were cut off near 8k tokens.** The cause was time as much as tokens: the cloud function stopped at 120 seconds. Pro requests now allow 16k tokens and 300 seconds. (Backend change — deploy `backend/` before publishing the extension.)
+* **The agent going quiet.** A reply cut off by the output limit in the middle of a tool call was hidden from the chat and ended the run with no message; it now asks the model to redo it in smaller pieces. Hitting the 15-step limit, or an empty model reply, now says so and offers "continue" instead of stopping silently. Your message is echoed immediately rather than after the licence check, and the input box stays usable while a task runs.
+* **Pro turning into Free after a settings loss.** The licence key is now also kept in the extension's own storage and restored at startup if the setting went missing (different profile, remote window, settings reset). When a saved key is not active, the chat says why (expired/cancelled vs. server unreachable) instead of silently showing Free.
+* **Slower follow-up steps.** Steps that react to a tool result now use low reasoning effort, and old images are dropped from the conversation after a few steps.
+
+### Added (earlier in this release)
+
 * **Floor plans and building layouts.** `create_floor_plan` designs a plan from a structured spec instead of hand-written SVG. A validator reviews it like a design check — every room reachable by a door without crossing a private room, windows on habitable rooms, room sizes, bedroom count against the brief, circulation share — and a deterministic renderer draws it with computed dimensions, door swings, windows, scale bar and north arrow. Rule packs for residential, office, education, healthcare, retail and hotel buildings.
 * **`architecture_reference`.** Design guidance (spec format, process, room sizes, stairs, accessibility, building-type notes) the agent can consult. It also searches your own notes in `.freebird/references/`, so licensed material you keep (for example excerpts from Neufert) can be used for any building type. See docs/architecture-references.md.
 * **`create_drawing`.** Draws wireframes, maps and other spatial pictures as SVG, shows them on white paper, and returns a rendered image to the model so it can check and fix its own output.
