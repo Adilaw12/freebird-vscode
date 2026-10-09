@@ -13,7 +13,7 @@ const { writeZip, readZip } = require(path.join(OUT, 'agent/zip.js'));
 const { readDocument, isSpecialDocument, looksBinary } = require(path.join(OUT, 'agent/documents.js'));
 const { buildPptx } = require(path.join(OUT, 'agent/pptx.js'));
 const { appendProjectMemory, readProjectMemory, MEMORY_RELATIVE_PATH } = require(path.join(OUT, 'agent/memory.js'));
-const { runAgentLoop } = require(path.join(OUT, 'agent/loop.js'));
+const { runAgentLoop, trimForHistory } = require(path.join(OUT, 'agent/loop.js'));
 const { executeToolCall } = require(path.join(OUT, 'agent/tools.js'));
 const { isPathIgnored } = require(path.join(OUT, 'agent/ignoreCheck.js'));
 const vscode = require('vscode');
@@ -180,6 +180,14 @@ async function run() {
             vscode.workspace.workspaceFolders = undefined;
         }
 
+        suite('history keeps a capped copy of tool output');
+        {
+            const big = 'x'.repeat(50_000);
+            const kept = trimForHistory(big);
+            check('a 50k-character tool result is cut to about 3k in history', kept.length < 3_200 && kept.includes('omitted from history'));
+            check('short tool output is left alone', trimForHistory('short') === 'short');
+        }
+
         suite('agent loop: cut-off tool calls, step limit, Stop');
         {
             vscode.workspace.workspaceFolders = [{ uri: { fsPath: dir } }];
@@ -193,6 +201,18 @@ async function run() {
                     }
                 };
             };
+
+            // 0. Freebird Cloud gets the system prompt as a system message (so the backend can cache it).
+            {
+                const seen = [];
+                const cloudLike = { supportsSystemMessages: true, async stream(messages, onChunk) { seen.push(messages); onChunk('done'); } };
+                await runAgentLoop(base(cloudLike).opts);
+                check('cloud provider receives the prompt as role system', seen[0][0].role === 'system' && seen[0].length === 1 + 1);
+                const plain = [];
+                const other = { async stream(messages, onChunk) { plain.push(messages); onChunk('done'); } };
+                await runAgentLoop(base(other).opts);
+                check('other providers keep the prompt as a user turn', plain[0][0].role === 'user' && plain[0][1].role === 'assistant');
+            }
 
             // 1. First reply is cut off mid tool call; the loop must retry instead of ending silently.
             let calls = 0;

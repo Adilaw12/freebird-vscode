@@ -1,5 +1,7 @@
 export interface Message {
-    role: 'user' | 'assistant';
+    /** 'system' is only sent to providers that set supportsSystemMessages (Freebird Cloud). It lets the backend cache
+     *  the system prompt; sent as a user message, the prompt is never cached. */
+    role: 'user' | 'assistant' | 'system';
     content: string;
     /** Set when this message carries an image (e.g. verify_diagram's rendered
      *  PNG) for a provider that supports it — see AIProvider.supportsImageInput. */
@@ -24,6 +26,10 @@ export interface CompletionOptions {
     /** Tab completion only: the chat-style prompt a non-FIM provider should use
      *  when a FIM-capable primary (Ollama) is unavailable. */
     fallbackPrompt?: string;
+    /** Tab completion only: the same prompt split into instructions and code. Freebird Cloud sends it as a system
+     *  message plus a user message — measured on the live backend, that returns nothing about 16% of the time instead
+     *  of 50%. Other providers ignore this and use `messages` / `fallbackPrompt` as before. */
+    completionParts?: { system: string; user: string };
     /** Set only by the Agent-mode loop — asks the backend to serve this request
      *  from the licence's monthly Claude Sonnet allowance (see api/chat.js). */
     premium?: boolean;
@@ -82,6 +88,9 @@ export interface AIProvider {
      *  only CloudProvider sets this today; Ollama's own image convention
      *  (`images: string[]`) is a different shape and not wired up yet. */
     readonly supportsImageInput?: boolean;
+
+    /** True when this provider takes role 'system' messages and caches them (Freebird Cloud). */
+    readonly supportsSystemMessages?: boolean;
 
     readonly supportsNativeTools?: boolean;
     streamWithTools?(

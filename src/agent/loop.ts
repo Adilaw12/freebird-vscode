@@ -213,7 +213,7 @@ async function runNativeToolLoop(opts: AgentRunOptions, turnId: string): Promise
         const toolSummary = toolResults.map(tr =>
             tr.isError ? `[ERROR] ${tr.output}` : tr.output
         ).join('\n\n---\n\n');
-        newHistory.push({ role: 'user', content: toolSummary });
+        newHistory.push({ role: 'user', content: trimForHistory(toolSummary) });
 
         if (circuitBroken) {
             trackEvent('agent_circuit_breaker_engaged');
@@ -267,10 +267,13 @@ async function runTextParsedLoop(opts: AgentRunOptions, turnId: string): Promise
         systemContent += `\n\nProject memory (${MEMORY_RELATIVE_PATH}):\n${projectMemory}`;
     }
 
-    const systemMessages: Message[] = [
-        { role: 'user', content: systemContent },
-        { role: 'assistant', content: 'Ready. I can read your entire codebase, edit files, run commands, and push to GitHub.' }
-    ];
+    // Freebird Cloud caches a system message; any other provider gets the prompt as a user turn, as before.
+    const systemMessages: Message[] = provider.supportsSystemMessages
+        ? [{ role: 'system', content: systemContent }]
+        : [
+            { role: 'user', content: systemContent },
+            { role: 'assistant', content: 'Ready. I can read your entire codebase, edit files, run commands, and push to GitHub.' }
+        ];
 
     const userContent = fileContext ? `${fileContext}\n\n${userMessage}` : userMessage;
 
@@ -408,7 +411,7 @@ async function runTextParsedLoop(opts: AgentRunOptions, turnId: string): Promise
             content: toolResultMsg || 'Stopped by the user.',
             ...(diagramImage && provider.supportsImageInput && { image: diagramImage })
         });
-        newHistory.push({ role: 'user', content: toolResultMsg || 'Stopped by the user.' });
+        newHistory.push({ role: 'user', content: trimForHistory(toolResultMsg || 'Stopped by the user.') });
 
         if (stopped) {
             say('Stopped.');
@@ -435,6 +438,17 @@ async function runTextParsedLoop(opts: AgentRunOptions, turnId: string): Promise
 }
 
 // ── Token-aware context management ───────────────────────────────────────────
+
+// Tool output kept in the conversation for LATER messages. Within the turn that ran the tool the model still gets
+// the full output; afterwards it only needs enough to remember what happened. Uncapped, one 50k-character file read
+// was resent on every following message, which made input the largest part of the Claude bill.
+const HISTORY_TOOL_OUTPUT_CHARS = 3_000;
+
+export function trimForHistory(text: string): string {
+    if (text.length <= HISTORY_TOOL_OUTPUT_CHARS) return text;
+    return text.slice(0, HISTORY_TOOL_OUTPUT_CHARS) +
+        `\n… (${text.length - HISTORY_TOOL_OUTPUT_CHARS} more characters omitted from history; re-run the tool if you need it)`;
+}
 
 function estimateTokens(text: string): number {
     return Math.ceil(text.length / 3.5);

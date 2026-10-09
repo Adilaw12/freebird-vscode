@@ -881,10 +881,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         const projectRules = readProjectRules();
         if (projectRules) trackEvent('rules_loaded');
+        // Freebird Cloud caches a system message; BYOK keeps the prompt as user turns it has always had.
+        const sysRole: 'system' | 'user' = mode === 'byok' ? 'user' : 'system';
         const messages: Message[] = [
-            ...FREE_SYSTEM,
+            ...FREE_SYSTEM.map(m => (m.role === 'user' ? { ...m, role: sysRole } : m)) as Message[],
             ...(projectRules ? [{
-                role: 'user',
+                role: sysRole,
                 content: `Project rules (${RULES_RELATIVE_PATH}) — the user's own conventions for this project. Follow these even when they conflict with your own defaults:\n${projectRules}`
             } as Message] : []),
             ...this.trimHistory(this.history),

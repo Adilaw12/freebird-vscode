@@ -58,6 +58,9 @@ export class CloudProvider implements AIProvider {
     // which is exactly what a Message.image gets converted into below.
     readonly supportsImageInput = true;
 
+    // The system prompt goes out as role 'system' so the backend can cache it (see api/chat.js).
+    readonly supportsSystemMessages = true;
+
     constructor(
         context: vscode.ExtensionContext,
         sessionId: string,
@@ -126,8 +129,16 @@ export class CloudProvider implements AIProvider {
             : { role: m.role, content: m.content }
         );
 
+        // Tab completions split into a system message and a user message when the caller provided both.
+        const completionMessages = opts?.isTabCompletion && opts.completionParts
+            ? [
+                { role: 'system', content: opts.completionParts.system },
+                { role: 'user', content: opts.completionParts.user }
+            ]
+            : undefined;
+
         const body = {
-            messages: wireMessages,
+            messages: completionMessages ?? wireMessages,
             sessionId:  this.sessionId,
             authToken:  session?.sessionToken,
             licenseKey: licenseKey || undefined,
