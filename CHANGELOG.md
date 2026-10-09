@@ -1,5 +1,13 @@
 # Changelog
 
+## \[0.15.1] — 2026-10-09
+
+### Fixed
+
+* **Lower Claude costs.** The Pro and free-chat system prompt was sent as a user message, so it was never cached on Freebird Cloud. It now goes as a system message, and repeated requests in a session can reuse the cached prompt.
+* **Long chats cost less.** Tool output kept for later messages is capped at about 3,000 characters. The model still sees full output during the turn that produced it.
+* **Fewer wasted tab-completion requests.** Cloud completions wait a little longer while you type. Once the free daily allowance is used up, Freebird stops sending requests until it resets, and a status-bar item shows the reset time.
+
 ## \[0.15.0] — 2026-10-07
 
 ### Added
