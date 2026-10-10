@@ -16,7 +16,7 @@ const WINDOW_END   = new Date('2026-09-21T00:00:00Z');
 
 // Newest published extension version. The extension nudges users running an older version to update.
 // Bump this on every Marketplace release (it must match package.json's version).
-const LATEST_VERSION = '0.15.2';
+const LATEST_VERSION = '0.15.3';
 
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
