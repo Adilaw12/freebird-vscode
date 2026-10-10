@@ -206,7 +206,7 @@ export async function activate(context: vscode.ExtensionContext) {
         context.globalState.update(WALKTHROUGH_SHOWN_KEY, true);
         vscode.commands.executeCommand(
             'workbench.action.openWalkthrough',
-            'TenLabs.freebird-ai#freebirdWelcome',
+            `${context.extension.id}#freebirdWelcome`,
             false
         );
     }

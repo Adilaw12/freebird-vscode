@@ -166,7 +166,8 @@ async function flush(): Promise<void> {
         meta: {
             sessionId: _sessionId,
             machineId: _machineId,
-            version: vscode.extensions.getExtension('TenLabs.freebird-ai')?.packageJSON?.version ?? 'unknown',
+            // Read from this install, not a fixed ID: the same build ships under more than one publisher.
+            version: _context?.extension.packageJSON?.version ?? 'unknown',
             platform: process.platform,
             backend: config.get<string>('backend', 'cloud')
         }

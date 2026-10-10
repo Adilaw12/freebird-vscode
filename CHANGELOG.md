@@ -1,5 +1,11 @@
 # Changelog
 
+## \[0.15.3] — 2026-10-10
+
+### Fixed
+
+* **Works under any publisher namespace.** The same build now ships to the TenLabs and TenLabsAU listings. The version reported in telemetry, the welcome walkthrough and the update button now follow the listing you installed, instead of assuming TenLabs. The update button opens Open VSX for non-TenLabs listings.
+
 ## \[0.15.2] — 2026-10-10
 
 ### Added

@@ -166,7 +166,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     break;
                 case 'update-open':
                     trackEvent('update_nudge_clicked');
-                    vscode.env.openExternal(vscode.Uri.parse('https://marketplace.visualstudio.com/items?itemName=TenLabs.freebird-ai'));
+                    vscode.env.openExternal(vscode.Uri.parse(this.listingUrl()));
                     break;
                 case 'stop':
                     trackEvent('stop_clicked');
@@ -300,6 +300,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             agentRunsLeft: getAgentTrialRunsLeft(this.context, byok),
             templateDaysLeft: endsAt === null ? 0 : Math.max(1, Math.ceil((endsAt - Date.now()) / 86_400_000))
         };
+    }
+
+    /** This install's listing page: the VS Code Marketplace for TenLabs, Open VSX for any other publisher namespace. */
+    private listingUrl(): string {
+        const { publisher, name } = this.context.extension.packageJSON as { publisher: string; name: string };
+        return publisher === 'TenLabs'
+            ? `https://marketplace.visualstudio.com/items?itemName=${publisher}.${name}`
+            : `https://open-vsx.org/extension/${publisher}/${name}`;
     }
 
     /** Nudges users on an older release to update. Shown in the transcript each time the chat opens. */
