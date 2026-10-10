@@ -1586,6 +1586,29 @@ function showUpgradeNudge(variant) {
   scroll();
 }
 
+// Built with DOM methods, not innerHTML: the version strings come from the server.
+function showUpdateNudge(current, latest) {
+  var nudge = document.createElement('div');
+  nudge.className = 'upgrade-nudge';
+  var icon = document.createElement('span');
+  icon.className = 'nudge-icon';
+  icon.textContent = '↑';
+  var text = document.createElement('span');
+  text.className = 'nudge-text';
+  text.textContent = 'Freebird ' + latest + ' is out, and you are on ' + current + '. Update for the best experience and the latest fixes.';
+  var update = document.createElement('button');
+  update.textContent = 'Update';
+  update.onclick = function() { vscode.postMessage({ type: 'update-open' }); };
+  var dismiss = document.createElement('button');
+  dismiss.className = 'nudge-dismiss';
+  dismiss.title = 'Dismiss';
+  dismiss.textContent = '✕';
+  dismiss.onclick = function() { nudge.remove(); };
+  nudge.append(icon, text, update, dismiss);
+  msgsEl.appendChild(nudge);
+  scroll();
+}
+
 function showUsageStats(edits, agentRuns, secondsSaved) {
   var el = document.getElementById('pro-stats');
   if (!el) return;
@@ -1928,6 +1951,7 @@ window.addEventListener('message',function(e){
       break;
     }
     case 'upgrade-nudge':    showUpgradeNudge(m.variant); break;
+    case 'update-nudge':     showUpdateNudge(m.current, m.latest); break;
     case 'cleared':          msgsEl.innerHTML=''; transcript=[]; currentAssistantText=''; addDivider('conversation cleared'); break;
     case 'workspace-files':  workspaceFiles=m.files||[]; break;
     case 'usage-stats':      showUsageStats(m.edits, m.agentRuns, m.secondsSaved); break;

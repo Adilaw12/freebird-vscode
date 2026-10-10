@@ -14,6 +14,10 @@
 const WINDOW_START = new Date('2026-09-07T00:00:00Z');
 const WINDOW_END   = new Date('2026-09-21T00:00:00Z');
 
+// Newest published extension version. The extension nudges users running an older version to update.
+// Bump this on every Marketplace release (it must match package.json's version).
+const LATEST_VERSION = '0.15.1';
+
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -24,6 +28,7 @@ export default async function handler(req, res) {
     const now = new Date();
     if (now >= WINDOW_START && now < WINDOW_END) {
         return res.status(200).json({
+            latestVersion: LATEST_VERSION,
             variant:   'update-0130',
             message:   'New: Code Hotspots & Contribution Map — a 4th built-in template that mines your real git history for file churn, hidden co-change coupling, and a rendered dependency graph, not just a raw commit log.',
             cta:       'Try a template',
@@ -32,5 +37,5 @@ export default async function handler(req, res) {
     }
 
     // No announcement active right now
-    return res.status(200).json({ message: null });
+    return res.status(200).json({ message: null, latestVersion: LATEST_VERSION });
 }

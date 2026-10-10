@@ -9,6 +9,7 @@ import { GitService } from '../git/service';
 import { Message } from '../ai/provider';
 import { runAgentLoop, AgentEvent, stripToolBlocks } from '../agent/loop';
 import { buildFileContext, resolveMentions, listWorkspaceFiles } from './contextBuilder';
+import { LATEST_VERSION_KEY, isOlderVersion } from '../announcement';
 import { getLicenseStatus, getPersistedLicenseHint, UPGRADE_URL, TEMPLATES_UPGRADE_URL, XENDIT_CHECKOUT_URL } from '../license/validator';
 import { getTemplateWelcomeEndsAt } from '../agent/templateCatalog';
 import { getCloudEditsRemaining, DAILY_CLOUD_LIMIT } from '../license/usage';
@@ -148,6 +149,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         // instead of staying at their default hidden state until some other action
         // happens to call showLicenseStatus() again.
         this.showLicenseStatus();
+        this.showUpdateNudge();
 
         webviewView.webview.onDidReceiveMessage(async (msg: any) => {
             switch (msg.type) {
@@ -159,7 +161,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     // The webview is now listening: resend what was posted before it could hear.
                     if (this.displayLog.length) this.post({ type: 'restore', items: this.displayLog });
                     this.showLicenseStatus();
+                    this.showUpdateNudge();
                     this.sendWorkspaceFiles();
+                    break;
+                case 'update-open':
+                    trackEvent('update_nudge_clicked');
+                    vscode.env.openExternal(vscode.Uri.parse('https://marketplace.visualstudio.com/items?itemName=TenLabs.freebird-ai'));
                     break;
                 case 'stop':
                     trackEvent('stop_clicked');
@@ -293,6 +300,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             agentRunsLeft: getAgentTrialRunsLeft(this.context, byok),
             templateDaysLeft: endsAt === null ? 0 : Math.max(1, Math.ceil((endsAt - Date.now()) / 86_400_000))
         };
+    }
+
+    /** Nudges users on an older release to update. Shown in the transcript each time the chat opens. */
+    private showUpdateNudge(): void {
+        const latest = this.context.globalState.get<string>(LATEST_VERSION_KEY);
+        const current = this.context.extension.packageJSON.version as string;
+        if (!latest || !isOlderVersion(current, latest)) return;
+        trackEvent('update_nudge_shown');
+        this.post({ type: 'update-nudge', current, latest });
     }
 
     async showLicenseStatus() {

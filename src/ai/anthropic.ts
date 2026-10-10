@@ -5,6 +5,15 @@ import { getApiKey } from './keys';
 
 const NO_KEY_MESSAGE = 'No Anthropic API key set. Run "Freebird: Configure AI Backend" (or "Freebird: Set API Key") to add one.';
 
+// Carry a short code or the HTTP status on the error so telemetry can classify it; the response body stays in the message only.
+function noKeyError(): Error {
+    return Object.assign(new Error(NO_KEY_MESSAGE), { code: 'NO_KEY' });
+}
+
+function httpError(status: number, body: string): Error {
+    return Object.assign(new Error(`Anthropic API error: ${body}`), { status });
+}
+
 export class AnthropicProvider implements AIProvider {
     readonly supportsNativeTools = true;
 
@@ -18,7 +27,7 @@ export class AnthropicProvider implements AIProvider {
 
     async stream(messages: Message[], onChunk: (text: string) => void, opts?: CompletionOptions): Promise<void> {
         if (!this.apiKey) {
-            throw new Error(NO_KEY_MESSAGE);
+            throw noKeyError();
         }
 
         const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -40,7 +49,7 @@ export class AnthropicProvider implements AIProvider {
 
         if (!response.ok) {
             const err = await response.text();
-            throw new Error(`Anthropic API error: ${err}`);
+            throw httpError(response.status, err);
         }
 
         for await (const data of sseData(response)) {
@@ -61,7 +70,7 @@ export class AnthropicProvider implements AIProvider {
         opts?: CompletionOptions
     ): Promise<StreamToolsResult> {
         if (!this.apiKey) {
-            throw new Error(NO_KEY_MESSAGE);
+            throw noKeyError();
         }
 
         const anthropicMessages = convertToAnthropicMessages(messages);
@@ -91,7 +100,7 @@ export class AnthropicProvider implements AIProvider {
 
         if (!response.ok) {
             const err = await response.text();
-            throw new Error(`Anthropic API error: ${err}`);
+            throw httpError(response.status, err);
         }
 
         let text = '';

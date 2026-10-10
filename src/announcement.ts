@@ -4,13 +4,27 @@ import { trackEvent } from './telemetry';
 
 const LAST_CHECK_KEY = 'freebird.announcementLastCheck';
 const DISMISSED_KEY  = 'freebird.announcementDismissed'; // stores the message text last dismissed
+export const LATEST_VERSION_KEY = 'freebird.latestVersion'; // newest published version, from the same endpoint
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // once per day is plenty
 
 interface Announcement {
     message: string | null;
+    latestVersion?: string;
     variant?: string;
     cta?: string;
     ctaAction?: string;
+}
+
+/** True when `current` is an older dotted version than `latest` (0.15.0 < 0.15.1). */
+export function isOlderVersion(current: string, latest: string): boolean {
+    const a = current.split('.').map(Number);
+    const b = latest.split('.').map(Number);
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+        const x = a[i] ?? 0;
+        const y = b[i] ?? 0;
+        if (x !== y) return x < y;
+    }
+    return false;
 }
 
 /**
@@ -32,6 +46,9 @@ export async function checkAnnouncement(context: vscode.ExtensionContext): Promi
     } catch {
         return; // silent — an announcement is never critical path
     }
+
+    // Recorded before the message check: the version nudge is independent of whether there is an announcement.
+    if (data.latestVersion) await context.globalState.update(LATEST_VERSION_KEY, data.latestVersion);
 
     if (!data.message) return;
 

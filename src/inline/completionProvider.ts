@@ -208,15 +208,22 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
                 }
                 return [];
             }
+            // Every failure the user sees as a one-time warning also needs a count: without it, a backend that
+            // fails on every request looks identical to one that is simply never asked.
+            trackEvent('tab_completion_error', `${backend}:${errorReason(err)}`);
             if (!warnedThisSession) {
                 warnedThisSession = true;
 
+                    const { message, action } = explainCompletionFailure(err, backend);
                     vscode.window.showWarningMessage(
-                        `Freebird: tab completion unavailable — ${err?.message ?? String(err)}`,
-                        'Configure AI Backend'
+                        `Freebird: ${message}`,
+                        'Configure AI Backend',
+                        ...(action ? [action.label] : [])
                     ).then(choice => {
                         if (choice === 'Configure AI Backend') {
                             vscode.commands.executeCommand('freebird.configure');
+                        } else if (choice && action && choice === action.label) {
+                            vscode.commands.executeCommand(action.command);
                         }
                     });
             }
@@ -279,6 +286,41 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
 
 function isFIMProvider(provider: unknown): provider is FIMProvider {
     return typeof (provider as FIMProvider).fillInMiddle === 'function';
+}
+
+/**
+ * What the user should do about a failed completion. The one-time warning names the cause and the fix,
+ * instead of echoing the provider's raw error text.
+ */
+function explainCompletionFailure(
+    err: any,
+    backend: string
+): { message: string; action?: { label: string; command: string } } {
+    const reason = errorReason(err);
+    const setKey = { label: 'Set API Key', command: 'freebird.setApiKey' };
+    if (reason === 'NO_KEY') {
+        return { message: `tab completion needs an API key for ${backend}. Add one to keep suggestions on.`, action: setKey };
+    }
+    if (reason === 'http_401' || reason === 'http_403') {
+        return { message: `${backend} rejected your API key. Check the key and set it again.`, action: setKey };
+    }
+    if (reason === 'http_404') {
+        return {
+            message: `${backend} doesn't recognise the model. Clear the freebird.model setting to use the default.`,
+            action: { label: 'Open Settings', command: 'workbench.action.openSettings' }
+        };
+    }
+    if (reason === 'http_429') {
+        return { message: `${backend} is rate-limiting you, or your account has run out of credit. Check your usage and billing with ${backend}.` };
+    }
+    return { message: `tab completion unavailable — ${err?.message ?? String(err)}`, action: setKey };
+}
+
+/** Bounded classifier for telemetry: an error code or HTTP status, never the message text. */
+function errorReason(err: any): string {
+    if (typeof err?.code === 'string' && /^[A-Z_0-9]{1,40}$/.test(err.code)) return err.code;
+    if (typeof err?.status === 'number') return `http_${err.status}`;
+    return 'other';
 }
 
 function getSurroundingText(document: vscode.TextDocument, position: vscode.Position): { prefix: string; suffix: string } {
