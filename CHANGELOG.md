@@ -1,5 +1,15 @@
 # Changelog
 
+## \[0.15.2] — 2026-10-10
+
+### Added
+
+* **Update notice.** When a newer version is out, the chat shows a card with an Update button. It appears each time the chat opens until you update. (Backend change: `backend/` must be deployed for the notice to appear.)
+
+### Fixed
+
+* **Clear messages when tab completion fails.** The warning now says what to do: add an API key, check a rejected key, fix the model setting, or check your rate limit or credit. Before, it showed the raw error text.
+
 ## \[0.15.1] — 2026-10-09
 
 ### Fixed
