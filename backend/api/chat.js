@@ -25,6 +25,8 @@ import { fetchGeminiWithFallback, PRO_GEMINI_MODEL_CANDIDATES } from '../lib/gem
 import { geminiChunkText, GEMINI_THINKING_HEADROOM } from '../lib/geminiText.js';
 import { fetchAnthropicWithFallback, anthropicConfigured, SONNET_MODEL_CANDIDATES } from '../lib/anthropicModel.js';
 import { fetchCerebrasWithFallback, cerebrasConfigured } from '../lib/cerebrasModel.js';
+import { readCerebrasCompletion, emptyReason } from '../lib/cerebrasStream.js';
+import { recordCompletionOutcomes } from '../lib/completionStats.js';
 import { quotaKeysFor, reserveQuota, refundQuota, reserveSingleCounter } from '../lib/quota.js';
 import { textOnlyContent } from '../lib/messageContent.js';
 import { createLineSplitter } from '../lib/sseLines.js';
@@ -389,6 +391,11 @@ export default async function handler(req, res) {
     // ── Stream provider response back to extension ──────────────────────────
     try {
         let upstream, modelUsed, provider;
+        // Set when a Cerebras completion was read in full before replying (see the Cerebras block below):
+        // the text is already in hand, so the stream is not read a second time.
+        let bufferedText;
+        let cerebrasFailed = false;
+        const outcomeStats = []; // fields for telemetry:completions:{day}, written once before the reply ends
 
         if (premiumReserved) {
             // Separate body: Sonnet 5 rejects `temperature`, and effort bounds
@@ -444,18 +451,37 @@ export default async function handler(req, res) {
             try {
                 const result = await fetchCerebrasWithFallback(cerebrasBody, { signal: AbortSignal.timeout(8_000) });
                 if (result.response.ok) {
-                    upstream = result.response;
-                    modelUsed = result.modelUsed;
-                    provider = 'cerebras';
+                    // Read the whole (short) stream before replying. A reasoning model can spend its entire output
+                    // budget on reasoning and finish with HTTP 200 and no text; streamed straight through, that
+                    // reached the user as an empty completion and never triggered the Gemini fallback below.
+                    // The 8s signal also bounds this read.
+                    const read = await readCerebrasCompletion(result.response);
+                    if (read.text.trim()) {
+                        upstream = result.response;
+                        modelUsed = result.modelUsed;
+                        provider = 'cerebras';
+                        bufferedText = read.text;
+                        outcomeStats.push('cerebras:ok');
+                    } else {
+                        cerebrasFailed = true;
+                        const why = emptyReason(read);
+                        outcomeStats.push('cerebras:empty', `cerebras:empty:${why}`);
+                        console.error(`Cerebras returned an empty completion (${why}), falling back to Gemini`);
+                    }
                 } else {
+                    cerebrasFailed = true;
+                    outcomeStats.push(`cerebras:error:http_${result.response.status}`);
                     console.error('Cerebras error, falling back to Gemini:', result.response.status, await result.response.text().catch(() => ''));
                 }
             } catch (err) {
+                cerebrasFailed = true;
+                outcomeStats.push('cerebras:error:exception');
                 console.error('Cerebras request failed, falling back to Gemini:', err);
             }
         }
 
         if (!upstream) {
+            if (cerebrasFailed) outcomeStats.push('gemini:after_cerebras_fail');
             const result = await withConnectTimeout(30_000, signal => fetchGeminiWithFallback(
                 'streamGenerateContent',
                 geminiBody,
@@ -467,7 +493,12 @@ export default async function handler(req, res) {
             provider = 'gemini';
         }
 
+        // Started here so the Redis write overlaps with sending the reply, and is recorded even if the
+        // fallback also failed (that is exactly the case worth counting). Awaited before the response ends.
+        const statsDone = recordCompletionOutcomes(redis, today, outcomeStats);
+
         if (!upstream.ok) {
+            await statsDone;
             const errText = await upstream.text().catch(() => upstream.statusText);
             console.error(`${provider} error:`, upstream.status, errText);
             // never charge for a failed upstream request
@@ -492,6 +523,7 @@ export default async function handler(req, res) {
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
         res.setHeader('Transfer-Encoding', 'chunked');
         res.setHeader('X-Model-Used', modelUsed); // helps spot a fallback engaging in the wild
+        if (cerebrasFailed) res.setHeader('X-Completion-Fallback', 'cerebras'); // Gemini answered because Cerebras failed or came back empty
         if (templateBonusUsed) {
             res.setHeader('X-Template-Bonus-Used', 'true'); // tells the extension to show the one-time upsell nudge
         }
@@ -522,7 +554,8 @@ export default async function handler(req, res) {
             }
         }
 
-        const reader  = upstream.body.getReader();
+        // A buffered Cerebras completion has already consumed its stream, so there is nothing left to read.
+        const reader  = bufferedText === undefined ? upstream.body.getReader() : null;
         const splitter = createLineSplitter(); // see lib/sseLines.js for why chunks aren't parsed in isolation
 
         // SSE lines look like: "data: {...}\n\n".
@@ -550,12 +583,18 @@ export default async function handler(req, res) {
             } catch { /* skip malformed SSE lines */ }
         };
 
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            splitter.push(value).forEach(handleLine);
+        if (bufferedText !== undefined) {
+            res.write(bufferedText);
+        } else {
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                splitter.push(value).forEach(handleLine);
+            }
+            splitter.flush().forEach(handleLine);
         }
-        splitter.flush().forEach(handleLine);
+
+        await statsDone; // never throws (see lib/completionStats.js)
 
         // Awaited before res.end(): on a serverless runtime, work started after
         // the response closes can be frozen mid-flight. recordUsage never throws.
