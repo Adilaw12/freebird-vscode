@@ -123,7 +123,10 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
     ): Promise<vscode.InlineCompletionItem[]> {
         const config = vscode.workspace.getConfiguration('freebird');
         const backend = config.get<string>('backend', 'cloud');
-        if (!config.get<boolean>('tabCompletion.enabled', true)) return [];
+        // Freebird Cloud completions are off unless the user turns them on in settings: the cloud model returned
+        // empty suggestions most of the time, and every empty one still used the free daily allowance. Local
+        // Ollama is free, so it keeps the default-on behaviour.
+        if (!tabCompletionEnabled(config, backend)) return [];
 
         if (document.uri.scheme !== 'file' && document.uri.scheme !== 'untitled') return [];
         if (document.getText().length === 0) return [];
@@ -282,6 +285,14 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
             });
         });
     }
+}
+
+/** On by default for local Ollama; off by default on Freebird Cloud. An explicit setting always wins. */
+function tabCompletionEnabled(config: vscode.WorkspaceConfiguration, backend: string): boolean {
+    const set = config.inspect<boolean>('tabCompletion.enabled');
+    const userChose = set?.globalValue !== undefined || set?.workspaceValue !== undefined || set?.workspaceFolderValue !== undefined;
+    if (userChose) return config.get<boolean>('tabCompletion.enabled', true);
+    return backend !== 'cloud';
 }
 
 function isFIMProvider(provider: unknown): provider is FIMProvider {

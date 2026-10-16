@@ -314,7 +314,7 @@
         "freebird.tabCompletion.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Show inline AI code completions (ghost text) as you type."
+          "description": "Show inline AI code completions (ghost text) as you type. On by default with local Ollama; off by default on Freebird Cloud until it is more reliable. Set it explicitly to override."
         },
         "freebird.tabCompletion.delay": {
           "type": "number",

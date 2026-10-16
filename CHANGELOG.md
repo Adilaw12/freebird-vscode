@@ -1,5 +1,11 @@
 # Changelog
 
+## \[Unreleased]
+
+### Changed
+
+* **Tab completions are off by default on Freebird Cloud.** Cloud completions came back empty most of the time, and each empty one still used the free daily allowance, so people ran out early. Turn them on in settings (`freebird.tabCompletion.enabled`) if you want to try them. Local Ollama completions stay on by default.
+
 ## \[0.15.3] — 2026-10-10
 
 ### Fixed
