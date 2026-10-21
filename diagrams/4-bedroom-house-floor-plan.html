@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>4-Bedroom House Floor Plan</title>
+  <style>
+    html, body { height: 100%; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1e1e2e; color: #cdd6f4; margin: 0; display: flex; flex-direction: column; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; flex-shrink: 0; }
+    h1 { font-size: 1.1rem; margin: 0; color: #89b4fa; font-weight: 600; }
+    .tools { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; }
+    .tools button { background: #313244; color: #cdd6f4; border: 1px solid #45475a; border-radius: 6px; padding: 3px 9px; cursor: pointer; font: inherit; }
+    .tools button:hover { background: #45475a; }
+    .tools button:focus-visible { outline: 2px solid #89b4fa; outline-offset: 1px; }
+    #zl { min-width: 3.2em; text-align: center; opacity: 0.8; }
+    #vp { flex: 1; position: relative; overflow: hidden; background: #181825; cursor: grab; touch-action: none; }
+    #vp.dragging { cursor: grabbing; }
+    /* Drawings are authored for paper (dark strokes, light fills), so show them on white. */
+    #vp.paper { background: #fff; }
+    #vp.paper + .hint, #vp.paper .hint { color: #1e1e2e; }
+    #stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+    #stage svg { display: block; }
+    .hint { position: absolute; right: 12px; bottom: 8px; font-size: 0.72rem; opacity: 0.45; pointer-events: none; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>4-Bedroom House Floor Plan</h1>
+    <div class="tools" role="toolbar" aria-label="Zoom">
+      <button id="zo" title="Zoom out (-)" aria-label="Zoom out">&minus;</button>
+      <span id="zl" aria-live="polite">100%</span>
+      <button id="zi" title="Zoom in (+)" aria-label="Zoom in">+</button>
+      <button id="zf" title="Fit to window (0 or double-click)">Fit</button>
+      <button id="z1" title="Actual size (1)">100%</button>
+    </div>
+  </header>
+  <main id="vp" class="paper"><div id="stage"><svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 880' font-family='Helvetica, Arial, sans-serif'>
+  <rect x='0' y='0' width='1200' height='880' fill='#fbfaf7'/>
+  <text x='600' y='36' text-anchor='middle' font-size='26' font-weight='bold' fill='#222'>4-BEDROOM HOUSE — FLOOR PLAN</text>
+  <text x='600' y='58' text-anchor='middle' font-size='13' fill='#666'>Single Story · Approx. 2,275 sq ft (65' x 45')</text>
+
+  <rect x='60' y='90' width='1040' height='720' fill='#ffffff' stroke='#1a1a1a' stroke-width='8'/>
+
+  <!-- Garage -->
+  <rect x='64' y='94' width='300' height='276' fill='#eef0f2' stroke='#1a1a1a' stroke-width='5'/>
+  <text x='214' y='225' text-anchor='middle' font-size='20' font-weight='600' fill='#333'>GARAGE</text>
+  <text x='214' y='247' text-anchor='middle' font-size='12' fill='#666'>19'6" x 17'3"</text>
+  <rect x='110' y='362' width='210' height='8' fill='#1a1a1a'/>
+
+  <!-- Entry -->
+  <rect x='364' y='94' width='150' height='150' fill='#ffffff' stroke='#1a1a1a' stroke-width='5'/>
+  <text x='439' y='165' text-anchor='middle' font-size='16' font-weight='600' fill='#333'>ENTRY</text>
+  <text x='439' y='183' text-anchor='middle' font-size='11' fill='#666'>FOYER</text>
+  <path d='M 414 94 A 40 40 0 0 1 454 134' fill='none' stroke='#999' stroke-width='1.5'/>
+  <line x1='414' y1='94' x2='414' y2='134' stroke='#1a1a1a' stroke-width='4'/>
+  <text x='439' y='74' text-anchor='middle' font-size='11' fill='#888'>front door</text>
+
+  <!-- Powder room -->
+  <rect x='364' y='244' width='150' height='126' fill='#ffffff' stroke='#1a1a1a' stroke-width='5'/>
+  <text x='439' y='300' text-anchor='middle' font-size='13' font-weight='600' fill='#333'>POWDER</text>
+  <text x='439' y='316' text-anchor='middle' font-size='11' fill='#666'>ROOM</text>
+  <circle cx='405' cy='350' r='9' fill='none' stroke='#8aa' stroke-width='2'/>
+
+  <!-- Living Room -->
+  <rect x='518' y='94' width='300' height='276' fill='#fff8ec' stroke='#1a1a1a' stroke-width='5'/>
+  <text x='668' y='220' text-anchor='middle' font-size='20' font-weight='600' fill='#333'>LIVING ROOM</text>
+  <text x='668' y='242' text-anchor='middle' font-size='12' fill='#666'>19'6" x 17'3"</text>
+  <rect x='560' y='86' width='80' height='10' fill='#9ec5e8'/>
+  <rect x='680' y='86' width='80' height='10' fill='#9ec5e8'/>
+
+  <!-- Dining Room -->
+  <rect x='822' y='94' width='278' height='276' fill='#fff8ec' stroke='#1a1a1a' stroke-width='5'/>
+  <text x='961' y='220' text-anchor='middle' font-size='18' font-weight='600' fill='#333'>DINING ROOM</text>
+  <text x='961' y='240' text-anchor='middle' font-size='12' fill='#666'>14' x 17'3"</text>
+  <rect x='940' y='86' width='80' height='10' fill='#9ec5e8'/>
+
+  <!-- Kitchen -->
+  <rect x='822' y='374' width='278' height='170' fill='#f3f7ee' stroke='#1a1a1a' stroke-width='5'/>
+  <text x='961' y='440' text-anchor='middle' font-size='18' font-weight='600' fill='#333'>KITCHEN</text>
+  <text x='961' y='460' text-anchor='middle' font-size='12' fill='#666'>14' x 10'6"</text>
+  <rect x='826' y='378' width='20' height='120' fill='#d8cdb8'/>
+  <rect x='826' y='378' width='150' height='20' fill='#d8cdb8'/>
+  <rect x='1030' y='378' width='66' height='20' fill='#d8cdb8'/>
+
+  <!-- Laundry/Pantry -->
+  <rect x='364' y='374' width='150' height='170' fill='#ffffff' stroke='#1a1a1a' stroke-width='5'/>
+  <text x='439' y='450' text-anchor='middle' font-size='13' font-weight='600' fill='#333'>LAUNDRY /</text>
+  <text x='439' y='466' text-anchor='middle' font-size='13' font-weight='600' fill='#333'>PANTRY</text>
+
+  <!-- Mud room -->
+  <rect x='64' y='374' width='300' height='170' fill='#eef0f2' stroke='#1a1a1a' stroke-width='5'/>
+  <text x='214' y='450' text-anchor='middle' font-size='14' font-weight='600' fill='#333'>MUD ROOM</text>
+  <text x='214' y='468' text-anchor='middle' font-size='11' fill='#666'>garage entry</text>
+
+  <!-- Hallway -->
+  <rect x='518' y='374' width='300' height='170' fill='#f6f6f3' stroke='#1a1a1a' stroke-width='5'/>
+  <text x='668' y='420' text-anchor='middle' font-size='14' font-weight='600' fill='#555'>HALLWAY</text>
+
+  <!-- Bedroom 2 -->
+  <rect x='64' y='548' width='260' height='258' fill='#eef2fb' stroke='#1a1a1a' stroke-width='5'/>
+  <text x='194' y='660' text-anchor='middle' font-size='18' font-weight='600' fill='#333'>BEDROOM 2</text>
+  <text x='194' y='680' text-anchor='middle' font-size='12' fill='#666'>12' x 16'</text>
+  <rect x='70' y='798' width='70' height='10' fill='#b9c6e0'/>
+  <rect x='250' y='548' width='74' height='70' fill='#ffffff' stroke='#1a1a1a' stroke-width='3'/>
+  <text x='287' y='588' text-anchor='middle' font-size='10' fill='#777'>CLOSET</text>
+
+  <!-- Bedroom 3 -->
+  <rect x='328' y='548' width='250' height='258' fill='#eef2fb' stroke='#1a1a1a' stroke-width='5'/>
+  <text x='453' y='660' text-anchor='middle' font-size='18' font-weight='600' fill='#333'>BEDROOM 3</text>
+  <text x='453' y='680' text-anchor='middle' font-size='12' fill='#666'>11'6" x 16'</text>
+  <rect x='500' y='548' width='74' height='70' fill='#ffffff' stroke='#1a1a1a' stroke-width='3'/>
+  <text x='537' y='588' text-anchor='middle' font-size='10' fill='#777'>CLOSET</text>
+
+  <!-- Bath 2 -->
+  <rect x='582' y='548' width='120' height='120' fill='#ffffff' stroke='#1a1a1a' stroke-width='5'/>
+  <text x='642' y='598' text-anchor='middle' font-size='13' font-weight='600' fill='#333'>BATH 2</text>
+  <rect x='590' y='556' width='40' height='22' fill='none' stroke='#8aa' stroke-width='2'/>
+  <circle cx='680' cy='640' r='12' fill='none' stroke='#8aa' stroke-width='2'/>
+
+  <!-- Linen -->
+  <rect x='582' y='672' width='120' height='40' fill='#ffffff' stroke='#1a1a1a' stroke-width='3'/>
+  <text x='642' y='697' text-anchor='middle' font-size='10' fill='#777'>LINEN</text>
+
+  <!-- Bedroom 4 / Office -->
+  <rect x='582' y='716' width='120' height='90' fill='#eef2fb' stroke='#1a1a1a' stroke-width='5'/>
+  <text x='642' y='745' text-anchor='middle' font-size='11' font-weight='600' fill='#333'>BED 4 /</text>
+  <text x='642' y='760' text-anchor='middle' font-size='11' font-weight='600' fill='#333'>OFFICE</text>
+
+  <!-- Master Suite -->
+  <rect x='706' y='548' width='394' height='258' fill='#f9eef0' stroke='#1a1a1a' stroke-width='5'/>
+  <text x='852' y='650' text-anchor='middle' font-size='18' font-weight='600' fill='#333'>BEDROOM 1 (MASTER)</text>
+  <text x='852' y='672' text-anchor='middle' font-size='12' fill='#666'>16' x 17'</text>
+  <rect x='706' y='794' width='90' height='12' fill='#e0b9c4'/>
+
+  <!-- divider between master bedroom and its closet/bath -->
+  <line x1='984' y1='548' x2='984' y2='806' stroke='#1a1a1a' stroke-width='5'/>
+
+  <!-- Walk-in closet -->
+  <rect x='988' y='548' width='112' height='110' fill='#ffffff' stroke='#1a1a1a' stroke-width='3'/>
+  <text x='1044' y='596' text-anchor='middle' font-size='11' font-weight='600' fill='#333'>WALK-IN</text>
+  <text x='1044' y='610' text-anchor='middle' font-size='11' font-weight='600' fill='#333'>CLOSET</text>
+
+  <!-- Master Bath -->
+  <rect x='988' y='662' width='112' height='144' fill='#ffffff' stroke='#1a1a1a' stroke-width='3'/>
+  <text x='1044' y='700' text-anchor='middle' font-size='12' font-weight='600' fill='#333'>MASTER</text>
+  <text x='1044' y='715' text-anchor='middle' font-size='12' font-weight='600' fill='#333'>BATH</text>
+  <rect x='994' y='670' width='50' height='22' fill='none' stroke='#8aa' stroke-width='2'/>
+  <circle cx='1080' cy='700' r='10' fill='none' stroke='#8aa' stroke-width='2'/>
+  <rect x='994' y='760' width='80' height='36' fill='none' stroke='#8aa' stroke-width='2'/>
+  <text x='1034' y='782' text-anchor='middle' font-size='9' fill='#8aa'>tub/shower</text>
+
+  <!-- North arrow -->
+  <g transform='translate(1065,120)'>
+    <circle r='28' fill='#ffffff' stroke='#999' stroke-width='1.5'/>
+    <line x1='0' y1='18' x2='0' y2='-18' stroke='#333' stroke-width='2'/>
+    <polygon points='0,-24 -7,-12 7,-12' fill='#333'/>
+    <text x='0' y='-30' text-anchor='middle' font-size='12' fill='#333' font-weight='600'>N</text>
+  </g>
+
+  <!-- Scale -->
+  <g transform='translate(70,830)'>
+    <line x1='0' y1='0' x2='120' y2='0' stroke='#333' stroke-width='2'/>
+    <line x1='0' y1='-5' x2='0' y2='5' stroke='#333' stroke-width='2'/>
+    <line x1='120' y1='-5' x2='120' y2='5' stroke='#333' stroke-width='2'/>
+    <text x='60' y='-10' text-anchor='middle' font-size='11' fill='#555'>10 ft</text>
+  </g>
+</svg></div><span class="hint">Scroll to zoom &middot; drag to pan &middot; double-click to fit</span></main>
+  <script>
+(function () {
+  var vp = document.getElementById('vp'), stage = document.getElementById('stage'), zl = document.getElementById('zl');
+  var s = 1, tx = 0, ty = 0, nat = null, touched = false;
+  function measure() {
+    var svg = stage.querySelector('svg'); if (!svg) return null;
+    var vb = svg.viewBox && svg.viewBox.baseVal, w, h;
+    if (vb && vb.width && vb.height) { w = vb.width; h = vb.height; }
+    else { var bb = svg.getBBox(); w = bb.x + bb.width; h = bb.y + bb.height; }
+    svg.removeAttribute('style'); svg.setAttribute('width', w); svg.setAttribute('height', h);
+    return { w: w, h: h };
+  }
+  function apply() { stage.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + s + ')'; zl.textContent = Math.round(s * 100) + '%'; }
+  function fit() {
+    if (!nat) return;
+    var pad = 24;
+    s = Math.min((vp.clientWidth - pad * 2) / nat.w, (vp.clientHeight - pad * 2) / nat.h, 2);
+    tx = (vp.clientWidth - nat.w * s) / 2; ty = (vp.clientHeight - nat.h * s) / 2; apply();
+  }
+  function zoomAt(f, cx, cy) {
+    var ns = Math.max(0.1, Math.min(8, s * f)); touched = true;
+    tx = cx - (cx - tx) * (ns / s); ty = cy - (cy - ty) * (ns / s); s = ns; apply();
+  }
+  function center() { return [vp.clientWidth / 2, vp.clientHeight / 2]; }
+  function actual() { touched = true; var c = center(); zoomAt(1 / s, c[0], c[1]); }
+  vp.addEventListener('wheel', function (e) {
+    e.preventDefault(); var r = vp.getBoundingClientRect();
+    zoomAt(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX - r.left, e.clientY - r.top);
+  }, { passive: false });
+  var drag = null;
+  vp.addEventListener('pointerdown', function (e) { drag = { x: e.clientX, y: e.clientY, tx: tx, ty: ty }; vp.setPointerCapture(e.pointerId); vp.classList.add('dragging'); });
+  vp.addEventListener('pointermove', function (e) { if (!drag) return; touched = true; tx = drag.tx + e.clientX - drag.x; ty = drag.ty + e.clientY - drag.y; apply(); });
+  function endDrag() { drag = null; vp.classList.remove('dragging'); }
+  vp.addEventListener('pointerup', endDrag); vp.addEventListener('pointercancel', endDrag);
+  vp.addEventListener('dblclick', function () { touched = false; fit(); });
+  document.getElementById('zi').onclick = function () { var c = center(); zoomAt(1.25, c[0], c[1]); };
+  document.getElementById('zo').onclick = function () { var c = center(); zoomAt(0.8, c[0], c[1]); };
+  document.getElementById('zf').onclick = function () { touched = false; fit(); };
+  document.getElementById('z1').onclick = actual;
+  document.addEventListener('keydown', function (e) {
+    var c = center();
+    if (e.key === '+' || e.key === '=') zoomAt(1.25, c[0], c[1]);
+    else if (e.key === '-') zoomAt(0.8, c[0], c[1]);
+    else if (e.key === '0') { touched = false; fit(); }
+    else if (e.key === '1') actual();
+  });
+  window.addEventListener('resize', function () { if (!touched) fit(); });
+  window.__viewerReady = function () { nat = measure(); fit(); };
+  // Renders the drawing to a PNG (white background, capped at ~1600px) and posts it
+  // to the extension, so create_drawing can show the model what it actually drew.
+  // Only runs inside a VS Code webview; a no-op when the file is opened in a browser.
+  window.__rasterize = function () {
+    var svg = stage.querySelector('svg');
+    if (!svg || !nat || typeof acquireVsCodeApi !== 'function') return;
+    var api = window.__vsapi || (window.__vsapi = acquireVsCodeApi());
+    var scale = Math.min(2, 1600 / Math.max(nat.w, nat.h));
+    var xml = new XMLSerializer().serializeToString(svg);
+    if (!/xmlns=/.test(xml.slice(0, 300))) xml = xml.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+    var img = new Image();
+    img.onload = function () {
+      try {
+        var c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(nat.w * scale)); c.height = Math.max(1, Math.round(nat.h * scale));
+        var ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+        ctx.drawImage(img, 0, 0, c.width, c.height);
+        api.postMessage({ type: 'raster', png: c.toDataURL('image/png') });
+      } catch (e) { api.postMessage({ type: 'raster-error', message: String(e && e.message || e) }); }
+    };
+    img.onerror = function () { api.postMessage({ type: 'raster-error', message: 'The SVG could not be rendered (malformed markup?)' }); };
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
+  };
+})();
+</script>
+  <script>window.__viewerReady(); window.__rasterize();</script>
+</body>
+</html>

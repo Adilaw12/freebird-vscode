@@ -4,6 +4,7 @@ import { FIMProvider } from '../ai/provider';
 import { getMachineId, trackEvent } from '../telemetry';
 import { stripFences } from '../util/text';
 import { UPGRADE_URL, XENDIT_CHECKOUT_URL, getCachedLicenseStatus } from '../license/validator';
+import { hasApiKey, KeyProvider, isKeyProvider } from '../ai/keys';
 
 const MAX_PREFIX_LINES = 100;
 const MAX_SUFFIX_LINES = 20;
@@ -144,6 +145,11 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
             return [];
         }
 
+        // A bring-your-own-key backend with no key can never answer. Stop here instead of sending a request
+        // that fails: that was showing up as a completion error on every keystroke. Chat still explains how
+        // to add a key, so nothing else is needed here.
+        if (isKeyProvider(backend) && !hasApiKey(backend as KeyProvider)) return [];
+
         const delayMs = effectiveDelay(config, backend);
         const cancelled = await this.debounce(delayMs, token);
         if (cancelled || token.isCancellationRequested) {
@@ -213,6 +219,7 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
             }
             // Every failure the user sees as a one-time warning also needs a count: without it, a backend that
             // fails on every request looks identical to one that is simply never asked.
+            if (err?.code === 'NO_KEY') return [];
             trackEvent('tab_completion_error', `${backend}:${errorReason(err)}`);
             if (!warnedThisSession) {
                 warnedThisSession = true;

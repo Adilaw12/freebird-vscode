@@ -1,0 +1,199 @@
+{
+  "brief": {
+    "buildingType": "residential",
+    "bedrooms": 4,
+    "location": "Melbourne, Australia",
+    "style": "Single storey brick veneer, typical Australian suburban layout"
+  },
+  "layout": {
+    "w": 16,
+    "items": [
+      {
+        "h": 4,
+        "items": [
+          {
+            "id": "garage",
+            "name": "Garage",
+            "type": "garage",
+            "w": 3
+          },
+          {
+            "id": "entry",
+            "name": "Entry",
+            "type": "hall",
+            "w": 2
+          },
+          {
+            "id": "living",
+            "name": "Living",
+            "type": "living",
+            "w": 5
+          },
+          {
+            "id": "dining",
+            "name": "Dining",
+            "type": "dining",
+            "w": 3
+          },
+          {
+            "id": "kitchen",
+            "name": "Kitchen",
+            "type": "kitchen",
+            "w": 3
+          }
+        ]
+      },
+      {
+        "h": 1.5,
+        "items": [
+          {
+            "id": "hall",
+            "name": "Hall",
+            "type": "hall",
+            "w": 16
+          }
+        ]
+      },
+      {
+        "h": 4,
+        "items": [
+          {
+            "id": "bed1",
+            "name": "Master Bedroom",
+            "type": "bedroom",
+            "w": 4
+          },
+          {
+            "id": "ensuite",
+            "name": "Ensuite",
+            "type": "bathroom",
+            "w": 2
+          },
+          {
+            "id": "bed2",
+            "name": "Bedroom 2",
+            "type": "bedroom",
+            "w": 3
+          },
+          {
+            "id": "bed3",
+            "name": "Bedroom 3",
+            "type": "bedroom",
+            "w": 3
+          },
+          {
+            "id": "bed4",
+            "name": "Bedroom 4",
+            "type": "bedroom",
+            "w": 2.5
+          },
+          {
+            "id": "bath2",
+            "name": "Bathroom",
+            "type": "bathroom",
+            "w": 1.5
+          }
+        ]
+      }
+    ]
+  },
+  "doors": [
+    {
+      "from": "exterior",
+      "to": "garage",
+      "side": "N"
+    },
+    {
+      "from": "exterior",
+      "to": "entry",
+      "side": "N"
+    },
+    {
+      "from": "entry",
+      "to": "living",
+      "side": "E"
+    },
+    {
+      "from": "living",
+      "to": "dining",
+      "side": "E"
+    },
+    {
+      "from": "dining",
+      "to": "kitchen",
+      "side": "E"
+    },
+    {
+      "from": "living",
+      "to": "hall",
+      "side": "S"
+    },
+    {
+      "from": "hall",
+      "to": "bed1",
+      "side": "N"
+    },
+    {
+      "from": "hall",
+      "to": "bed2",
+      "side": "N"
+    },
+    {
+      "from": "hall",
+      "to": "bed3",
+      "side": "N"
+    },
+    {
+      "from": "hall",
+      "to": "bed4",
+      "side": "N"
+    },
+    {
+      "from": "hall",
+      "to": "bath2",
+      "side": "N"
+    },
+    {
+      "from": "bed1",
+      "to": "ensuite",
+      "side": "E"
+    }
+  ],
+  "windows": [
+    {
+      "room": "living",
+      "side": "N",
+      "width": 3
+    },
+    {
+      "room": "dining",
+      "side": "N",
+      "width": 1.8
+    },
+    {
+      "room": "kitchen",
+      "side": "N",
+      "width": 1.8
+    },
+    {
+      "room": "bed1",
+      "side": "S",
+      "width": 1.8
+    },
+    {
+      "room": "bed2",
+      "side": "S",
+      "width": 1.5
+    },
+    {
+      "room": "bed3",
+      "side": "S",
+      "width": 1.5
+    },
+    {
+      "room": "bed4",
+      "side": "S",
+      "width": 1.5
+    }
+  ]
+}
