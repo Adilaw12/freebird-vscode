@@ -75,7 +75,13 @@ check('empty submission rejected', (await call({ trigger: 'manual', meta })).sta
 check('GET rejected', (await call({}, 'GET')).status === 405);
 
 const entry = JSON.parse(lists.get(`feedback:items:${today}`)[0]);
-check('no email or contact field is ever stored', !('email' in entry) && !Object.keys(entry).some(k => /mail|contact|name/i.test(k)));
+check('no contact stored when none was given', entry.contact === null);
+
+const latest = () => JSON.parse(lists.get(`feedback:items:${today}`)[0]);
+const withEmail = await call({ trigger: 'manual', text: 'hi', contact: '  someone@example.com ', meta: { ...meta, machineId: 'm-contact-1' } });
+check('valid reply email is stored, trimmed', withEmail.status === 200 && latest().contact === 'someone@example.com');
+const badEmail = await call({ trigger: 'manual', text: 'hi', contact: 'not-an-email', meta: { ...meta, machineId: 'm-contact-2' } });
+check('malformed email is dropped and the report is kept', badEmail.status === 200 && latest().contact === null && latest().text === 'hi');
 
 let last;
 for (let i = 0; i < 25; i++) last = await call({ trigger: 'result', rating: 'up', meta: { ...meta, machineId: 'm-flood' } });

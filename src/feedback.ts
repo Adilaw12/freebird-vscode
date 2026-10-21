@@ -9,6 +9,8 @@ export interface FeedbackSubmission {
     rating?: 'up' | 'down';
     reason?: string;
     text?: string;
+    /** Optional reply address, typed by the user. Only sent when they fill it in. */
+    contact?: string;
     /** Bounded classifier for what the user was doing (an error code or feature) — never free text. */
     context?: string;
 }

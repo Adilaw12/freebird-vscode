@@ -148,10 +148,11 @@ export class CloudProvider implements AIProvider {
             // for anything billing/security-relevant.
             templateId: opts?.templateId,
             templateLicenseKey: templateLicenseKey || undefined,
-            // Agent-mode requests (premium flag) produce whole files and drawings in one
-            // answer; the chat default of 2048 truncated them mid-file. The backend still
-            // caps each tier (free trial 4096) — this just stops us asking for too little.
-            maxTokens:  opts?.maxTokens ?? (opts?.premium ? 16000 : 2048),
+            // Chat replies that include several files or a command ran past the old 2048
+            // default and were cut off mid-answer. Agent-mode requests (premium) get more.
+            // The backend still caps each tier (free trial 4096) — this just stops us asking
+            // for too little.
+            maxTokens:  opts?.maxTokens ?? (opts?.premium ? 16000 : 8192),
             isTabCompletion: opts?.isTabCompletion,
             premium: opts?.premium,
             agentTrial: opts?.agentTrial,

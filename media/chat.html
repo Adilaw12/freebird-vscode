@@ -509,6 +509,9 @@ em { font-style: italic; }
   border: 1px solid var(--vscode-input-border, var(--vscode-widget-border, rgba(255,255,255,0.12)));
 }
 .feedback-text:focus { outline: 1px solid var(--vscode-focusBorder, #4a9eff); outline-offset: -1px; }
+.feedback-contact { width: 100%; box-sizing: border-box; margin-top: 6px; padding: 6px 8px; font: inherit; color: inherit;
+  background: var(--vscode-input-background, rgba(255,255,255,0.04)); border: 1px solid var(--vscode-input-border, rgba(255,255,255,0.12)); border-radius: 4px; }
+.feedback-contact:focus { outline: 1px solid var(--vscode-focusBorder, #4a9eff); outline-offset: -1px; }
 .feedback-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .feedback-note { opacity: 0.5; font-size: 0.92em; line-height: 1.35; }
 .feedback-buttons { display: flex; gap: 6px; flex-shrink: 0; }
@@ -1686,7 +1689,10 @@ function showFeedbackCard(kind, context, auto) {
   ta.setAttribute('aria-label', 'Your feedback');
   ta.placeholder = kind === 'failure' ? 'What were you trying to do? (optional)'
                  : kind === 'manual' ? 'Tell us what\'s on your mind' : 'What went wrong? (optional)';
-  var note = mk('span', 'feedback-note', 'Sent with your Freebird version and platform. No code, prompts or email.');
+  var contact = mk('input', 'feedback-contact'); contact.type = 'email'; contact.maxLength = 120;
+  contact.placeholder = 'Your email (optional, only so we can reply)';
+  contact.setAttribute('aria-label', 'Email, optional');
+  var note = mk('span', 'feedback-note', 'Sent with your Freebird version and platform. No code or prompts. Your email is only used to reply.');
   var status = mk('span', 'feedback-error'); status.setAttribute('role', 'status');
   var send = mk('button', 'feedback-send', 'Send'); send.type = 'button';
   var skip = mk('button', 'feedback-skip', kind === 'failure' ? 'Not now' : 'Cancel'); skip.type = 'button';
@@ -1695,7 +1701,7 @@ function showFeedbackCard(kind, context, auto) {
   btns.appendChild(skip); btns.appendChild(send);
   var footLeft = mk('div'); footLeft.appendChild(note); footLeft.appendChild(status);
   foot.appendChild(footLeft); foot.appendChild(btns);
-  body.appendChild(chipRow); body.appendChild(ta); body.appendChild(foot);
+  body.appendChild(chipRow); body.appendChild(ta); body.appendChild(contact); body.appendChild(foot);
   card.appendChild(body);
 
   function refresh() { send.disabled = !(rating || ta.value.trim() || (kind === 'failure')); }
@@ -1724,7 +1730,8 @@ function showFeedbackCard(kind, context, auto) {
     vscode.postMessage({
       type: 'feedback-submit', id: id, trigger: kind, context: context,
       rating: rating || (kind === 'failure' ? 'down' : undefined),
-      reason: reason || undefined, text: ta.value.trim() || undefined
+      reason: reason || undefined, text: ta.value.trim() || undefined,
+      contact: contact.value.trim() || undefined
     });
   }
   send.onclick = submit;

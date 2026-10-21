@@ -4,10 +4,10 @@ const redis = Redis.fromEnv();
 
 // In-product feedback from the extension's chat view (thumbs on a result, a
 // "what went wrong" note after a failure, or the always-available Feedback
-// button). No email or other contact detail is collected.
+// button). An email is collected only if the user types one, to reply to them.
 //
 // Payload: { rating?: 'up'|'down', reason?, text?, trigger, context?,
-//            meta: { version, platform, backend, machineId } }
+//            contact?, meta: { version, platform, backend, machineId } }
 //
 // Free text is stored here, never sent through /api/telemetry (whose `detail`
 // field is a bounded classifier, not a place for user-written text). The
@@ -31,6 +31,9 @@ const MAX_ITEMS_PER_DAY = 1000;
 const TTL_SECONDS = 90 * 24 * 3600;
 
 const clip = (v, n) => (typeof v === 'string' ? v.trim().slice(0, n) : '');
+// Optional reply address. Deliberately loose: it only has to look like an email,
+// and anything that doesn't is dropped rather than failing the whole report.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '');
@@ -55,6 +58,8 @@ export default async function handler(req, res) {
     if (!rating && !text) return res.status(400).json({ error: 'Nothing to record' });
 
     const machineId = clip(meta.machineId, 64);
+    const contactRaw = clip(body.contact, 120);
+    const contact = EMAIL_RE.test(contactRaw) ? contactRaw : null;
     const today = new Date().toISOString().slice(0, 10);
 
     try {
@@ -78,6 +83,8 @@ export default async function handler(req, res) {
             // feature name) — same rules as telemetry `detail`.
             context: clip(body.context, 48) || null,
             machineId: machineId || null,
+            // Kept only so the team can reply to this report. Optional and never used for anything else.
+            contact,
             version: clip(meta.version, 16) || null,
             platform: clip(meta.platform, 16) || null,
             backend: clip(meta.backend, 32) || null,

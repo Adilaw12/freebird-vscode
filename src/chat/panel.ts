@@ -251,7 +251,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 case 'feedback-submit': {
                     const ok = await submitFeedback(this.context, {
                         trigger: msg.trigger, rating: msg.rating, reason: msg.reason,
-                        text: typeof msg.text === 'string' ? msg.text : undefined, context: msg.context
+                        text: typeof msg.text === 'string' ? msg.text : undefined, context: msg.context,
+                        contact: typeof msg.contact === 'string' && msg.contact.trim() ? msg.contact.trim() : undefined
                     } as FeedbackSubmission);
                     this.post({ type: 'feedback-result', id: msg.id, ok });
                     break;
