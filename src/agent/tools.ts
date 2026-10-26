@@ -31,6 +31,8 @@ export interface ToolResult {
     /** Set by verify_diagram (and future visual-check tools) so the model's
      *  next turn — and the chat UI — can actually see what got rendered. */
     image?: { mimeType: string; base64: string };
+    /** Why a run_command failed, for telemetry: a timeout kill or a non-zero exit. */
+    failure?: 'timeout' | 'exit';
 }
 
 // ── Native tool schemas (for Anthropic/OpenAI/DeepSeek/Qwen) ─────────────────
@@ -979,7 +981,11 @@ async function runCommandTool(tool: ToolCall, onApprovalNeeded: ApprovalFn, turn
             (err: ExecException | null, stdout: string, stderr: string) => {
                 const combined = truncate(`${stdout}${stderr}`.trim() || '(no output)', MAX_TOOL_OUTPUT_CHARS);
                 if (err) {
-                    resolve({ success: false, output: `${combined}\n\n[exit code ${err.code ?? 'unknown'}]` });
+                    resolve({
+                        success: false,
+                        output: `${combined}\n\n[exit code ${err.code ?? 'unknown'}]`,
+                        failure: err.killed ? 'timeout' : 'exit'
+                    });
                 } else {
                     resolve({ success: true, output: combined });
                 }

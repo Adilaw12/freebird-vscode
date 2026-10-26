@@ -49,7 +49,7 @@ export type AgentEvent =
     /** Plain-language progress line for the UI ("Waiting for the model…", "Writing deck.pptx…"). */
     | { type: 'status'; text: string }
     | { type: 'tool-start'; id: string; tool: ToolCall }
-    | { type: 'tool-result'; id: string; tool: ToolCall; success: boolean; output: string; image?: { mimeType: string; base64: string } };
+    | { type: 'tool-result'; id: string; tool: ToolCall; success: boolean; output: string; image?: { mimeType: string; base64: string }; failure?: 'timeout' | 'exit' };
 
 export interface AgentRunOptions {
     userMessage: string;
@@ -190,7 +190,7 @@ async function runNativeToolLoop(opts: AgentRunOptions, turnId: string): Promise
             const id = `${tc.name}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
             onEvent({ type: 'tool-start', id, tool: internalTool });
             const toolResult = await executeToolCall(internalTool, git, onApprovalNeeded, context, sessionId, turnId);
-            onEvent({ type: 'tool-result', id, tool: internalTool, success: toolResult.success, output: toolResult.output, image: toolResult.image });
+            onEvent({ type: 'tool-result', id, tool: internalTool, success: toolResult.success, output: toolResult.output, image: toolResult.image, failure: toolResult.failure });
 
             toolResults.push({
                 toolCallId: tc.id,
@@ -382,7 +382,7 @@ async function runTextParsedLoop(opts: AgentRunOptions, turnId: string): Promise
             const id = `${tool.action}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
             onEvent({ type: 'tool-start', id, tool });
             const result = await executeToolCall(tool, git, onApprovalNeeded, context, sessionId, turnId);
-            onEvent({ type: 'tool-result', id, tool, success: result.success, output: result.output, image: result.image });
+            onEvent({ type: 'tool-result', id, tool, success: result.success, output: result.output, image: result.image, failure: result.failure });
             toolResultParts.push(
                 `Result of ${tool.action}:\n` +
                 (result.success ? result.output : `[ERROR] ${result.output}`)
