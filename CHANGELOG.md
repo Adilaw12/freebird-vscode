@@ -1,5 +1,12 @@
 # Changelog
 
+## \[Unreleased]
+
+### Fixed
+
+* **Failures now say what went wrong.** A dropped connection, an unreachable network, a server error and a provider error each get their own name in the error message and in the counts, instead of all being filed as "unknown". "The AI provider returned an error" and "Free tier is temporarily at capacity" are no longer reported as "took too long".
+* **Tab completion stops retrying a failing backend.** After five failures in a row, suggestions pause for two minutes (up to thirty if the backend keeps failing) instead of sending a request at every pause in typing. One successful reply starts it again.
+
 ## \[0.15.4] — 2026-10-16
 
 ### Changed

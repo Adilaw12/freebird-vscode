@@ -47,7 +47,9 @@ const suites = [
     require('./template-welcome.test.js'),
     require('./api-keys.test.js'),
     require('./usage-stats.test.js'),
-    require('./documents.test.js')
+    require('./documents.test.js'),
+    require('./cloud-errors.test.js'),
+    require('./error-breaker.test.js')
 ];
 
 (async () => {

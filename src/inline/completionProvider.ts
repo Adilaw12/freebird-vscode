@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { getProvider } from '../ai';
 import { FIMProvider } from '../ai/provider';
 import { getMachineId, trackEvent } from '../telemetry';
+import { ErrorBreaker } from './errorBreaker';
 import { stripFences } from '../util/text';
 import { UPGRADE_URL, XENDIT_CHECKOUT_URL, getCachedLicenseStatus } from '../license/validator';
 import { hasApiKey, KeyProvider, isKeyProvider } from '../ai/keys';
@@ -68,6 +69,8 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
     private pendingTimer: ReturnType<typeof setTimeout> | undefined;
     private readonly pausedItem: vscode.StatusBarItem;
     private resumeTimer: ReturnType<typeof setTimeout> | undefined;
+    // Stops requests after repeated failures so a broken backend is not retried at every pause in typing.
+    private readonly errorBreaker = new ErrorBreaker();
 
     constructor(private readonly context: vscode.ExtensionContext) {
         // Persistent, clickable notice while free completions are used up — the one-off toast was easy to miss,
@@ -150,6 +153,16 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
         // to add a key, so nothing else is needed here.
         if (isKeyProvider(backend) && !hasApiKey(backend as KeyProvider)) return [];
 
+        // The backend keeps failing (unreachable, bad key, no network): stop asking for a while instead of failing
+        // again at every pause in typing. The one-time warning already told the user what is wrong.
+        if (this.errorBreaker.isOpen) {
+            if (Date.now() - lastSkipEventAt > 10 * 60 * 1000) {
+                lastSkipEventAt = Date.now();
+                trackEvent('tab_completion_skipped_errors', backend);
+            }
+            return [];
+        }
+
         const delayMs = effectiveDelay(config, backend);
         const cancelled = await this.debounce(delayMs, token);
         if (cancelled || token.isCancellationRequested) {
@@ -221,6 +234,7 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
             // fails on every request looks identical to one that is simply never asked.
             if (err?.code === 'NO_KEY') return [];
             trackEvent('tab_completion_error', `${backend}:${errorReason(err)}`);
+            if (this.errorBreaker.recordFailure()) trackEvent('tab_completion_paused_errors', backend);
             if (!warnedThisSession) {
                 warnedThisSession = true;
 
@@ -250,6 +264,9 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
         // after the user had already typed past it and VS Code cancelled?
         // Those have very different fixes (a bad maxTokens/reasoning_effort
         // tuning vs. nothing actually wrong), so they need separate counts.
+        // Every path that reaches here got an answer from the backend (even an empty one).
+        this.errorBreaker.recordSuccess();
+
         // (Normally an in-flight cancellation aborts the request and lands in the
         // catch above; this covers a response that finished as it was cancelled.)
         if (token.isCancellationRequested) {
