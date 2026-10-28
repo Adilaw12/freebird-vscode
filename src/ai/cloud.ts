@@ -43,6 +43,32 @@ function withTimeout(signal: AbortSignal | undefined, ms: number): AbortSignal {
     return ctrl.signal;
 }
 
+/** True for the two errors that are not failures: the caller cancelled, or our own backstop timer fired. */
+function isAbortOrTimeout(err: any): boolean {
+    return err?.name === 'AbortError' || err?.name === 'TimeoutError';
+}
+
+/**
+ * A code from a backend error body, only if it looks like one (SHOUTY_SNAKE). The code ends up in
+ * telemetry as a bounded label, so anything else is dropped rather than trusted.
+ */
+function cleanCode(value: unknown): string | undefined {
+    return typeof value === 'string' && /^[A-Z][A-Z_0-9]{0,39}$/.test(value) ? value : undefined;
+}
+
+/** The low-level reason behind a network failure (e.g. ENOTFOUND, ECONNRESET), for support — never the full text. */
+function networkHint(err: any): string {
+    const raw = err?.cause?.code ?? err?.code;
+    return typeof raw === 'string' && /^[A-Z_0-9]{1,40}$/.test(raw) ? ` (${raw})` : '';
+}
+
+/** Error with a machine-readable `code`, so every failure lands in telemetry under its own name. */
+function codedError(message: string, code: string): Error {
+    const e = new Error(message) as any;
+    e.code = code;
+    return e;
+}
+
 export class CloudProvider implements AIProvider {
     private readonly context: vscode.ExtensionContext;
     private readonly sessionId: string;
@@ -159,17 +185,28 @@ export class CloudProvider implements AIProvider {
             effort: opts?.effort
         };
 
-        const res = await fetch(endpoint, {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify(body),
-            // Backstop only. This covers the WHOLE request, including the time a Pro agent
-            // model spends planning before it streams a single character. It sits above the
-            // backend's own 120s function limit (backend/vercel.json) so the server's limit,
-            // not this timer, normally ends a stuck request. 90s used to cut off requests
-            // the server was still happily working on.
-            signal:  withTimeout(opts?.signal, STREAM_TIMEOUT_MS)
-        });
+        let res: Response;
+        try {
+            res = await fetch(endpoint, {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify(body),
+                // Backstop only. This covers the WHOLE request, including the time a Pro agent
+                // model spends planning before it streams a single character. It sits above the
+                // backend's own 120s function limit (backend/vercel.json) so the server's limit,
+                // not this timer, normally ends a stuck request. 90s used to cut off requests
+                // the server was still happily working on.
+                signal:  withTimeout(opts?.signal, STREAM_TIMEOUT_MS)
+            });
+        } catch (err: any) {
+            if (isAbortOrTimeout(err)) throw err;
+            // The request never got an answer (DNS, connection reset, offline, blocked network). Before this it
+            // surfaced as a bare "fetch failed" with no code, so these failures were all counted as "unknown".
+            throw codedError(
+                `Couldn't reach Freebird Cloud${networkHint(err)}. Check your internet connection, VPN or proxy, then try again.`,
+                'NETWORK_ERROR'
+            );
+        }
 
         if (res.status === 401) {
             const errorBody = await res.json().catch(() => ({})) as Record<string, unknown>;
@@ -215,22 +252,35 @@ export class CloudProvider implements AIProvider {
         // cause is a very large single answer (e.g. a detailed drawing), and the
         // bare "Cloud AI error (504)" gave the user nothing to act on.
         if (res.status === 504 || res.status === 503 || res.status === 502) {
-            const err = new Error(
+            // Our own backend also answers 502/503 on purpose, with a code and a message (the AI provider failed, or
+            // the free tier is at capacity). Those are not timeouts and used to be reported as "took too long".
+            const errorBody = await res.json().catch(() => ({})) as Record<string, unknown>;
+            const code = cleanCode(errorBody.code);
+            if (code === 'UPSTREAM_ERROR') {
+                const status = typeof errorBody.status === 'number' ? ` (HTTP ${errorBody.status})` : '';
+                throw codedError(`The AI provider returned an error${status}. Try again in a moment.`, 'UPSTREAM_ERROR');
+            }
+            if (code && typeof errorBody.error === 'string') {
+                throw codedError(errorBody.error, code);
+            }
+            throw codedError(
                 'The cloud AI took too long to answer (the request timed out). ' +
                 'This usually happens with very large outputs — try again, or ask for something smaller or simpler ' +
-                '(for a drawing: fewer rooms or less detail). If it keeps happening, switch to a faster backend via "Freebird: Configure AI Backend".'
-            ) as any;
-            err.code = 'GATEWAY_TIMEOUT';
-            throw err;
+                '(for a drawing: fewer rooms or less detail). If it keeps happening, switch to a faster backend via "Freebird: Configure AI Backend".',
+                'GATEWAY_TIMEOUT'
+            );
         }
 
         if (!res.ok) {
             let detail = res.statusText;
+            let code: string | undefined;
             try {
                 const body = await res.json() as Record<string, unknown>;
                 detail = (body.error as string) ?? detail;
+                code = cleanCode(body.code);
             } catch { /* ignore */ }
-            throw new Error(`Cloud AI error (${res.status}): ${detail}`);
+            // Always coded: the server's own code when it sent one (e.g. SERVER_ERROR), otherwise the HTTP status.
+            throw codedError(`Cloud AI error (${res.status}): ${detail}`, code ?? `HTTP_${res.status}`);
         }
 
         // Update local quota cache from response headers (quota mode only)
@@ -271,15 +321,26 @@ export class CloudProvider implements AIProvider {
         const decoder = new TextDecoder();
         let firstByteMs = -1, chars = 0;
 
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            const text = decoder.decode(value, { stream: true });
-            if (text) {
-                if (firstByteMs < 0) firstByteMs = Date.now() - t0;
-                chars += text.length;
-                onChunk(text);
+        try {
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                const text = decoder.decode(value, { stream: true });
+                if (text) {
+                    if (firstByteMs < 0) firstByteMs = Date.now() - t0;
+                    chars += text.length;
+                    onChunk(text);
+                }
             }
+        } catch (err: any) {
+            if (isAbortOrTimeout(err)) throw err;
+            // The answer started and the connection then died ("terminated"). Named so it is not lumped in with
+            // server errors; any text that already arrived stays on screen (the panel appends this note).
+            perfLog(`request  STREAM DROPPED after ${((Date.now() - t0) / 1000).toFixed(1)}s, ${chars} chars`);
+            throw codedError(
+                `The connection to Freebird Cloud dropped${chars > 0 ? ' partway through the answer' : ' before any text arrived'}${networkHint(err)}. Try again.`,
+                'STREAM_DROPPED'
+            );
         }
         // A request that ends without a single character of text is a failure, not an empty answer: the Pro
         // model can spend its whole output budget planning and stop before writing anything, which used to
