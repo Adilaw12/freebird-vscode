@@ -11,6 +11,7 @@
 ### Changed
 
 * **Cloud tab completions use Gemini only.** The Cerebras path is removed. Cloud completions are still off by default; turn them on with `freebird.tabCompletion.enabled`.
+* **Pro tab completions have a daily ceiling.** Pro, Team and trial completions go to Gemini, not Haiku, and are capped at 1,000 a day per license. At the cap, completions pause until midnight UTC and the message points to Ollama, which has no limit. Chat and agent work still use Haiku.
 * **Stripe webhook errors are retried.** A failed handler now returns a 500, so Stripe retries the event instead of dropping it. Before, a failed write could leave a paying customer with no license.
 * **Subscription lifecycle is counted.** Renewals, cancellations, failed payments, and checkouts at an unrecognised price now appear on the daily dashboard.
 

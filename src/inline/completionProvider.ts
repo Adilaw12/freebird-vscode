@@ -19,6 +19,7 @@ const CLOUD_DELAY_MS = 500;
 const MAX_EXTRA_DELAY_MS = 400;
 const BLOCKED_UNTIL_KEY = 'freebird.completionBlockedUntil';
 const WALL_DAY_KEY = 'freebird.completionWallDay';
+const PRO_LIMIT_DAY_KEY = 'freebird.proCompletionLimitDay';
 const PAUSED_COMMAND = 'freebird.completionsPaused';
 
 const COMPLETION_SYSTEM_PROMPT =
@@ -201,6 +202,20 @@ class FreebirdCompletionProvider implements vscode.InlineCompletionItemProvider 
             if (token.isCancellationRequested) {
                 trackEvent('tab_completion_cancelled', backend);
                 extraDelayMs = Math.min(MAX_EXTRA_DELAY_MS, extraDelayMs + 50);
+                return [];
+            }
+            if (err?.code === 'PRO_COMPLETION_LIMIT') {
+                // Pause until midnight UTC, like the free wall, and say it once a day.
+                // Ollama completions aren't affected, so the message points there.
+                trackEvent('tab_completion_pro_limit', backend);
+                this.blockUntilReset();
+                const today = new Date().toISOString().slice(0, 10);
+                if (this.context.globalState.get<string>(PRO_LIMIT_DAY_KEY) !== today) {
+                    await this.context.globalState.update(PRO_LIMIT_DAY_KEY, today);
+                    vscode.window.showInformationMessage(
+                        'Freebird: you\'ve reached today\'s Pro tab-completion limit. Completions resume tomorrow. For unlimited completions now, switch to Ollama in Configure AI Backend.'
+                    );
+                }
                 return [];
             }
             const quotaHit = err?.code === 'COMPLETION_QUOTA_EXCEEDED' || err?.code === 'QUOTA_EXCEEDED';

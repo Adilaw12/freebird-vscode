@@ -1722,6 +1722,9 @@ function showFeedbackCard(kind, context, auto) {
     if (kind === 'manual') buildChips(FEEDBACK_REASONS.manual);
     else if (kind === 'result' && rating === 'down') buildChips(FEEDBACK_REASONS.down);
     else chipRow.style.display = 'none';
+    // A thumbs-down is the report we most want to follow up on, so the email
+    // prompt says so. Only the wording changes; the field stays optional.
+    if (rating === 'down') contact.placeholder = 'Leave an email and we can follow up (optional)';
     refresh(); ta.focus();
   }
   function submit() {
@@ -1742,7 +1745,11 @@ function showFeedbackCard(kind, context, auto) {
   card._onResult = function(ok) {
     if (ok) {
       card.innerHTML = '';
-      var t = mk('div', 'feedback-thanks', rating === 'up' ? 'Thanks \u2014 glad it helped.' : 'Thanks \u2014 we read every one.');
+      // Only promise a reply when an address was actually left.
+      var thanks = rating === 'up' ? 'Thanks \u2014 glad it helped.'
+        : contact.value.trim() ? 'Thanks \u2014 we read every one, and we\u2019ll reply to the email you left.'
+        : 'Thanks \u2014 we read every one.';
+      var t = mk('div', 'feedback-thanks', thanks);
       card.appendChild(t);
       setTimeout(function() { if (card.parentNode) card.remove(); }, 4000);
     } else {

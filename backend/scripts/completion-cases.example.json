@@ -1,0 +1,20 @@
+[
+  {
+    "file": "example/math.js",
+    "language": "javascript",
+    "prefix": "function average(values) {\n  if (values.length === 0) return 0;\n  let total = 0;\n  for (const v of values) total += v;\n  return ",
+    "suffix": "\n}\n"
+  },
+  {
+    "file": "example/server.py",
+    "language": "python",
+    "prefix": "from flask import Flask, jsonify\n\napp = Flask(__name__)\n\n@app.route('/health')\ndef health():\n    return ",
+    "suffix": "\n\nif __name__ == '__main__':\n    app.run()\n"
+  },
+  {
+    "file": "example/Button.tsx",
+    "language": "typescriptreact",
+    "prefix": "type ButtonProps = { label: string; onClick: () => void; disabled?: boolean };\n\nexport function Button({ label, onClick, disabled }: ButtonProps) {\n  return (\n    <button ",
+    "suffix": ">\n      {label}\n    </button>\n  );\n}\n"
+  }
+]

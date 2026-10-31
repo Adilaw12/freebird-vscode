@@ -2,7 +2,7 @@ import { isDesignConversation } from '../architecture/intent';
 import * as vscode from 'vscode';
 import { Message, AIProvider, RichMessage, ToolResultEntry } from '../ai/provider';
 import { parseToolCalls, executeToolCall, getWorkspaceTree, stripToolBlocks, nativeToToolCall,
-         TOOL_SYSTEM_PROMPT, NATIVE_TOOL_GUIDELINES, NATIVE_TOOL_SCHEMAS, ToolCall } from './tools';
+         TOOL_SYSTEM_PROMPT, NATIVE_TOOL_GUIDELINES, NATIVE_TOOL_SCHEMAS, ToolCall, ToolFailure } from './tools';
 import { GitService } from '../git/service';
 import { buildFileContext } from '../chat/contextBuilder';
 import { readProjectMemory, MEMORY_RELATIVE_PATH } from './memory';
@@ -49,7 +49,7 @@ export type AgentEvent =
     /** Plain-language progress line for the UI ("Waiting for the model…", "Writing deck.pptx…"). */
     | { type: 'status'; text: string }
     | { type: 'tool-start'; id: string; tool: ToolCall }
-    | { type: 'tool-result'; id: string; tool: ToolCall; success: boolean; output: string; image?: { mimeType: string; base64: string }; failure?: 'timeout' | 'exit' };
+    | { type: 'tool-result'; id: string; tool: ToolCall; success: boolean; output: string; image?: { mimeType: string; base64: string }; failure?: ToolFailure };
 
 export interface AgentRunOptions {
     userMessage: string;

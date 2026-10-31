@@ -43,6 +43,10 @@ const QUOTA_TTL      = 24 * 60 * 60; // 1 day in seconds
 // by Gemini, so the cost per completion stays small even at this volume.
 const COMPLETION_DAILY_LIMIT    = 100;
 const COMPLETION_IP_DAILY_LIMIT = 1000;
+// Pro/Team/trial completions skip the free bucket, but still get a per-license
+// ceiling so one runaway editor can't generate unbounded cost. Completions are
+// routed to Gemini for paid users too (Haiku is for chat and agent work).
+const PRO_COMPLETION_DAILY_LIMIT = 1000;
 // isTabCompletion is client-supplied, so a modified client could label a chat
 // message as a "completion" to use the larger bucket. Capping output length
 // for that bucket makes it useless for real chat (completions request 128).
@@ -283,7 +287,24 @@ export default async function handler(req, res) {
         }
     }
 
-    const maxTokens = (isCompletion && !unmetered)
+    // Paid completions skip the free bucket, but get their own per-license ceiling.
+    if (unmetered && isCompletion && normalizedLicenseKey) {
+        const { blocked } = await reserveSingleCounter(
+            redis,
+            `completion:pro:${normalizedLicenseKey}:${today}`,
+            PRO_COMPLETION_DAILY_LIMIT,
+            QUOTA_TTL
+        );
+        if (blocked) {
+            return res.status(429).json({
+                error: `Pro tab-completion limit of ${PRO_COMPLETION_DAILY_LIMIT} reached for today. Completions resume tomorrow, or switch to Ollama for unlimited local completions.`,
+                code:  'PRO_COMPLETION_LIMIT',
+                limit: PRO_COMPLETION_DAILY_LIMIT
+            });
+        }
+    }
+
+    const maxTokens = isCompletion
         ? Math.min(Number(requestedMaxTokens) || COMPLETION_MAX_TOKENS, COMPLETION_MAX_TOKENS)
         : agentTrialReserved
         ? Math.min(Number(requestedMaxTokens) || AGENT_TRIAL_MAX_TOKENS, AGENT_TRIAL_MAX_TOKENS)
@@ -385,7 +406,9 @@ export default async function handler(req, res) {
             }
         }
 
-        if (!upstream && (unmetered || templateHaikuEligible || agentTrialReserved) && anthropicConfigured()) {
+        // Completions stay off Haiku even for paid users: they're the most frequent
+        // request type, and Gemini is the right cost and speed for them.
+        if (!upstream && ((unmetered && !isCompletion) || templateHaikuEligible || agentTrialReserved) && anthropicConfigured()) {
             try {
                 const result = await withConnectTimeout(30_000, signal => fetchAnthropicWithFallback(anthropicBody, { signal }));
                 if (result.response.ok) {
@@ -405,7 +428,7 @@ export default async function handler(req, res) {
                 'streamGenerateContent',
                 geminiBody,
                 { signal },
-                unmetered ? PRO_GEMINI_MODEL_CANDIDATES : undefined
+                unmetered && !isCompletion ? PRO_GEMINI_MODEL_CANDIDATES : undefined
             ));
             upstream = result.response;
             modelUsed = result.modelUsed;
