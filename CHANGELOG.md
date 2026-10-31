@@ -7,6 +7,29 @@
 * **Failures now say what went wrong.** A dropped connection, an unreachable network, a server error and a provider error each get their own name in the error message and in the counts, instead of all being filed as "unknown". "The AI provider returned an error" and "Free tier is temporarily at capacity" are no longer reported as "took too long".
 * **Tab completion stops retrying a failing backend.** After five failures in a row, suggestions pause for two minutes (up to thirty if the backend keeps failing) instead of sending a request at every pause in typing. One successful reply starts it again.
 
+## \[0.15.5] — 2026-10-31
+
+### Added
+
+* **Manage Subscription.** `Freebird: Manage Subscription` opens Stripe's customer portal, where Pro subscribers can cancel, change their card, or download invoices. Trials and licenses not linked to Stripe get a message instead. (Backend change: `backend/` must be deployed, and the Stripe Customer Portal must be turned on.)
+* **Optional email at trial start.** Starting a trial asks for an email, which can be skipped by pressing Enter on an empty box. Esc cancels the trial. The email is used only for trial reminders and help.
+* **Grace period for failed renewals.** A Pro subscription whose renewal payment fails keeps Pro for 7 days while Stripe retries the card, instead of losing access at once.
+
+### Changed
+
+* **Cloud tab completions use Gemini only.** The Cerebras path is removed. Cloud completions are still off by default; turn them on with `freebird.tabCompletion.enabled`.
+* **Pro tab completions have a daily ceiling.** Pro, Team and trial completions go to Gemini, not Haiku, and are capped at 1,000 a day per license. At the cap, completions pause until midnight UTC and the message points to Ollama, which has no limit. Chat and agent work still use Haiku.
+* **Stripe webhook errors are retried.** A failed handler now returns a 500, so Stripe retries the event instead of dropping it. Before, a failed write could leave a paying customer with no license.
+* **Subscription lifecycle is counted.** Renewals, cancellations, failed payments, and checkouts at an unrecognised price now appear on the daily dashboard.
+
+* **Tool errors say what failed.** Failed tool calls are counted with a cause (`tool_error:edit_file:match_failed`, `tool_error:read_file:not_found`, `run_command:timeout`, `run_command:exit`). A user clicking Reject is counted separately as `tool_rejected`. Only the cause is recorded, never file contents or paths.
+* **Feedback asks for an email on a thumbs-down.** The address stays optional. The thank-you only promises a reply if one was left.
+* **Completion check script** (`backend/scripts/completion-check.js`) runs real completion prompts through the endpoint and reports empty replies, latency and the model used. Not shipped to users.
+
+### Fixed
+
+* **Public numbers match the product.** The README said 20 free edits a day and unlimited chat on the free tier. The free cloud allowance is 10 a day, and chat on Ollama or BYOK is what's unlimited.
+
 ## \[0.15.4] — 2026-10-16
 
 ### Changed

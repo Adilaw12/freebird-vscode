@@ -24,9 +24,6 @@ import { templateHaikuDailyLimit } from '../lib/templateWelcome.js';
 import { fetchGeminiWithFallback, PRO_GEMINI_MODEL_CANDIDATES } from '../lib/geminiModel.js';
 import { geminiChunkText, GEMINI_THINKING_HEADROOM } from '../lib/geminiText.js';
 import { fetchAnthropicWithFallback, anthropicConfigured, SONNET_MODEL_CANDIDATES } from '../lib/anthropicModel.js';
-import { fetchCerebrasWithFallback, cerebrasConfigured } from '../lib/cerebrasModel.js';
-import { readCerebrasCompletion, emptyReason } from '../lib/cerebrasStream.js';
-import { recordCompletionOutcomes } from '../lib/completionStats.js';
 import { quotaKeysFor, reserveQuota, refundQuota, reserveSingleCounter } from '../lib/quota.js';
 import { textOnlyContent } from '../lib/messageContent.js';
 import { createLineSplitter } from '../lib/sseLines.js';
@@ -43,10 +40,13 @@ const QUOTA_TTL      = 24 * 60 * 60; // 1 day in seconds
 
 // Tab completions have their own, much larger bucket (see lib/quota.js).
 // 100/day ≈ 3,000/month — above Copilot Free's completion allowance. Served
-// on Cerebras at ~$0.0007 each, so even every daily-active free user maxing
-// out stays around $4/day.
+// by Gemini, so the cost per completion stays small even at this volume.
 const COMPLETION_DAILY_LIMIT    = 100;
 const COMPLETION_IP_DAILY_LIMIT = 1000;
+// Pro/Team/trial completions skip the free bucket, but still get a per-license
+// ceiling so one runaway editor can't generate unbounded cost. Completions are
+// routed to Gemini for paid users too (Haiku is for chat and agent work).
+const PRO_COMPLETION_DAILY_LIMIT = 1000;
 // isTabCompletion is client-supplied, so a modified client could label a chat
 // message as a "completion" to use the larger bucket. Capping output length
 // for that bucket makes it useless for real chat (completions request 128).
@@ -287,7 +287,24 @@ export default async function handler(req, res) {
         }
     }
 
-    const maxTokens = (isCompletion && !unmetered)
+    // Paid completions skip the free bucket, but get their own per-license ceiling.
+    if (unmetered && isCompletion && normalizedLicenseKey) {
+        const { blocked } = await reserveSingleCounter(
+            redis,
+            `completion:pro:${normalizedLicenseKey}:${today}`,
+            PRO_COMPLETION_DAILY_LIMIT,
+            QUOTA_TTL
+        );
+        if (blocked) {
+            return res.status(429).json({
+                error: `Pro tab-completion limit of ${PRO_COMPLETION_DAILY_LIMIT} reached for today. Completions resume tomorrow, or switch to Ollama for unlimited local completions.`,
+                code:  'PRO_COMPLETION_LIMIT',
+                limit: PRO_COMPLETION_DAILY_LIMIT
+            });
+        }
+    }
+
+    const maxTokens = isCompletion
         ? Math.min(Number(requestedMaxTokens) || COMPLETION_MAX_TOKENS, COMPLETION_MAX_TOKENS)
         : agentTrialReserved
         ? Math.min(Number(requestedMaxTokens) || AGENT_TRIAL_MAX_TOKENS, AGENT_TRIAL_MAX_TOKENS)
@@ -306,7 +323,6 @@ export default async function handler(req, res) {
     const systemParts = [];
     const geminiContents = [];
     const anthropicMessages = [];
-    const cerebrasMessages = [];
 
     for (const msg of messages) {
         if (msg.role === 'system') {
@@ -321,10 +337,6 @@ export default async function handler(req, res) {
             anthropicMessages.push({
                 role: msg.role === 'assistant' ? 'assistant' : 'user',
                 content: msg.content // string or content-block array — passed through unchanged
-            });
-            cerebrasMessages.push({
-                role: msg.role === 'assistant' ? 'assistant' : 'user',
-                content: textOnly
             });
         }
     }
@@ -361,41 +373,9 @@ export default async function handler(req, res) {
     // OpenAI-compatible shape — system prompt is just another message in the
     // array (unlike Anthropic's separate top-level `system` field), placed first.
     //
-    // reasoning_effort: 'low' is NOT optional — verified live against the
-    // real API that gpt-oss-120b defaults to heavy chain-of-thought,
-    // streamed as separate delta.reasoning tokens BEFORE any delta.content.
-    // At this feature's tight maxTokens (128), the default reasoning depth
-    // can consume the entire budget and return an empty completion with
-    // finish_reason:"length" — confirmed happening at 30 tokens in testing,
-    // and confirmed AGAIN at production scale on 2026-10-01: 1,314 Cerebras
-    // completion calls that day, only 226 tab_completion_shown (~17%
-    // shown rate) — the dominant cause isn't cancellation, it's exactly
-    // this reasoning-eats-the-budget failure. 'none' is rejected by this
-    // model (only low/medium/high accepted); 'low' still reasons some but
-    // needs real headroom past the shared 128 completion budget to
-    // reliably leave room for actual content afterward — given ONLY to
-    // Cerebras here, not to the Gemini fallback or Haiku (neither has this
-    // failure mode, no reason to loosen their budgets too).
-    const CEREBRAS_COMPLETION_MAX_TOKENS = 320;
-    const cerebrasBody = {
-        max_tokens: isCompletion ? CEREBRAS_COMPLETION_MAX_TOKENS : maxTokens,
-        temperature: 0.2,
-        stream: true,
-        reasoning_effort: 'low',
-        messages: [
-            ...(systemParts.length > 0 ? [{ role: 'system', content: systemParts.join('\n\n') }] : []),
-            ...cerebrasMessages
-        ]
-    };
-
     // ── Stream provider response back to extension ──────────────────────────
     try {
         let upstream, modelUsed, provider;
-        // Set when a Cerebras completion was read in full before replying (see the Cerebras block below):
-        // the text is already in hand, so the stream is not read a second time.
-        let bufferedText;
-        let cerebrasFailed = false;
-        const outcomeStats = []; // fields for telemetry:completions:{day}, written once before the reply ends
 
         if (premiumReserved) {
             // Separate body: Sonnet 5 rejects `temperature`, and effort bounds
@@ -426,7 +406,9 @@ export default async function handler(req, res) {
             }
         }
 
-        if (!upstream && (unmetered || templateHaikuEligible || agentTrialReserved) && anthropicConfigured()) {
+        // Completions stay off Haiku even for paid users: they're the most frequent
+        // request type, and Gemini is the right cost and speed for them.
+        if (!upstream && ((unmetered && !isCompletion) || templateHaikuEligible || agentTrialReserved) && anthropicConfigured()) {
             try {
                 const result = await withConnectTimeout(30_000, signal => fetchAnthropicWithFallback(anthropicBody, { signal }));
                 if (result.response.ok) {
@@ -441,64 +423,19 @@ export default async function handler(req, res) {
             }
         }
 
-        // Free-tier tab completions only — Pro/unmetered already gets Haiku
-        // above. 8s timeout (not the usual 30s): Cerebras is fast enough that
-        // a slow response already signals trouble (including its own rate
-        // limiting), so bailing quickly to Gemini keeps a misbehaving
-        // Cerebras request from making a completion feel slower than the
-        // pre-Cerebras baseline — defeating the entire point of using it.
-        if (!upstream && !unmetered && isTabCompletion && cerebrasConfigured()) {
-            try {
-                const result = await fetchCerebrasWithFallback(cerebrasBody, { signal: AbortSignal.timeout(8_000) });
-                if (result.response.ok) {
-                    // Read the whole (short) stream before replying. A reasoning model can spend its entire output
-                    // budget on reasoning and finish with HTTP 200 and no text; streamed straight through, that
-                    // reached the user as an empty completion and never triggered the Gemini fallback below.
-                    // The 8s signal also bounds this read.
-                    const read = await readCerebrasCompletion(result.response);
-                    if (read.text.trim()) {
-                        upstream = result.response;
-                        modelUsed = result.modelUsed;
-                        provider = 'cerebras';
-                        bufferedText = read.text;
-                        outcomeStats.push('cerebras:ok');
-                    } else {
-                        cerebrasFailed = true;
-                        const why = emptyReason(read);
-                        outcomeStats.push('cerebras:empty', `cerebras:empty:${why}`);
-                        console.error(`Cerebras returned an empty completion (${why}), falling back to Gemini`);
-                    }
-                } else {
-                    cerebrasFailed = true;
-                    outcomeStats.push(`cerebras:error:http_${result.response.status}`);
-                    console.error('Cerebras error, falling back to Gemini:', result.response.status, await result.response.text().catch(() => ''));
-                }
-            } catch (err) {
-                cerebrasFailed = true;
-                outcomeStats.push('cerebras:error:exception');
-                console.error('Cerebras request failed, falling back to Gemini:', err);
-            }
-        }
-
         if (!upstream) {
-            if (cerebrasFailed) outcomeStats.push('gemini:after_cerebras_fail');
             const result = await withConnectTimeout(30_000, signal => fetchGeminiWithFallback(
                 'streamGenerateContent',
                 geminiBody,
                 { signal },
-                unmetered ? PRO_GEMINI_MODEL_CANDIDATES : undefined
+                unmetered && !isCompletion ? PRO_GEMINI_MODEL_CANDIDATES : undefined
             ));
             upstream = result.response;
             modelUsed = result.modelUsed;
             provider = 'gemini';
         }
 
-        // Started here so the Redis write overlaps with sending the reply, and is recorded even if the
-        // fallback also failed (that is exactly the case worth counting). Awaited before the response ends.
-        const statsDone = recordCompletionOutcomes(redis, today, outcomeStats);
-
         if (!upstream.ok) {
-            await statsDone;
             const errText = await upstream.text().catch(() => upstream.statusText);
             console.error(`${provider} error:`, upstream.status, errText);
             // never charge for a failed upstream request
@@ -523,7 +460,6 @@ export default async function handler(req, res) {
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
         res.setHeader('Transfer-Encoding', 'chunked');
         res.setHeader('X-Model-Used', modelUsed); // helps spot a fallback engaging in the wild
-        if (cerebrasFailed) res.setHeader('X-Completion-Fallback', 'cerebras'); // Gemini answered because Cerebras failed or came back empty
         if (templateBonusUsed) {
             res.setHeader('X-Template-Bonus-Used', 'true'); // tells the extension to show the one-time upsell nudge
         }
@@ -554,8 +490,7 @@ export default async function handler(req, res) {
             }
         }
 
-        // A buffered Cerebras completion has already consumed its stream, so there is nothing left to read.
-        const reader  = bufferedText === undefined ? upstream.body.getReader() : null;
+        const reader  = upstream.body.getReader();
         const splitter = createLineSplitter(); // see lib/sseLines.js for why chunks aren't parsed in isolation
 
         // SSE lines look like: "data: {...}\n\n".
@@ -573,28 +508,19 @@ export default async function handler(req, res) {
                 if (provider === 'anthropic') usageTracker.consume(parsed);
                 // Gemini: all non-thought parts of candidates[0].content (see lib/geminiText.js)
                 // Anthropic: content_block_delta events carry delta.text
-                // Cerebras: OpenAI-compatible choices[0].delta.content
                 const text = provider === 'anthropic'
                     ? (parsed?.type === 'content_block_delta' ? parsed?.delta?.text : undefined)
-                    : provider === 'cerebras'
-                    ? parsed?.choices?.[0]?.delta?.content
                     : geminiChunkText(parsed);
                 if (text) res.write(text);
             } catch { /* skip malformed SSE lines */ }
         };
 
-        if (bufferedText !== undefined) {
-            res.write(bufferedText);
-        } else {
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                splitter.push(value).forEach(handleLine);
-            }
-            splitter.flush().forEach(handleLine);
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            splitter.push(value).forEach(handleLine);
         }
-
-        await statsDone; // never throws (see lib/completionStats.js)
+        splitter.flush().forEach(handleLine);
 
         // Awaited before res.end(): on a serverless runtime, work started after
         // the response closes can be frozen mid-flight. recordUsage never throws.

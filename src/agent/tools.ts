@@ -25,12 +25,18 @@ export interface ToolCall {
     [key: string]: unknown;
 }
 
+/** Failure causes that show up in telemetry as tool_error:<action>:<cause>. */
+export type ToolFailure = 'timeout' | 'exit' | 'not_found' | 'match_failed';
+
 export interface ToolResult {
     success: boolean;
     output: string;
     /** Set by verify_diagram (and future visual-check tools) so the model's
      *  next turn — and the chat UI — can actually see what got rendered. */
     image?: { mimeType: string; base64: string };
+    /** Why a tool failed, for telemetry. Lets the dashboard say what is failing,
+     *  not just that a tool failed. Never includes file contents or paths. */
+    failure?: ToolFailure;
 }
 
 // ── Native tool schemas (for Anthropic/OpenAI/DeepSeek/Qwen) ─────────────────
@@ -512,7 +518,7 @@ async function readFileTool(tool: ToolCall): Promise<ToolResult> {
 
     const full = resolveWorkspacePath(relPath);
     if (!fs.existsSync(full)) {
-        return { success: false, output: `File not found: ${relPath}. Use list_files to find the right path (attachments are under .freebird/uploads/).` };
+        return { success: false, failure: 'not_found', output: `File not found: ${relPath}. Use list_files to find the right path (attachments are under .freebird/uploads/).` };
     }
     if (fs.statSync(full).isDirectory()) {
         return { success: false, output: `${relPath} is a folder, not a file. Use list_files to see what is inside.` };
@@ -890,7 +896,7 @@ async function editFileTool(tool: ToolCall, onApprovalNeeded: ApprovalFn, turnId
     if (start === -1) {
         const fuzzy = findFuzzyMatch(content, oldStr);
         if (!fuzzy) {
-            return { success: false, output: `oldStr not found in ${relPath}. Read the file first and copy the text to match exactly.` };
+            return { success: false, failure: 'match_failed', output: `oldStr not found in ${relPath}. Read the file first and copy the text to match exactly.` };
         }
         start = fuzzy.start;
         end = fuzzy.end;
@@ -979,7 +985,11 @@ async function runCommandTool(tool: ToolCall, onApprovalNeeded: ApprovalFn, turn
             (err: ExecException | null, stdout: string, stderr: string) => {
                 const combined = truncate(`${stdout}${stderr}`.trim() || '(no output)', MAX_TOOL_OUTPUT_CHARS);
                 if (err) {
-                    resolve({ success: false, output: `${combined}\n\n[exit code ${err.code ?? 'unknown'}]` });
+                    resolve({
+                        success: false,
+                        output: `${combined}\n\n[exit code ${err.code ?? 'unknown'}]`,
+                        failure: err.killed ? 'timeout' : 'exit'
+                    });
                 } else {
                     resolve({ success: true, output: combined });
                 }

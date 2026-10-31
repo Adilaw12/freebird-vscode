@@ -2,8 +2,8 @@
 //
 // `content` is normally a plain string, but the extension's verify_diagram
 // tool (Agent mode) can send an Anthropic-shaped content-block array when a
-// tool result carries a rendered image (see src/ai/cloud.ts). Gemini/Cerebras
-// don't understand that shape, so they need a safe text-only extraction
+// tool result carries a rendered image (see src/ai/cloud.ts). Gemini
+// doesn't understand that shape, so they need a safe text-only extraction
 // instead of a stringified object landing in their request body.
 
 /**

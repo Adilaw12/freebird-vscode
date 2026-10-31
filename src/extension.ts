@@ -4,7 +4,7 @@ import { GitService } from './git/service';
 import { registerInlineEdit } from './inline/editor';
 import { registerTabCompletion } from './inline/completionProvider';
 import { registerShareSelection } from './share/share';
-import { restoreLicenseKeyIfLost, watchLicenseKeyRemoval, getLicenseStatus, getPersistedLicenseHint, warmLicenseCache, activateLicense, clearLicenseCache, startTrial, UPGRADE_URL, TEMPLATES_UPGRADE_URL, XENDIT_CHECKOUT_URL, API_BASE } from './license/validator';
+import { restoreLicenseKeyIfLost, watchLicenseKeyRemoval, getLicenseStatus, getPersistedLicenseHint, warmLicenseCache, activateLicense, clearLicenseCache, startTrial, isValidEmail, openBillingPortal, UPGRADE_URL, TEMPLATES_UPGRADE_URL, XENDIT_CHECKOUT_URL, API_BASE } from './license/validator';
 import { getCloudEditsRemaining } from './license/usage';
 import { signInWithGitHub, getStoredSession, clearSession } from './auth/github';
 import { buildIndex, updateFileInIndex, removeFileFromIndex, getIndexStats } from './index/indexer';
@@ -357,10 +357,29 @@ export async function activate(context: vscode.ExtensionContext) {
         }),
 
         vscode.commands.registerCommand('freebird.startTrial', async () => {
+            // Asked before the trial starts so trial reminders can reach the user
+            // later. Enter on an empty box skips it; Esc cancels starting the trial.
+            const emailInput = await vscode.window.showInputBox({
+                title: 'Start your free 7-day Pro trial',
+                prompt: 'Email for trial reminders and help (optional). Press Enter to skip.',
+                placeHolder: 'you@example.com',
+                ignoreFocusOut: true,
+                validateInput: value => {
+                    const trimmed = value.trim();
+                    return trimmed === '' || isValidEmail(trimmed) ? undefined : 'Enter a valid email, or leave this empty to skip.';
+                }
+            });
+            if (emailInput === undefined) {
+                trackEvent('trial_start_cancelled');
+                return;
+            }
+            const email = emailInput.trim() || undefined;
+            trackEvent(email ? 'trial_email_given' : 'trial_email_skipped');
+
             await vscode.window.withProgress(
                 { location: vscode.ProgressLocation.Notification, title: 'Starting your Pro trial…', cancellable: false },
                 async () => {
-                    const result = await startTrial(context, getMachineId());
+                    const result = await startTrial(context, getMachineId(), email);
 
                     if (result.ok) {
                         // Not tracked client-side: api/start-trial.js already
@@ -398,6 +417,35 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('freebird.tryMultiFileEditing', async () => {
             trackEvent('try_multifile_command_used');
             vscode.commands.executeCommand('freebird.startTrial');
+        }),
+
+        vscode.commands.registerCommand('freebird.manageSubscription', async () => {
+            const licenseKey = vscode.workspace.getConfiguration('freebird').get<string>('licenseKey', '').trim().toUpperCase();
+            if (!licenseKey) {
+                vscode.window.showInformationMessage('No Freebird license key is set on this machine, so there is no subscription to manage.');
+                return;
+            }
+
+            trackEvent('manage_subscription_clicked');
+            const result = await openBillingPortal(licenseKey);
+            if (result.url) {
+                vscode.env.openExternal(vscode.Uri.parse(result.url));
+                return;
+            }
+
+            // Trials and non-Stripe licenses have nothing to open here, so say that
+            // rather than showing a generic error.
+            if (result.code === 'NO_STRIPE_CUSTOMER') {
+                vscode.window.showInformationMessage(
+                    'This license is not linked to a Stripe subscription, so there is nothing to manage here. Use Freebird: Send Feedback if you need help.'
+                );
+                return;
+            }
+            trackEvent('manage_subscription_failed');
+            const choice = await vscode.window.showErrorMessage(result.error ?? 'Could not open billing. Please try again.', 'Tell us what happened');
+            if (choice === 'Tell us what happened') {
+                await vscode.commands.executeCommand('freebird.sendFeedback', 'manage_subscription_failed');
+            }
         }),
 
         vscode.commands.registerCommand('freebird.manageTeamSeats', async () => {

@@ -204,20 +204,27 @@ export function getCachedLicenseStatus(): LicenseStatus {
     return { isPro: false };
 }
 
+/** Loose format check, enough to catch typos. The backend checks the same shape. */
+export function isValidEmail(value: string): boolean {
+    return value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
 /**
  * Claims a self-serve 7-day Pro trial for this device (machineId-gated, no
  * sign-in required) and, on success, activates it immediately — no manual
- * key copy/paste needed.
+ * key copy/paste needed. The email is optional and is only used for trial
+ * reminders and account help.
  */
 export async function startTrial(
     context: vscode.ExtensionContext,
-    machineId: string
+    machineId: string,
+    email?: string
 ): Promise<StartTrialResult> {
     try {
         const res = await fetch(`${API_BASE}/api/start-trial`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ machineId }),
+            body: JSON.stringify({ machineId, ...(email && { email }) }),
             signal: AbortSignal.timeout(10_000)
         });
 
@@ -231,5 +238,28 @@ export async function startTrial(
         return { ok: true, trialEndsAt: data.trialEndsAt };
     } catch (err: any) {
         return { ok: false, error: err?.message ?? 'Network error starting trial.' };
+    }
+}
+
+/**
+ * Asks the backend for a Stripe customer-portal link, so a Pro subscriber can
+ * cancel, change their card, or download invoices. Only works for Stripe-paid
+ * licenses; trials and other providers get an error explaining that.
+ */
+export async function openBillingPortal(licenseKey: string): Promise<{ url?: string; error?: string; code?: string }> {
+    try {
+        const res = await fetch(`${API_BASE}/api/billing-portal`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: licenseKey }),
+            signal: AbortSignal.timeout(10_000)
+        });
+        const data = await res.json() as { url?: string; error?: string; code?: string };
+        if (!res.ok || !data.url) {
+            return { error: data.error ?? 'Could not open billing.', code: data.code };
+        }
+        return { url: data.url };
+    } catch (err: any) {
+        return { error: err?.message ?? 'Network error opening billing.' };
     }
 }

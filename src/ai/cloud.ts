@@ -233,6 +233,13 @@ export class CloudProvider implements AIProvider {
                 err.code   = 'COMPLETION_QUOTA_EXCEEDED';
                 throw err;
             }
+            // Paid users' completion ceiling. Separate from the free bucket, so
+            // it doesn't show the upgrade prompt a Pro user can't act on.
+            if (code === 'PRO_COMPLETION_LIMIT') {
+                const err  = new Error('PRO_COMPLETION_LIMIT') as any;
+                err.code   = 'PRO_COMPLETION_LIMIT';
+                throw err;
+            }
 
             if (code === 'IP_RATE_LIMITED') {
                 const err  = new Error('IP_RATE_LIMITED') as any;

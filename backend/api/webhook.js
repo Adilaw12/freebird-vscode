@@ -5,6 +5,22 @@ import { generateKey } from '../lib/keygen.js';
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const redis  = Redis.fromEnv();
 
+// Pro prices sold through /upgrade (monthly, annual, and the India prices).
+const KNOWN_PRO_PRICE_IDS = [
+    process.env.STRIPE_PRICE_PRO_MONTHLY,
+    process.env.STRIPE_PRICE_PRO_ANNUAL,
+    process.env.STRIPE_PRICE_PRO_INDIA_MONTHLY,
+    process.env.STRIPE_PRICE_PRO_INDIA_ANNUAL
+].filter(Boolean);
+
+// Subscription lifecycle counters, in the same daily hash as the funnel, so
+// renewals and churn show on the dashboard. Failures here never block the webhook.
+async function countDaily(name) {
+    const key = `telemetry:daily:${new Date().toISOString().slice(0, 10)}`;
+    await redis.hincrby(key, name, 1).catch(() => {});
+    await redis.expire(key, 90 * 24 * 60 * 60).catch(() => {});
+}
+
 async function getRawBody(req) {
     return new Promise((resolve, reject) => {
         const chunks = [];
@@ -55,6 +71,11 @@ export default async function handler(req, res) {
                         plan = 'team';
                     } else if (priceId && process.env.STRIPE_TEMPLATES_PRICE_ID && priceId === process.env.STRIPE_TEMPLATES_PRICE_ID) {
                         plan = 'templates';
+                    } else if (priceId && !KNOWN_PRO_PRICE_IDS.includes(priceId)) {
+                        // Not a price /upgrade sells. It still gets Pro, as before, but it's
+                        // logged and counted so a stray payment link can't go unnoticed.
+                        console.error(`Checkout with unrecognised price ${priceId} granted pro:`, session.id);
+                        await countDaily('unknown_price');
                     }
                 } catch (err) {
                     console.error('Could not read line items, defaulting to pro plan:', err.message);
@@ -145,10 +166,14 @@ export default async function handler(req, res) {
                 if (!license) break;
 
                 const newStatus = sub.status === 'active' ? 'active' : sub.status;
+                const now = new Date().toISOString();
+                const { pastDueSince, ...rest } = license;
                 await redis.set(`license:${customerData.key}`, {
-                    ...license,
+                    ...rest,
                     status:    newStatus,
-                    updatedAt: new Date().toISOString()
+                    // Start the grace period the first time Stripe reports past_due.
+                    ...(newStatus === 'past_due' && { pastDueSince: pastDueSince ?? now }),
+                    updatedAt: now
                 });
                 console.log(`Subscription updated for ${license.email}: ${newStatus}`);
                 break;
@@ -187,6 +212,7 @@ export default async function handler(req, res) {
                     }
                 }
 
+                await countDaily('subscription_cancelled');
                 console.log(`Subscription cancelled for ${license.email}`);
                 break;
             }
@@ -199,11 +225,14 @@ export default async function handler(req, res) {
                 const license = await redis.get(`license:${customerData.key}`);
                 if (!license) break;
 
+                const now = new Date().toISOString();
                 await redis.set(`license:${customerData.key}`, {
                     ...license,
                     status:    'past_due',
-                    updatedAt: new Date().toISOString()
+                    pastDueSince: license.pastDueSince ?? now,
+                    updatedAt: now
                 });
+                await countDaily('payment_failed');
                 console.log(`Payment failed for ${license.email}`);
                 break;
             }
@@ -219,11 +248,14 @@ export default async function handler(req, res) {
                 const license = await redis.get(`license:${customerData.key}`);
                 if (!license) break;
 
+                // Drops pastDueSince, so a recovered payment ends the grace period.
+                const { pastDueSince, ...rest } = license;
                 await redis.set(`license:${customerData.key}`, {
-                    ...license,
+                    ...rest,
                     status:    'active',
                     updatedAt: new Date().toISOString()
                 });
+                await countDaily('subscription_renewed');
                 console.log(`Subscription renewed for ${license.email}`);
                 break;
             }
@@ -234,7 +266,9 @@ export default async function handler(req, res) {
         }
     } catch (err) {
         console.error(`Webhook handler error for ${event.type}:`, err);
-        // Return 200 so Stripe doesn't retry — log the error for manual review
+        // 500 so Stripe retries the event. Returning 200 here meant a failed Redis
+        // write left a paying customer with no license, and nothing would retry it.
+        return res.status(500).json({ error: 'Webhook handler failed' });
     }
 
     res.json({ received: true });

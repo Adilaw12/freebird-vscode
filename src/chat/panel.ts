@@ -1122,7 +1122,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             case 'tool-result': {
                 perfLog(`tool     ${event.tool.action}  ${((Date.now() - (this.toolStartedAt.get(event.id) ?? Date.now())) / 1000).toFixed(1)}s  ${event.success ? 'ok' : 'FAILED'}`);
                 this.toolStartedAt.delete(event.id);
-                if (!event.success) trackEvent('tool_error', event.tool.action);
+                // A user clicking Reject is a choice, not a failure, so it gets its own
+                // counter. Every rejection message in tools.ts starts with "User rejected".
+                if (!event.success) {
+                    if (event.output.startsWith('User rejected')) {
+                        trackEvent('tool_rejected', event.tool.action);
+                    } else {
+                        // Command failures split into timeout vs non-zero exit, e.g. "run_command:timeout".
+                        const detail = event.failure ? `${event.tool.action}:${event.failure}` : event.tool.action;
+                        trackEvent('tool_error', detail);
+                    }
+                }
                 // Related-location lists are short (max 6 lines) and meant to be read
                 // in full — the generic 200-char preview cap would cut them mid-list.
                 const cap = event.tool.action === 'flag_related_locations' ? Infinity : 200;
