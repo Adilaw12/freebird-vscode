@@ -1,6 +1,6 @@
 # Changelog
 
-## \[Unreleased]
+## \[0.15.5] — 2026-10-31
 
 ### Added
 
@@ -14,6 +14,10 @@
 * **Pro tab completions have a daily ceiling.** Pro, Team and trial completions go to Gemini, not Haiku, and are capped at 1,000 a day per license. At the cap, completions pause until midnight UTC and the message points to Ollama, which has no limit. Chat and agent work still use Haiku.
 * **Stripe webhook errors are retried.** A failed handler now returns a 500, so Stripe retries the event instead of dropping it. Before, a failed write could leave a paying customer with no license.
 * **Subscription lifecycle is counted.** Renewals, cancellations, failed payments, and checkouts at an unrecognised price now appear on the daily dashboard.
+
+* **Tool errors say what failed.** Failed tool calls are counted with a cause (`tool_error:edit_file:match_failed`, `tool_error:read_file:not_found`, `run_command:timeout`, `run_command:exit`). A user clicking Reject is counted separately as `tool_rejected`. Only the cause is recorded, never file contents or paths.
+* **Feedback asks for an email on a thumbs-down.** The address stays optional. The thank-you only promises a reply if one was left.
+* **Completion check script** (`backend/scripts/completion-check.js`) runs real completion prompts through the endpoint and reports empty replies, latency and the model used. Not shipped to users.
 
 ### Fixed
 
