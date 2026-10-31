@@ -10,6 +10,9 @@
 
 import { Redis } from '@upstash/redis';
 import { generateKey } from '../lib/keygen.js';
+
+// Same shape the extension checks (see isValidEmail in src/license/validator.ts).
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 import { TRIAL_DAYS } from '../lib/license.js';
 
 const redis = Redis.fromEnv();
@@ -21,12 +24,18 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-    const { machineId } = req.body ?? {};
+    const { machineId, email: rawEmail } = req.body ?? {};
 
     if (!machineId || typeof machineId !== 'string' || !machineId.trim()) {
         return res.status(400).json({ error: 'Missing device id.', code: 'MACHINE_ID_REQUIRED' });
     }
     const safeMachineId = machineId.trim().slice(0, 48);
+
+    // Optional. Anything that isn't a plausible address is dropped, not rejected,
+    // so a typo never blocks the trial itself.
+    const email = typeof rawEmail === 'string' && rawEmail.trim().length <= 254 && EMAIL_PATTERN.test(rawEmail.trim())
+        ? rawEmail.trim().toLowerCase()
+        : null;
 
     const trialMarkerKey = `trial:machine:${safeMachineId}`;
 
@@ -58,6 +67,8 @@ export default async function handler(req, res) {
         // both this and the old raw-number format from trials created before
         // this change.
         trialEndsAt: new Date(trialEndsAt).toISOString(),
+        // Used for trial reminders and account help only. Written only when given.
+        ...(email && { email, emailCapturedAt: nowIso }),
         createdAt: nowIso,
         updatedAt: nowIso
     };
@@ -71,6 +82,7 @@ export default async function handler(req, res) {
         // tracked in the same daily hash so the dashboard can show adoption.
         const telemetryKey = `telemetry:daily:${new Date().toISOString().slice(0, 10)}`;
         await redis.hincrby(telemetryKey, 'trial_started', 1).catch(() => {});
+        await redis.hincrby(telemetryKey, email ? 'trial_started_with_email' : 'trial_started_without_email', 1).catch(() => {});
         await redis.expire(telemetryKey, 90 * 24 * 60 * 60).catch(() => {});
 
         // Same event, broken down by country (same hash and key shape as

@@ -4,8 +4,25 @@
 
 export const TRIAL_DAYS = 7;
 
+// A renewal that fails keeps Pro for this many days while Stripe retries the
+// card. Without this, one declined card removes access at once, and the
+// customer reads that as the product breaking rather than a payment problem.
+export const PAST_DUE_GRACE_DAYS = 7;
+
+const PAID_PLANS = ['pro', 'enterprise', 'team'];
+
+// pastDueSince is set by the webhook when a payment fails. Records written
+// before that existed fall back to updatedAt, so they also get the grace period.
+function inPastDueGrace(license) {
+    const sinceMs = new Date(license.pastDueSince ?? license.updatedAt).getTime();
+    if (Number.isNaN(sinceMs)) return false;
+    return Date.now() - sinceMs < PAST_DUE_GRACE_DAYS * 24 * 60 * 60 * 1000;
+}
+
 export function isLicenseActive(license) {
-    if (!license || license.status !== 'active') return false;
+    if (!license) return false;
+    if (license.status === 'past_due') return PAID_PLANS.includes(license.plan) && inPastDueGrace(license);
+    if (license.status !== 'active') return false;
 
     if (license.plan === 'trial') {
         // trialEndsAt was originally stored as raw epoch ms; now stored as an

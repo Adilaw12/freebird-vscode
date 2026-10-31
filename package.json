@@ -203,6 +203,10 @@
         "title": "Freebird: Sign out of GitHub"
       },
       {
+        "command": "freebird.manageSubscription",
+        "title": "Freebird: Manage Subscription"
+      },
+      {
         "command": "freebird.manageTeamSeats",
         "title": "Freebird: Manage Team Seats"
       },

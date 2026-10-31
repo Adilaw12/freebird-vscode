@@ -1,5 +1,23 @@
 # Changelog
 
+## \[Unreleased]
+
+### Added
+
+* **Manage Subscription.** `Freebird: Manage Subscription` opens Stripe's customer portal, where Pro subscribers can cancel, change their card, or download invoices. Trials and licenses not linked to Stripe get a message instead. (Backend change: `backend/` must be deployed, and the Stripe Customer Portal must be turned on.)
+* **Optional email at trial start.** Starting a trial asks for an email, which can be skipped by pressing Enter on an empty box. Esc cancels the trial. The email is used only for trial reminders and help.
+* **Grace period for failed renewals.** A Pro subscription whose renewal payment fails keeps Pro for 7 days while Stripe retries the card, instead of losing access at once.
+
+### Changed
+
+* **Cloud tab completions use Gemini only.** The Cerebras path is removed. Cloud completions are still off by default; turn them on with `freebird.tabCompletion.enabled`.
+* **Stripe webhook errors are retried.** A failed handler now returns a 500, so Stripe retries the event instead of dropping it. Before, a failed write could leave a paying customer with no license.
+* **Subscription lifecycle is counted.** Renewals, cancellations, failed payments, and checkouts at an unrecognised price now appear on the daily dashboard.
+
+### Fixed
+
+* **Public numbers match the product.** The README said 20 free edits a day and unlimited chat on the free tier. The free cloud allowance is 10 a day, and chat on Ollama or BYOK is what's unlimited.
+
 ## \[0.15.4] — 2026-10-16
 
 ### Changed

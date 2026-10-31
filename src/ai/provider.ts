@@ -14,9 +14,8 @@ export interface CompletionOptions {
     /** Set when this message originated from one of the built-in prompt templates —
      *  lets CloudProvider request the free-tier Haiku quality bonus for it. */
     templateId?: string;
-    /** Set for tab-completion requests specifically — lets CloudProvider route
-     *  free-tier completions through Cerebras (fast, paid) before the existing
-     *  Gemini path, without touching regular chat. See api/chat.js. */
+    /** Set for tab-completion requests specifically, so the backend can apply
+     *  the completion token budget and quota bucket instead of the chat ones. See api/chat.js. */
     isTabCompletion?: boolean;
     /** How hard the Freebird Cloud Sonnet model should think before answering. Omitted = server default (medium). */
     effort?: 'low' | 'medium' | 'high';

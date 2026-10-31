@@ -24,7 +24,6 @@ import { templateHaikuDailyLimit } from '../lib/templateWelcome.js';
 import { fetchGeminiWithFallback, PRO_GEMINI_MODEL_CANDIDATES } from '../lib/geminiModel.js';
 import { geminiChunkText, GEMINI_THINKING_HEADROOM } from '../lib/geminiText.js';
 import { fetchAnthropicWithFallback, anthropicConfigured, SONNET_MODEL_CANDIDATES } from '../lib/anthropicModel.js';
-import { fetchCerebrasWithFallback, cerebrasConfigured } from '../lib/cerebrasModel.js';
 import { quotaKeysFor, reserveQuota, refundQuota, reserveSingleCounter } from '../lib/quota.js';
 import { textOnlyContent } from '../lib/messageContent.js';
 import { createLineSplitter } from '../lib/sseLines.js';
@@ -41,8 +40,7 @@ const QUOTA_TTL      = 24 * 60 * 60; // 1 day in seconds
 
 // Tab completions have their own, much larger bucket (see lib/quota.js).
 // 100/day ≈ 3,000/month — above Copilot Free's completion allowance. Served
-// on Cerebras at ~$0.0007 each, so even every daily-active free user maxing
-// out stays around $4/day.
+// by Gemini, so the cost per completion stays small even at this volume.
 const COMPLETION_DAILY_LIMIT    = 100;
 const COMPLETION_IP_DAILY_LIMIT = 1000;
 // isTabCompletion is client-supplied, so a modified client could label a chat
@@ -304,7 +302,6 @@ export default async function handler(req, res) {
     const systemParts = [];
     const geminiContents = [];
     const anthropicMessages = [];
-    const cerebrasMessages = [];
 
     for (const msg of messages) {
         if (msg.role === 'system') {
@@ -319,10 +316,6 @@ export default async function handler(req, res) {
             anthropicMessages.push({
                 role: msg.role === 'assistant' ? 'assistant' : 'user',
                 content: msg.content // string or content-block array — passed through unchanged
-            });
-            cerebrasMessages.push({
-                role: msg.role === 'assistant' ? 'assistant' : 'user',
-                content: textOnly
             });
         }
     }
@@ -359,33 +352,6 @@ export default async function handler(req, res) {
     // OpenAI-compatible shape — system prompt is just another message in the
     // array (unlike Anthropic's separate top-level `system` field), placed first.
     //
-    // reasoning_effort: 'low' is NOT optional — verified live against the
-    // real API that gpt-oss-120b defaults to heavy chain-of-thought,
-    // streamed as separate delta.reasoning tokens BEFORE any delta.content.
-    // At this feature's tight maxTokens (128), the default reasoning depth
-    // can consume the entire budget and return an empty completion with
-    // finish_reason:"length" — confirmed happening at 30 tokens in testing,
-    // and confirmed AGAIN at production scale on 2026-10-01: 1,314 Cerebras
-    // completion calls that day, only 226 tab_completion_shown (~17%
-    // shown rate) — the dominant cause isn't cancellation, it's exactly
-    // this reasoning-eats-the-budget failure. 'none' is rejected by this
-    // model (only low/medium/high accepted); 'low' still reasons some but
-    // needs real headroom past the shared 128 completion budget to
-    // reliably leave room for actual content afterward — given ONLY to
-    // Cerebras here, not to the Gemini fallback or Haiku (neither has this
-    // failure mode, no reason to loosen their budgets too).
-    const CEREBRAS_COMPLETION_MAX_TOKENS = 320;
-    const cerebrasBody = {
-        max_tokens: isCompletion ? CEREBRAS_COMPLETION_MAX_TOKENS : maxTokens,
-        temperature: 0.2,
-        stream: true,
-        reasoning_effort: 'low',
-        messages: [
-            ...(systemParts.length > 0 ? [{ role: 'system', content: systemParts.join('\n\n') }] : []),
-            ...cerebrasMessages
-        ]
-    };
-
     // ── Stream provider response back to extension ──────────────────────────
     try {
         let upstream, modelUsed, provider;
@@ -431,27 +397,6 @@ export default async function handler(req, res) {
                 }
             } catch (err) {
                 console.error('Anthropic request failed, falling back to Gemini:', err);
-            }
-        }
-
-        // Free-tier tab completions only — Pro/unmetered already gets Haiku
-        // above. 8s timeout (not the usual 30s): Cerebras is fast enough that
-        // a slow response already signals trouble (including its own rate
-        // limiting), so bailing quickly to Gemini keeps a misbehaving
-        // Cerebras request from making a completion feel slower than the
-        // pre-Cerebras baseline — defeating the entire point of using it.
-        if (!upstream && !unmetered && isTabCompletion && cerebrasConfigured()) {
-            try {
-                const result = await fetchCerebrasWithFallback(cerebrasBody, { signal: AbortSignal.timeout(8_000) });
-                if (result.response.ok) {
-                    upstream = result.response;
-                    modelUsed = result.modelUsed;
-                    provider = 'cerebras';
-                } else {
-                    console.error('Cerebras error, falling back to Gemini:', result.response.status, await result.response.text().catch(() => ''));
-                }
-            } catch (err) {
-                console.error('Cerebras request failed, falling back to Gemini:', err);
             }
         }
 
@@ -540,11 +485,8 @@ export default async function handler(req, res) {
                 if (provider === 'anthropic') usageTracker.consume(parsed);
                 // Gemini: all non-thought parts of candidates[0].content (see lib/geminiText.js)
                 // Anthropic: content_block_delta events carry delta.text
-                // Cerebras: OpenAI-compatible choices[0].delta.content
                 const text = provider === 'anthropic'
                     ? (parsed?.type === 'content_block_delta' ? parsed?.delta?.text : undefined)
-                    : provider === 'cerebras'
-                    ? parsed?.choices?.[0]?.delta?.content
                     : geminiChunkText(parsed);
                 if (text) res.write(text);
             } catch { /* skip malformed SSE lines */ }

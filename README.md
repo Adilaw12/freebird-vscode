@@ -1,6 +1,6 @@
 # Freebird AI — AI Coding Assistant for VS Code
 
-**No setup. No throttling. 10 free AI edits/day.**
+**No setup. No API keys. 10 free cloud AI edits/day.**
 
 [![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/TenLabs.freebird-ai?style=flat-square&label=VS%20Marketplace&color=0066B8)](https://marketplace.visualstudio.com/items?itemName=TenLabs.freebird-ai)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](https://github.com/Adilaw12/freebird-vscode/blob/main/LICENSE)
@@ -12,17 +12,14 @@
 
 **Run full codebase security audits, architecture mapping, and technical debt analysis with Agent mode** — try free for 7 days, no card needed. Pro is $9.90/month (or $99/year) for unlimited multi-file editing, plus sharing a selection with a colleague without giving them your whole codebase — Agent mode works on any model, including fully local Ollama, not just our cloud. Team is $25/month for up to 5 seats.
 
-Install Freebird AI and start coding in seconds — no API keys, no throttling, no configuration. You get **10 free advanced AI edits per day** powered by Gemini Flash Lite, plus free BYOK and unlimited local AI when you want full privacy.
+Install Freebird AI and start coding in seconds — no API keys, no configuration. You get **10 free cloud AI edits per day** powered by Gemini Flash Lite, plus free BYOK and unlimited local AI when you want full privacy.
 
 **Copilot throttled? Cursor too expensive? GitHub limits hit?**
-Freebird never blocks you — it picks up where other tools stop.
+When the free cloud allowance runs out, keep going for free with Ollama or your own API key.
 
 **[Upgrade to Pro — $9.90 USD/month →](https://freebird-backend.vercel.app/upgrade)** ([$99/year](https://freebird-backend.vercel.app/upgrade?cadence=annual)) · or start a **free 7-day Pro trial** (no card needed) right from the chat panel
 
 ⭐ **If Freebird saves you time, a GitHub star helps others find it** — thank you!
-
-> **📅 Heads up: the free daily cloud limit is changing on Monday, September 14.**
-> To keep Freebird fast and reliable as usage grows, the free tier's daily cloud limit is moving from 20 to **10** advanced edits/day, effective **Monday, September 14**. Everything else on Free — unlimited chat, unlimited tab completions on Ollama/BYOK, project rules — is unchanged. If you're already relying on the higher limit day to day, **[Pro's $9.90/month unlocks unlimited cloud edits](https://freebird-backend.vercel.app/upgrade)** plus full Agent mode (multi-file edits, terminal commands, one-click checkpoints) — or try it free for 7 days, no card needed, right from the chat panel.
 
 ---
 
@@ -78,13 +75,14 @@ We ran our own **Codebase Cartographer** prompt template against this repo — r
 
 | Feature | Free | Pro ($9.90 USD/mo) |
 |---|:---:|:---:|
-| AI chat (unlimited questions) | ✅ | ✅ |
+| AI chat on Gemini (cloud) | 10/day | **Unlimited** |
+| AI chat on Ollama or BYOK | ✅ Unlimited | ✅ Unlimited |
 | Active file + `@` file context | ✅ | ✅ |
 | `/` slash commands | ✅ | ✅ |
 | Works instantly — no setup | ✅ | ✅ |
 | Unlimited local Ollama (100% private) | ✅ | ✅ |
 | **Bring your own API keys — BYOK (Anthropic / OpenAI / DeepSeek / Qwen / Kimi K3 / Custom Provider)**, direct-to-LLM speed & total privacy | ✅ | ✅ |
-| AI tab completion (ghost text, as you type) | ✅ | ✅ |
+| AI tab completion on Ollama or BYOK (ghost text, as you type) | ✅ | ✅ |
 | Project rules — `.freebird/rules.md`, your own conventions, always loaded | ✅ | ✅ |
 | Inline edit (`Ctrl+Alt+K`) & AI commit, cloud-powered | 10/day | **Unlimited** |
 | **Multi-file agent edits, terminal commands, checkpoints** | — | ✅ |
@@ -127,10 +125,10 @@ $25/month for up to 5 seats ($5/seat — cheaper per-seat than an individual Pro
 ![Freebird AI feature highlights](media/feature-grid.png)
 
 ### Works Immediately — No Setup Required
-Install and start coding. Your first 20 advanced edits per day are powered by Gemini Flash Lite — no API key, no Ollama, nothing to configure.
+Install and start coding. Your first 10 cloud AI edits per day are powered by Gemini Flash Lite — no API key, no Ollama, nothing to configure.
 
-### 20 Free Advanced Edits Every Day
-Unlimited chat, plus 20 cloud-powered inline edits and AI commits a day. Resets daily, no card required. Multi-file agent edits and terminal commands are Pro (see below).
+### 10 Free Cloud Edits Every Day
+Cloud chat, inline edits, and AI commits share 10 uses a day. Chat on Ollama or BYOK is unlimited. Resets daily, no card required. Multi-file agent edits and terminal commands are Pro (see below).
 
 ### Hit Your Daily Cap? You've Got Options
 If you've configured Ollama as your backend, Freebird falls back to it automatically when the cloud quota runs out. Otherwise you'll see a clear "free edits used up" prompt with a no-card 7-day Pro trial one click away — or switch to BYOK (free, unlimited) or Ollama (free, unlimited) anytime from **Freebird: Configure AI Backend**.
