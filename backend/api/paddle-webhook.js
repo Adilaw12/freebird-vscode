@@ -84,6 +84,9 @@ export default async function handler(req, res) {
             case 'transaction.completed': {
                 if (!customerId) break;
                 const { key, isNew } = await licenseForCustomer(customerId, email);
+                // The success page finds the key by transaction id, the same way it finds
+                // a Stripe checkout session. Two hours, like the Stripe mapping.
+                if (data.id) await redis.set(`session:${data.id}`, key, { ex: 7200 });
                 if (isNew) {
                     await countDaily('pro_subscribed');
                     console.log(`Paddle pro activated: ${email ?? customerId} -> ${key}`);
