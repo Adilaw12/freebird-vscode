@@ -1,5 +1,6 @@
 // backend/lib/checkoutPricing.js — plan/cadence/country -> Stripe Price ID,
-// shared by api/checkout.js. Extracted so the routing logic is unit-testable
+// shared by api/checkout.js. Also refuses countries on the sanctions list
+// (lib/sanctionedCountries.js). Extracted so the routing logic is unit-testable
 // without a full Vercel handler (same reasoning as lib/quota.js).
 //
 // India gets its own PPP-priced INR Price rather than Stripe's Adaptive
@@ -11,6 +12,8 @@
 // STRIPE_PRICE_PRO_INDIA_* are deliberately allowed to be unset — until
 // that Payment gets created in Stripe, Indian buyers fall through to the
 // default (USD) price rather than getting a 500.
+
+import { isBlockedCountry } from './sanctionedCountries.js';
 
 export const PLANS = ['pro'];
 
@@ -60,6 +63,10 @@ export async function createCheckoutSession(stripe, opts) {
 
     if (!PLANS.includes(plan)) return { error: `plan must be one of: ${PLANS.join(', ')}`, status: 400 };
     if (!['monthly', 'annual'].includes(cadence)) return { error: 'cadence must be "monthly" or "annual"', status: 400 };
+    // Sanctions: no Pro sales to buyers in these countries, whatever the payment provider allows.
+    if (isBlockedCountry(country)) {
+        return { error: 'Freebird Pro is not available in your country.', status: 403 };
+    }
 
     const { priceId, region } = priceIdFor(plan, cadence, country);
     if (!priceId) return { error: `Price not configured for ${plan}/${region}/${cadence}`, status: 500 };
