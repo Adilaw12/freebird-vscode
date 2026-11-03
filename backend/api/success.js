@@ -3,7 +3,9 @@ import { Redis } from '@upstash/redis';
 const redis = Redis.fromEnv();
 
 export default async function handler(req, res) {
-    const { session_id } = req.query;
+    // Stripe sends session_id. Paddle sends its transaction id as _ptxn (or transaction_id).
+    // Both are stored under the same session: key by the webhook handlers.
+    const session_id = req.query.session_id || req.query._ptxn || req.query.transaction_id;
 
     if (!session_id) {
         return res.status(400).send(page('Missing session ID', '<p>Something went wrong. Please <a href="mailto:support@ten-labs.com.au">contact support</a>.</p>'));
