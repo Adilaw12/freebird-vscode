@@ -860,7 +860,6 @@ em { font-style: italic; }
   </div>
   <div class="banner-links">
     <button class="link-btn" onclick="vscode.postMessage({type:'upgrade'})">Upgrade to Pro</button>
-    <button class="link-btn" onclick="vscode.postMessage({type:'upgrade-local'})" title="E-wallets for Vietnam/Indonesia — Stripe doesn't support these">Pay with Local Methods (VN/ID)</button>
     <button class="link-btn" onclick="vscode.postMessage({type:'activate-license'})">Enter license key</button>
     <button class="banner-close" onclick="document.getElementById('upgrade-banner').style.display='none'" title="Dismiss">&#x2715;</button>
   </div>
@@ -874,7 +873,6 @@ em { font-style: italic; }
   <span id="trial-banner-text"></span>
   <div class="banner-links">
     <button class="link-btn" onclick="vscode.postMessage({type:'upgrade'})">Upgrade to Pro</button>
-    <button class="link-btn" onclick="vscode.postMessage({type:'upgrade-local'})">Pay with Local Methods (VN/ID)</button>
   </div>
 </div>
 
@@ -1482,7 +1480,6 @@ function showQuotaWall() {
     + '<div class="quota-wall-actions">'
       + '<button class="quota-wall-btn-primary" onclick="vscode.postMessage({type:\'start-trial\'})">Try Pro free for 7 days — no card →</button>'
       + '<button class="quota-wall-btn-secondary" onclick="vscode.postMessage({type:\'upgrade\'})">Upgrade now — $9.90/month</button>'
-      + '<button class="quota-wall-btn-secondary" onclick="vscode.postMessage({type:\'upgrade-local\'})" title="E-wallets for Vietnam/Indonesia — Stripe doesn\'t support these">Pay with Local Methods (VN/ID)</button>'
       + '<button class="quota-wall-btn-secondary" onclick="vscode.postMessage({type:\'install-ollama\'})">Use a local model instead</button>'
     + '</div>'
     + '<div class="quota-wall-reset">Free edits reset in ' + resetTime + ' (midnight UTC)</div>';

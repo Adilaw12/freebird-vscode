@@ -9,6 +9,7 @@ import { Redis } from '@upstash/redis';
 import { hasTemplateLibraryAccess } from '../lib/license.js';
 import { TEMPLATE_CATALOG } from '../lib/templateCatalog.js';
 import { getWelcomeEndsAt } from '../lib/templateWelcome.js';
+import { resolveLicenseKey } from '../lib/licenseResolve.js';
 
 const redis = Redis.fromEnv();
 
@@ -33,10 +34,13 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-    const { licenseKey, templateLicenseKey, machineId, installedAt } = req.body ?? {};
+    const { licenseKey, templateLicenseKey, machineId, installedAt, authToken } = req.body ?? {};
+
+    // Licence linked to the signed-in GitHub account, when no key was pasted.
+    const linkedKey = await resolveLicenseKey(redis, { licenseKey: null, authToken });
 
     let entitled = false;
-    for (const raw of [licenseKey, templateLicenseKey]) {
+    for (const raw of [licenseKey, templateLicenseKey, linkedKey]) {
         if (entitled) break;
         if (!raw || typeof raw !== 'string') continue;
 

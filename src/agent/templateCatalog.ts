@@ -9,6 +9,7 @@
 
 import * as vscode from 'vscode';
 import { API_BASE } from '../license/validator';
+import { getStoredSession } from '../auth/github';
 import { PROMPT_TEMPLATES, PromptTemplate } from './promptTemplates';
 import { getMachineId } from '../telemetry';
 
@@ -131,6 +132,9 @@ async function fetchCatalog(context: vscode.ExtensionContext): Promise<CatalogEn
         return persisted.templates;
     }
 
+    // Signed in: the backend finds a Templates/Pro plan linked to the account without any key.
+    const session = await getStoredSession(context);
+
     try {
         const res = await fetch(`${API_BASE}/api/templates`, {
             method: 'POST',
@@ -138,6 +142,7 @@ async function fetchCatalog(context: vscode.ExtensionContext): Promise<CatalogEn
             body: JSON.stringify({
                 licenseKey,
                 templateLicenseKey,
+                authToken: session?.sessionToken,
                 machineId: getMachineId(),
                 installedAt: getFirstSeenAt(context)
             }),

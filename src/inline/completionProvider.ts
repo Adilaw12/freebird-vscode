@@ -4,7 +4,7 @@ import { FIMProvider } from '../ai/provider';
 import { getMachineId, trackEvent } from '../telemetry';
 import { ErrorBreaker } from './errorBreaker';
 import { stripFences } from '../util/text';
-import { UPGRADE_URL, XENDIT_CHECKOUT_URL, getCachedLicenseStatus } from '../license/validator';
+import { getCachedLicenseStatus } from '../license/validator';
 import { hasApiKey, KeyProvider, isKeyProvider } from '../ai/keys';
 
 const MAX_PREFIX_LINES = 100;
@@ -51,15 +51,11 @@ function showCompletionWall(resetAt: number): void {
         `Freebird: you've used today's free tab completions — they come back at ${resetTime}. Chat still works. ` +
             'Pro makes completions unlimited and adds Agent mode.',
         'Upgrade to Pro',
-        'Pay with Local Methods (VN/ID)',
         'Use a local model'
     ).then(choice => {
         if (choice === 'Upgrade to Pro') {
             trackEvent('upgrade_clicked', 'completion');
-            vscode.env.openExternal(vscode.Uri.parse(UPGRADE_URL));
-        } else if (choice === 'Pay with Local Methods (VN/ID)') {
-            trackEvent('upgrade_clicked_local', 'completion');
-            vscode.env.openExternal(vscode.Uri.parse(XENDIT_CHECKOUT_URL));
+            vscode.commands.executeCommand('freebird.upgrade', 'pro');
         } else if (choice === 'Use a local model') {
             vscode.commands.executeCommand('freebird.configure');
         }

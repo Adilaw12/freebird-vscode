@@ -14,8 +14,8 @@ function check(label, condition) {
 const secret = 'pdl_ntfset_test_secret';
 const body = '{"event_type":"subscription.created"}';
 const now = 1_800_000_000;
-const sign = (ts, payload = body, key = secret) =>
-    `ts=${ts};h1=${createHmac('sha256', key).update(`${ts}:${payload}`).digest('hex')}`;
+const h1 = (ts, payload = body, key = secret) => createHmac('sha256', key).update(`${ts}:${payload}`).digest('hex');
+const sign = (ts, payload = body, key = secret) => `ts=${ts};h1=${h1(ts, payload, key)}`;
 
 console.log('\n--- Paddle webhook signatures ---');
 check('a correct, fresh signature is accepted', verifyPaddleSignature(body, sign(now), secret, now));
@@ -26,6 +26,10 @@ check('a future timestamp beyond tolerance is rejected', !verifyPaddleSignature(
 check('a missing header is rejected', !verifyPaddleSignature(body, undefined, secret, now));
 check('a header with no h1 is rejected', !verifyPaddleSignature(body, `ts=${now}`, secret, now));
 check('no configured secret means reject everything', !verifyPaddleSignature(body, sign(now), '', now));
+// During secret rotation Paddle sends one h1 per active secret.
+check('rotation: second h1 matching is accepted', verifyPaddleSignature(body, `ts=${now};h1=${h1(now, body, 'old')};h1=${h1(now)}`, secret, now));
+check('rotation: first h1 matching is accepted', verifyPaddleSignature(body, `ts=${now};h1=${h1(now)};h1=${h1(now, body, 'old')}`, secret, now));
+check('rotation: no h1 matching is rejected', !verifyPaddleSignature(body, `ts=${now};h1=${h1(now, body, 'a')};h1=${h1(now, body, 'b')}`, secret, now));
 
 console.log(`\n${total - failed}/${total} checks passed`);
 if (failed > 0) process.exit(1);

@@ -7,9 +7,6 @@
     { "source": "/upgrade", "destination": "/api/upgrade-page" },
     { "source": "/dashboard", "destination": "/api/dashboard" },
     { "source": "/share/:id", "destination": "/api/share?id=:id" },
-    { "source": "/pay-local", "destination": "/api/xendit-checkout-page" }
-  ],
-  "crons": [
-    { "path": "/api/xendit-recharge-cron", "schedule": "0 3 * * *" }
+    { "source": "/api/paddle/webhook", "destination": "/api/paddle-webhook" }
   ]
 }
