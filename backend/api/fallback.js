@@ -10,6 +10,7 @@ import { geminiChunkText } from '../lib/geminiText.js';
 import { Redis } from '@upstash/redis';
 import { createHash } from 'crypto';
 import { verifySession } from '../lib/authToken.js';
+import { resolveLicenseKey } from '../lib/licenseResolve.js';
 import { isLicenseActive, hasTemplateLibraryAccess, FREE_TEMPLATE_IDS } from '../lib/license.js';
 import { TEMPLATE_CATALOG } from '../lib/templateCatalog.js';
 import { templateHaikuDailyLimit } from '../lib/templateWelcome.js';
@@ -71,9 +72,10 @@ export default async function handler(req, res) {
 
     // ── Pro/Enterprise: fully unmetered — skips the IP burst limit too ─────────
     let unmetered = false;
-    if (licenseKey && typeof licenseKey === 'string') {
+    const normalizedLicenseKey = await resolveLicenseKey(redis, { licenseKey, authToken });
+    if (normalizedLicenseKey) {
         try {
-            const license = await redis.get(`license:${licenseKey.trim().toUpperCase()}`);
+            const license = await redis.get(`license:${normalizedLicenseKey}`);
             if (isLicenseActive(license)) {
                 unmetered = true;
             }
@@ -132,9 +134,12 @@ export default async function handler(req, res) {
         : 0;
     if (templateBonusLimit > 0) {
         let hasTemplateAccess = false;
-        if (templateLicenseKey && typeof templateLicenseKey === 'string') {
+        const templateKey = (templateLicenseKey && typeof templateLicenseKey === 'string')
+            ? templateLicenseKey.trim().toUpperCase()
+            : normalizedLicenseKey;
+        if (templateKey) {
             try {
-                const tLicense = await redis.get(`license:${templateLicenseKey.trim().toUpperCase()}`);
+                const tLicense = await redis.get(`license:${templateKey}`);
                 hasTemplateAccess = hasTemplateLibraryAccess(tLicense);
             } catch (err) {
                 console.error('Template license lookup error (fallback):', err);

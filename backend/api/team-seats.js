@@ -12,6 +12,7 @@
 
 import { Redis } from '@upstash/redis';
 import { generateKey } from '../lib/keygen.js';
+import { resolveLicenseKey } from '../lib/licenseResolve.js';
 
 const redis = Redis.fromEnv();
 
@@ -22,16 +23,17 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-    const { ownerLicenseKey, action, teammateEmail, seatKey } = req.body ?? {};
+    const { ownerLicenseKey, authToken, action, teammateEmail, seatKey } = req.body ?? {};
 
-    if (!ownerLicenseKey || typeof ownerLicenseKey !== 'string') {
-        return res.status(400).json({ error: 'ownerLicenseKey required' });
+    // The owner's key, or else the Team licence linked to their signed-in GitHub account.
+    const normalisedOwnerKey = await resolveLicenseKey(redis, { licenseKey: ownerLicenseKey, authToken });
+    if (!normalisedOwnerKey) {
+        return res.status(400).json({ error: 'ownerLicenseKey or a signed-in account required' });
     }
     if (!['list', 'add', 'remove'].includes(action)) {
         return res.status(400).json({ error: 'action must be list, add, or remove' });
     }
 
-    const normalisedOwnerKey = ownerLicenseKey.trim().toUpperCase();
 
     // ── Verify this key is an active team plan AND the owner (not a seat) ──────
     const ownerLicense = await redis.get(`license:${normalisedOwnerKey}`).catch(() => null);

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { getStoredSession, clearSession, signInWithGitHub, GithubSession } from '../auth/github';
 
 export const API_BASE    = 'https://freebird-backend.vercel.app';
 // A dynamic redirect (api/upgrade-page.js), not a hardcoded Payment Link —
@@ -8,13 +9,20 @@ export const API_BASE    = 'https://freebird-backend.vercel.app';
 // extension just opens this URL, so all of them get that routing for free
 // without needing their own fetch/JSON logic. Append "?cadence=annual" for
 // the annual price once a UI offers that choice.
-export const UPGRADE_URL = `${API_BASE}/upgrade`;
-export const TEMPLATES_UPGRADE_URL = 'https://buy.stripe.com/3cI6oJ3SdgUu9ys1ylfAc04';
-// Stripe doesn't support Indonesia's QRIS/OVO/DANA/ShopeePay or Vietnam's
-// MoMo/ZaloPay at all — customers there click Upgrade but can never pay.
-// This is a second, self-selected checkout path (not geo-detected) for
-// those two markets — see backend/api/xendit-*.js.
-export const XENDIT_CHECKOUT_URL = `${API_BASE}/pay-local`;
+/**
+ * Checkout provider switch. false = today's behaviour (Stripe via /upgrade). true =
+ * Paddle: Upgrade signs the user in with GitHub, asks the backend for a signed
+ * checkout link (api/link-token.js) and opens it, and the plan lands on their
+ * account with no key to paste. Flip to true once Paddle is live (sandbox testing:
+ * build a dev copy with it on). See openUpgrade() below.
+ */
+export const PADDLE_CHECKOUT_ENABLED = false;
+export const EXTENSION_ID = 'TenLabs.freebird-ai';
+const STRIPE_TEMPLATES_URL = 'https://buy.stripe.com/3cI6oJ3SdgUu9ys1ylfAc04';
+// Used inside chat markdown links, where we can't run code. With Paddle on these are
+// deep links back into the extension (handled in extension.ts), which then run openUpgrade().
+export const UPGRADE_URL = PADDLE_CHECKOUT_ENABLED ? `vscode://${EXTENSION_ID}/upgrade?plan=pro` : `${API_BASE}/upgrade`;
+export const TEMPLATES_UPGRADE_URL = PADDLE_CHECKOUT_ENABLED ? `vscode://${EXTENSION_ID}/upgrade?plan=templates` : STRIPE_TEMPLATES_URL;
 
 const CACHE_TTL_MS   = 60 * 60 * 1000;          // 1 hour
 const OFFLINE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days offline grace
@@ -27,6 +35,11 @@ export interface LicenseStatus {
     expiresAt?: string;
     /** Set when a key is saved but not granting Pro, so the UI can say why instead of silently showing Free. */
     reason?: 'invalid' | 'offline';
+    /** Where this status came from: a pasted key, or the licence linked to the signed-in GitHub account. */
+    source?: 'key' | 'account';
+    /** Premium Prompt Templates access (a standalone Templates plan does not make isPro true). */
+    templateLibrary?: boolean;
+    billingCycle?: string;
 }
 
 export interface StartTrialResult {
@@ -47,28 +60,14 @@ interface CacheEntry {
 // Avoids hitting globalState (async) or the network on every message send.
 let _memCache: { status: LicenseStatus; ts: number; key: string } | null = null;
 
-export async function getLicenseStatus(context: vscode.ExtensionContext): Promise<LicenseStatus> {
-    const key = vscode.workspace
-        .getConfiguration('freebird')
-        .get<string>('licenseKey', '')
-        .trim()
-        .toUpperCase();
+const ACCOUNT_PREFIX = 'acct:';
 
-    if (!key) return { isPro: false };
+function planFrom(data: { plan?: string }): NonNullable<LicenseStatus['plan']> {
+    return data.plan === 'enterprise' ? 'enterprise' : data.plan === 'team' ? 'team' : data.plan === 'trial' ? 'trial' : 'pro';
+}
 
-    // 1. In-memory cache — zero I/O, sub-millisecond
-    if (_memCache && _memCache.key === key && Date.now() - _memCache.ts < CACHE_TTL_MS) {
-        return _memCache.status;
-    }
-
-    // 2. Persistent cache (globalState) — fast local read, no network
-    const persisted = context.globalState.get<CacheEntry>('licenseCache');
-    if (persisted && persisted.key === key && Date.now() - persisted.ts < CACHE_TTL_MS) {
-        _memCache = { status: persisted.status, ts: persisted.ts, key };
-        return persisted.status;
-    }
-
-    // 3. Network validation — only when cache is stale
+/** Validates a pasted key. null = the check itself failed (offline, server error). */
+async function validateKey(key: string): Promise<LicenseStatus | null> {
     try {
         const res = await fetch(`${API_BASE}/api/validate`, {
             method: 'POST',
@@ -76,34 +75,121 @@ export async function getLicenseStatus(context: vscode.ExtensionContext): Promis
             body: JSON.stringify({ key }),
             signal: AbortSignal.timeout(6000)
         });
-
-        if (!res.ok) return fallbackToCache(persisted, key);
-
+        if (!res.ok) return null;
         const data = await res.json() as { valid: boolean; email?: string; plan?: string; isTeamOwner?: boolean; expiresAt?: string };
-        const status: LicenseStatus = {
+        return {
             isPro: data.valid === true,
-            plan: data.plan === 'enterprise' ? 'enterprise' : data.plan === 'team' ? 'team' : data.plan === 'trial' ? 'trial' : 'pro',
+            plan: planFrom(data),
             isTeamOwner: data.isTeamOwner === true,
             email: data.email,
-            expiresAt: data.expiresAt
+            expiresAt: data.expiresAt,
+            source: 'key'
         };
-
-        if (status.isPro) {
-            const entry: CacheEntry = { status, ts: Date.now(), key, everValidated: true };
-            await context.globalState.update('licenseCache', entry);
-            await context.globalState.update(KEY_BACKUP, key);
-            _memCache = { status, ts: Date.now(), key };
-        } else {
-            await context.globalState.update('licenseCache', undefined);
-            _memCache = null;
-            status.reason = 'invalid';
-        }
-
-        return status;
-
     } catch {
-        return fallbackToCache(persisted, key);
+        return null;
     }
+}
+
+/** What api/license-status.js says about the signed-in GitHub account. */
+export interface AccountStatus {
+    linked: boolean;
+    valid: boolean;
+    plan?: string;
+    status?: string;
+    billingCycle?: string | null;
+    templateLibrary?: boolean;
+    isTeamOwner?: boolean;
+    email?: string | null;
+    expiresAt?: string | null;
+    /** Paddle's own update-card / cancel links for the subscription. */
+    billing?: { update: string | null; cancel: string | null } | null;
+}
+
+export async function fetchAccountStatus(session: GithubSession): Promise<AccountStatus | null> {
+    try {
+        const res = await fetch(`${API_BASE}/api/license-status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ authToken: session.sessionToken }),
+            signal: AbortSignal.timeout(6000)
+        });
+        if (!res.ok) return null;
+        return await res.json() as AccountStatus;
+    } catch {
+        return null;
+    }
+}
+
+function statusFromAccount(a: AccountStatus): LicenseStatus {
+    const paid = a.valid === true;
+    return {
+        isPro: paid,
+        ...(paid ? {
+            plan: planFrom(a),
+            isTeamOwner: a.isTeamOwner === true,
+            email: a.email ?? undefined,
+            expiresAt: a.expiresAt ?? undefined
+        } : {}),
+        templateLibrary: a.templateLibrary === true,
+        billingCycle: a.billingCycle ?? undefined,
+        source: 'account'
+    };
+}
+
+export async function getLicenseStatus(context: vscode.ExtensionContext): Promise<LicenseStatus> {
+    const key = vscode.workspace
+        .getConfiguration('freebird')
+        .get<string>('licenseKey', '')
+        .trim()
+        .toUpperCase();
+
+    // A saved key wins; with none, the licence linked to the signed-in GitHub account is used.
+    const session = await getStoredSession(context);
+    const id = key || (session ? `${ACCOUNT_PREFIX}${session.login}` : '');
+    if (!id) return { isPro: false };
+
+    // 1. In-memory cache — zero I/O, sub-millisecond
+    if (_memCache && _memCache.key === id && Date.now() - _memCache.ts < CACHE_TTL_MS) {
+        return _memCache.status;
+    }
+
+    // 2. Persistent cache (globalState) — fast local read, no network
+    const persisted = context.globalState.get<CacheEntry>('licenseCache');
+    if (persisted && persisted.key === id && Date.now() - persisted.ts < CACHE_TTL_MS) {
+        _memCache = { status: persisted.status, ts: persisted.ts, key: id };
+        return persisted.status;
+    }
+
+    // 3. Network validation — only when cache is stale
+    //    keyResult: undefined = no key, null = the check failed, otherwise the answer.
+    const keyResult = key ? await validateKey(key) : undefined;
+    let status: LicenseStatus | null = keyResult ?? null;
+
+    // No key, or a key that doesn't grant Pro (say an expired trial still in settings):
+    // ask what the signed-in account has.
+    if (session && !status?.isPro) {
+        const account = await fetchAccountStatus(session);
+        if (account) {
+            const fromAccount = statusFromAccount(account);
+            if (fromAccount.isPro) status = fromAccount;
+            else if (keyResult === undefined) status = fromAccount; // no key to disagree with
+        }
+    }
+
+    if (!status) return fallbackToCache(persisted, id);
+
+    if (status.isPro) {
+        const entry: CacheEntry = { status, ts: Date.now(), key: id, everValidated: true };
+        await context.globalState.update('licenseCache', entry);
+        if (status.source === 'key') await context.globalState.update(KEY_BACKUP, key);
+        _memCache = { status, ts: Date.now(), key: id };
+    } else {
+        await context.globalState.update('licenseCache', undefined);
+        _memCache = null;
+        if (key) status.reason = 'invalid';
+    }
+
+    return status;
 }
 
 function fallbackToCache(cached: CacheEntry | null | undefined, key: string): LicenseStatus {
@@ -192,9 +278,12 @@ export function clearLicenseCache(context: vscode.ExtensionContext): void {
  */
 export function getPersistedLicenseHint(context: vscode.ExtensionContext): LicenseStatus | undefined {
     const key = vscode.workspace.getConfiguration('freebird').get<string>('licenseKey', '').trim().toUpperCase();
-    if (!key) return undefined;
     const persisted = context.globalState.get<CacheEntry>('licenseCache');
-    return persisted && persisted.key === key && persisted.status.isPro === true ? persisted.status : undefined;
+    if (!persisted || persisted.status.isPro !== true) return undefined;
+    // With a key saved the cache must be for that key; with none, only an account entry counts.
+    return key
+        ? (persisted.key === key ? persisted.status : undefined)
+        : (persisted.key.startsWith(ACCOUNT_PREFIX) ? persisted.status : undefined);
 }
 
 export function getCachedLicenseStatus(): LicenseStatus {
@@ -262,4 +351,153 @@ export async function openBillingPortal(licenseKey: string): Promise<{ url?: str
     } catch (err: any) {
         return { error: err?.message ?? 'Network error opening billing.' };
     }
+}
+
+// ── Upgrading, and saving a purchase to the GitHub account ───────────────────
+
+export type UpgradePlan = 'pro' | 'pro-annual' | 'templates' | 'team';
+const UPGRADE_PLANS: UpgradePlan[] = ['pro', 'pro-annual', 'templates', 'team'];
+export function isUpgradePlan(v: unknown): v is UpgradePlan {
+    return typeof v === 'string' && (UPGRADE_PLANS as string[]).includes(v);
+}
+
+/** Fired when the account's plan may have changed (purchase finished, sign-in, link). */
+export const onLicenseChanged = new vscode.EventEmitter<void>();
+
+async function signInForPurchase(context: vscode.ExtensionContext, intro: string): Promise<GithubSession | null> {
+    try {
+        return await vscode.window.withProgress(
+            { location: vscode.ProgressLocation.Notification, title: 'Waiting for GitHub sign-in…', cancellable: false },
+            () => signInWithGitHub(context, intro)
+        );
+    } catch (err: any) {
+        if (err?.message !== 'CANCELLED') vscode.window.showErrorMessage(`GitHub sign-in failed: ${err?.message ?? err}`);
+        return null;
+    }
+}
+
+/**
+ * The one entry point for every "Upgrade" button. With Paddle on: sign in with
+ * GitHub if needed, get a signed checkout link for this account, open it, then
+ * watch for the plan to appear. With it off: the old Stripe behaviour.
+ */
+export async function openUpgrade(context: vscode.ExtensionContext, plan: UpgradePlan = 'pro'): Promise<void> {
+    if (!PADDLE_CHECKOUT_ENABLED) {
+        const url = plan === 'templates' ? STRIPE_TEMPLATES_URL
+            : plan === 'pro-annual' ? `${API_BASE}/upgrade?cadence=annual`
+            : `${API_BASE}/upgrade`;
+        await vscode.env.openExternal(vscode.Uri.parse(url));
+        return;
+    }
+
+    let session = await getStoredSession(context)
+        ?? await signInForPurchase(context, 'Sign in with GitHub to save your plan to your account (no license key to paste)');
+    if (!session) return;
+
+    const requestLink = (s: GithubSession) => fetch(`${API_BASE}/api/link-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ authToken: s.sessionToken, plan }),
+        signal: AbortSignal.timeout(10_000)
+    });
+
+    try {
+        let res = await requestLink(session);
+        if (res.status === 401) {
+            // The saved sign-in expired: sign in again once.
+            await clearSession(context);
+            session = await signInForPurchase(context, 'Your Freebird sign-in expired. Sign in with GitHub to continue');
+            if (!session) return;
+            res = await requestLink(session);
+        }
+        const data = await res.json().catch(() => ({})) as { url?: string; error?: string; code?: string };
+
+        if (res.ok && data.url) {
+            await vscode.env.openExternal(vscode.Uri.parse(data.url));
+            watchForUpgrade(context, plan);
+            return;
+        }
+        if (res.status === 409) {
+            // Already has it (or it is bundled): say so and refresh what the extension believes.
+            vscode.window.showInformationMessage(data.error ?? 'You already have this plan.');
+            clearLicenseCache(context);
+            onLicenseChanged.fire();
+            return;
+        }
+        vscode.window.showErrorMessage(data.error ?? 'Could not start checkout. Please try again, or email support@ten-labs.com.au.');
+    } catch {
+        vscode.window.showErrorMessage('Could not reach Freebird to start checkout. Check your connection and try again.');
+    }
+}
+
+let _watchTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** After checkout opens, polls the account until the purchase shows up (up to 20 minutes). */
+export function watchForUpgrade(context: vscode.ExtensionContext, plan: UpgradePlan): void {
+    if (_watchTimer) clearTimeout(_watchTimer);
+    const until = Date.now() + 20 * 60 * 1000;
+
+    const tick = async () => {
+        _watchTimer = undefined;
+        if (Date.now() > until) return;
+        const session = await getStoredSession(context);
+        const a = session ? await fetchAccountStatus(session) : null;
+        const done = a && (plan === 'templates' ? a.templateLibrary === true
+            : plan === 'team' ? a.valid && a.plan === 'team'
+            : a.valid);
+        if (done && a) {
+            clearLicenseCache(context);
+            onLicenseChanged.fire();
+            vscode.window.showInformationMessage(
+                plan === 'templates'
+                    ? 'Premium Prompt Templates are active on your account. Enjoy!'
+                    : `Freebird ${a.plan === 'team' ? 'Team' : 'Pro'} is active on your account. Enjoy!`
+            );
+            return;
+        }
+        _watchTimer = setTimeout(tick, 5000);
+    };
+    _watchTimer = setTimeout(tick, 5000);
+}
+
+/**
+ * After someone activates a paid key by hand, offer to save it to their GitHub
+ * account so they never paste it again (on any machine).
+ */
+export async function offerAccountLink(context: vscode.ExtensionContext, key: string): Promise<void> {
+    let session = await getStoredSession(context);
+    if (!session) {
+        const pick = await vscode.window.showInformationMessage(
+            'Save this license to your GitHub account? You will not need to paste the key again, on this or any other machine.',
+            'Sign in and save', 'Not now'
+        );
+        if (pick !== 'Sign in and save') return;
+        session = await signInForPurchase(context, 'Sign in with GitHub to save your license to your account');
+        if (!session) return;
+    }
+    try {
+        const res = await fetch(`${API_BASE}/api/link-license`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ authToken: session.sessionToken, key }),
+            signal: AbortSignal.timeout(10_000)
+        });
+        const data = await res.json().catch(() => ({})) as { error?: string };
+        if (res.ok) {
+            vscode.window.showInformationMessage('License saved to your GitHub account.');
+            onLicenseChanged.fire();
+        } else {
+            vscode.window.showWarningMessage(data.error ?? 'Could not save the license to your account. Your key still works.');
+        }
+    } catch {
+        vscode.window.showWarningMessage('Could not reach Freebird to save the license. Your key still works.');
+    }
+}
+
+/** Paddle's update-card / cancel links for the signed-in account, if it has a Paddle subscription. */
+export async function getAccountBilling(context: vscode.ExtensionContext): Promise<{ update: string | null; cancel: string | null } | null> {
+    const session = await getStoredSession(context);
+    if (!session) return null;
+    const a = await fetchAccountStatus(session);
+    return a?.billing ?? null;
 }

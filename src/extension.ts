@@ -4,7 +4,7 @@ import { GitService } from './git/service';
 import { registerInlineEdit } from './inline/editor';
 import { registerTabCompletion } from './inline/completionProvider';
 import { registerShareSelection } from './share/share';
-import { restoreLicenseKeyIfLost, watchLicenseKeyRemoval, getLicenseStatus, getPersistedLicenseHint, warmLicenseCache, activateLicense, clearLicenseCache, startTrial, isValidEmail, openBillingPortal, UPGRADE_URL, TEMPLATES_UPGRADE_URL, XENDIT_CHECKOUT_URL, API_BASE } from './license/validator';
+import { restoreLicenseKeyIfLost, watchLicenseKeyRemoval, getLicenseStatus, getPersistedLicenseHint, warmLicenseCache, activateLicense, clearLicenseCache, startTrial, isValidEmail, openBillingPortal, API_BASE, openUpgrade, isUpgradePlan, onLicenseChanged, offerAccountLink, getAccountBilling } from './license/validator';
 import { getCloudEditsRemaining } from './license/usage';
 import { signInWithGitHub, getStoredSession, clearSession } from './auth/github';
 import { buildIndex, updateFileInIndex, removeFileFromIndex, getIndexStats } from './index/indexer';
@@ -30,9 +30,7 @@ async function runLicenseActivationFlow(opts: {
     progressTitle: string;
     validate: (key: string) => Promise<{ ok: boolean; email?: string }>;
     onSuccess: (email: string | undefined, refreshStatusBar: () => void) => void;
-    upgradeUrl: string;
-    // Pro only (v1 scope) — omit for Templates, which has no Xendit path.
-    localUpgradeUrl?: string;
+    onBuy?: () => void;
     notSetUpMessage: string;
     buyLabel: string;
     retryCommand: string;
@@ -54,22 +52,17 @@ async function runLicenseActivationFlow(opts: {
                 opts.onSuccess(result.email, opts.refreshStatusBar);
             } else {
                 const actions = [opts.buyLabel];
-                if (opts.localUpgradeUrl) actions.push('Pay with Local Methods (VN/ID)');
                 actions.push('Try Again');
                 const action = await vscode.window.showErrorMessage(
                     'License key not recognised or subscription is inactive.',
                     ...actions
                 );
                 if (action === opts.buyLabel) {
-                    if (opts.upgradeUrl) {
-                        vscode.env.openExternal(vscode.Uri.parse(opts.upgradeUrl));
+                    if (opts.onBuy) {
+                        opts.onBuy();
                     } else {
                         vscode.window.showInformationMessage(opts.notSetUpMessage);
                     }
-                }
-                if (action === 'Pay with Local Methods (VN/ID)' && opts.localUpgradeUrl) {
-                    trackEvent('upgrade_clicked_local');
-                    vscode.env.openExternal(vscode.Uri.parse(opts.localUpgradeUrl));
                 }
                 if (action === 'Try Again') vscode.commands.executeCommand(opts.retryCommand);
             }
@@ -182,6 +175,23 @@ export async function activate(context: vscode.ExtensionContext) {
     }
     refreshStatusBar();
 
+    // A purchase finished, or the account was linked or signed in: re-read everything that depends on the plan.
+    context.subscriptions.push(onLicenseChanged.event(() => {
+        clearLicenseCache(context);
+        clearTemplateCatalogCache(context);
+        refreshStatusBar();
+    }));
+
+    // Links in chat markdown (vscode://TenLabs.freebird-ai/upgrade?plan=pro) land here.
+    context.subscriptions.push(vscode.window.registerUriHandler({
+        handleUri(uri: vscode.Uri) {
+            if (uri.path !== '/upgrade') return;
+            const plan = new URLSearchParams(uri.query).get('plan');
+            trackEvent('upgrade_clicked', 'deeplink');
+            openUpgrade(context, isUpgradePlan(plan) ? plan : 'pro');
+        }
+    }));
+
     // ── What's New page after a minor/major update ──────────────────────────
     // Must precede the walkthrough block below: that block sets the flag we use
     // to tell an existing user (show notes) from a fresh install (don't).
@@ -222,14 +232,9 @@ export async function activate(context: vscode.ExtensionContext) {
         const action = await vscode.window.showWarningMessage(
             `Daily cloud edits used. "${featureName}" needs cloud AI — upgrade to Pro for unlimited, or wait until tomorrow.`,
             'Upgrade to Pro',
-            'Pay with Local Methods (VN/ID)',
             'Activate License'
         );
-        if (action === 'Upgrade to Pro') vscode.env.openExternal(vscode.Uri.parse(UPGRADE_URL));
-        if (action === 'Pay with Local Methods (VN/ID)') {
-            trackEvent('upgrade_clicked_local');
-            vscode.env.openExternal(vscode.Uri.parse(XENDIT_CHECKOUT_URL));
-        }
+        if (action === 'Upgrade to Pro') openUpgrade(context, 'pro');
         if (action === 'Activate License') vscode.commands.executeCommand('freebird.activateLicense');
         return false;
     }
@@ -292,6 +297,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 progressTitle: 'Validating license key…',
                 validate: async key => {
                     const status = await activateLicense(context, key);
+                    if (status.isPro && status.plan !== 'trial') void offerAccountLink(context, key.trim().toUpperCase());
                     return { ok: status.isPro, email: status.email };
                 },
                 onSuccess: (email, refresh) => {
@@ -301,8 +307,7 @@ export async function activate(context: vscode.ExtensionContext) {
                     );
                     refresh();
                 },
-                upgradeUrl: UPGRADE_URL,
-                localUpgradeUrl: XENDIT_CHECKOUT_URL,
+                onBuy: () => { openUpgrade(context, 'pro'); },
                 notSetUpMessage: 'Freebird Pro purchasing isn\'t set up yet.',
                 buyLabel: 'Buy Pro',
                 retryCommand: 'freebird.activateLicense',
@@ -327,7 +332,7 @@ export async function activate(context: vscode.ExtensionContext) {
                     trackEvent('template_license_activated');
                     vscode.window.showInformationMessage('Freebird Template Library activated. Enjoy the full catalog!');
                 },
-                upgradeUrl: TEMPLATES_UPGRADE_URL,
+                onBuy: () => { openUpgrade(context, 'templates'); },
                 notSetUpMessage: 'Freebird Template Library purchasing isn\'t set up yet.',
                 buyLabel: 'Buy Template Library',
                 retryCommand: 'freebird.activateTemplateLicense',
@@ -343,7 +348,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 );
                 trackEvent('github_signed_in');
                 vscode.window.showInformationMessage(`Signed in to Freebird as ${session.login}.`);
-                refreshStatusBar();
+                onLicenseChanged.fire(); // a plan linked to this account switches on without a key
             } catch (err: any) {
                 if (err?.message === 'CANCELLED') return;
                 vscode.window.showErrorMessage(`GitHub sign-in failed: ${err.message}`);
@@ -352,6 +357,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
         vscode.commands.registerCommand('freebird.signOutGitHub', async () => {
             await clearSession(context);
+            clearLicenseCache(context);
             vscode.window.showInformationMessage('Signed out of Freebird GitHub sign-in.');
             refreshStatusBar();
         }),
@@ -398,7 +404,7 @@ export async function activate(context: vscode.ExtensionContext) {
                         );
                         if (action === 'Upgrade to Pro') {
                             trackEvent('upgrade_clicked');
-                            vscode.env.openExternal(vscode.Uri.parse(UPGRADE_URL));
+                            openUpgrade(context, 'pro');
                         }
                     } else {
                         trackEvent('trial_start_failed');
@@ -420,9 +426,19 @@ export async function activate(context: vscode.ExtensionContext) {
         }),
 
         vscode.commands.registerCommand('freebird.manageSubscription', async () => {
+            const billing = await getAccountBilling(context);
+            if (billing && (billing.update || billing.cancel)) {
+                trackEvent('manage_subscription_clicked');
+                const items: { label: string; url: string }[] = [];
+                if (billing.update) items.push({ label: '$(credit-card) Update payment method', url: billing.update });
+                if (billing.cancel) items.push({ label: '$(close) Cancel subscription', url: billing.cancel });
+                const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Manage your Freebird subscription' });
+                if (pick) vscode.env.openExternal(vscode.Uri.parse(pick.url));
+                return;
+            }
             const licenseKey = vscode.workspace.getConfiguration('freebird').get<string>('licenseKey', '').trim().toUpperCase();
             if (!licenseKey) {
-                vscode.window.showInformationMessage('No Freebird license key is set on this machine, so there is no subscription to manage.');
+                vscode.window.showInformationMessage('No Freebird subscription was found for this machine or your GitHub account. If you subscribed, sign in with GitHub (Freebird: Sign in with GitHub) and try again.');
                 return;
             }
 
@@ -462,6 +478,7 @@ export async function activate(context: vscode.ExtensionContext) {
             }
 
             const ownerKey = vscode.workspace.getConfiguration('freebird').get<string>('licenseKey', '').trim();
+            const teamSession = await getStoredSession(context);
 
             const choice = await vscode.window.showQuickPick(
                 [
@@ -478,7 +495,7 @@ export async function activate(context: vscode.ExtensionContext) {
                     const listRes = await fetch(`${API_BASE}/api/team-seats`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ ownerLicenseKey: ownerKey, action: 'list' })
+                        body: JSON.stringify({ ownerLicenseKey: ownerKey, authToken: teamSession?.sessionToken, action: 'list' })
                     });
                     const data = await listRes.json() as any;
                     if (!listRes.ok) throw new Error(data.error ?? 'Could not load seats');
@@ -504,7 +521,7 @@ export async function activate(context: vscode.ExtensionContext) {
                         () => fetch(`${API_BASE}/api/team-seats`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ ownerLicenseKey: ownerKey, action: 'add', teammateEmail: email })
+                            body: JSON.stringify({ ownerLicenseKey: ownerKey, authToken: teamSession?.sessionToken, action: 'add', teammateEmail: email })
                         })
                     );
                     const data = await addRes.json() as any;
@@ -521,7 +538,7 @@ export async function activate(context: vscode.ExtensionContext) {
                     const listRes = await fetch(`${API_BASE}/api/team-seats`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ ownerLicenseKey: ownerKey, action: 'list' })
+                        body: JSON.stringify({ ownerLicenseKey: ownerKey, authToken: teamSession?.sessionToken, action: 'list' })
                     });
                     const data = await listRes.json() as any;
                     if (!listRes.ok) throw new Error(data.error ?? 'Could not load seats');
@@ -541,7 +558,7 @@ export async function activate(context: vscode.ExtensionContext) {
                     const removeRes = await fetch(`${API_BASE}/api/team-seats`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ ownerLicenseKey: ownerKey, action: 'remove', seatKey: (target as any).value })
+                        body: JSON.stringify({ ownerLicenseKey: ownerKey, authToken: teamSession?.sessionToken, action: 'remove', seatKey: (target as any).value })
                     });
                     const removeData = await removeRes.json() as any;
                     if (!removeRes.ok) throw new Error(removeData.error ?? 'Could not remove seat');
@@ -553,22 +570,11 @@ export async function activate(context: vscode.ExtensionContext) {
             }
         }),
 
-        vscode.commands.registerCommand('freebird.upgradeToPro', async () => {
-            const choice = await vscode.window.showQuickPick(
-                [
-                    { label: '$(credit-card) Upgrade to Pro', description: 'International card, via Stripe', value: 'stripe' },
-                    { label: '$(globe) Pay with Local Methods (VN/ID)', description: 'E-wallets — OVO, DANA, ShopeePay, MoMo, ZaloPay', value: 'xendit' },
-                ],
-                { placeHolder: 'How would you like to pay?' }
-            );
-            if (!choice) return;
-            if (choice.value === 'xendit') {
-                trackEvent('upgrade_clicked_local');
-                vscode.env.openExternal(vscode.Uri.parse(XENDIT_CHECKOUT_URL));
-            } else {
-                trackEvent('upgrade_clicked');
-                vscode.env.openExternal(vscode.Uri.parse(UPGRADE_URL));
-            }
+        vscode.commands.registerCommand('freebird.upgrade', (plan?: unknown) => openUpgrade(context, isUpgradePlan(plan) ? plan : 'pro')),
+
+        vscode.commands.registerCommand('freebird.upgradeToPro', () => {
+            trackEvent('upgrade_clicked');
+            return openUpgrade(context, 'pro');
         }),
 
         vscode.commands.registerCommand('freebird.previewHtml', (uri?: vscode.Uri) => {
@@ -592,14 +598,9 @@ export async function activate(context: vscode.ExtensionContext) {
                 vscode.window.showWarningMessage(
                     `${backend.name} requires an active Pro/Team/Enterprise license.`,
                     'Upgrade to Pro',
-                    'Pay with Local Methods (VN/ID)',
                     'Dismiss'
                 ).then(choice => {
-                    if (choice === 'Upgrade to Pro') vscode.env.openExternal(vscode.Uri.parse(UPGRADE_URL));
-                    if (choice === 'Pay with Local Methods (VN/ID)') {
-                        trackEvent('upgrade_clicked_local');
-                        vscode.env.openExternal(vscode.Uri.parse(XENDIT_CHECKOUT_URL));
-                    }
+                    if (choice === 'Upgrade to Pro') openUpgrade(context, 'pro');
                 });
                 return;
             }
@@ -686,11 +687,7 @@ export async function activate(context: vscode.ExtensionContext) {
                     trackEvent('template_locked_trial_clicked', chosen.template.id);
                     vscode.commands.executeCommand('freebird.startTrial');
                 } else if (action === 'Buy Template Library') {
-                    if (TEMPLATES_UPGRADE_URL) {
-                        vscode.env.openExternal(vscode.Uri.parse(TEMPLATES_UPGRADE_URL));
-                    } else {
-                        vscode.window.showInformationMessage('Freebird Template Library purchasing isn\'t set up yet.');
-                    }
+                    openUpgrade(context, 'templates');
                 } else if (action === 'Activate Existing Key') {
                     vscode.commands.executeCommand('freebird.activateTemplateLicense');
                 }

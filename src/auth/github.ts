@@ -50,7 +50,7 @@ export async function clearSession(context: vscode.ExtensionContext): Promise<vo
  * Throws on cancellation, timeout, or failure — callers should catch and show
  * a message rather than letting it propagate silently.
  */
-export async function signInWithGitHub(context: vscode.ExtensionContext): Promise<GithubSession> {
+export async function signInWithGitHub(context: vscode.ExtensionContext, intro?: string): Promise<GithubSession> {
   if (GITHUB_CLIENT_ID.startsWith('REPLACE_WITH')) {
     throw new Error('GitHub sign-in is not configured yet (missing OAuth Client ID).');
   }
@@ -72,7 +72,7 @@ export async function signInWithGitHub(context: vscode.ExtensionContext): Promis
   await vscode.env.clipboard.writeText(codeData.user_code);
 
   const choice = await vscode.window.showInformationMessage(
-    `Sign in to Freebird with GitHub — code ${codeData.user_code} has been copied to your clipboard. ` +
+    `${intro ?? 'Sign in to Freebird with GitHub'} — code ${codeData.user_code} has been copied to your clipboard. ` +
     `Paste it on the GitHub page that opens.`,
     'Open GitHub',
     'Cancel'

@@ -10,7 +10,7 @@ import { Message } from '../ai/provider';
 import { runAgentLoop, AgentEvent, stripToolBlocks } from '../agent/loop';
 import { buildFileContext, resolveMentions, listWorkspaceFiles } from './contextBuilder';
 import { LATEST_VERSION_KEY, isOlderVersion } from '../announcement';
-import { getLicenseStatus, getPersistedLicenseHint, UPGRADE_URL, TEMPLATES_UPGRADE_URL, XENDIT_CHECKOUT_URL } from '../license/validator';
+import { getLicenseStatus, getPersistedLicenseHint, UPGRADE_URL } from '../license/validator';
 import { getTemplateWelcomeEndsAt } from '../agent/templateCatalog';
 import { getCloudEditsRemaining, DAILY_CLOUD_LIMIT } from '../license/usage';
 import { recordEditUsed, recordAgentRun, getUsageStats } from '../license/stats';
@@ -208,22 +208,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     trackEvent('quota_wall_shown');
                     break;
                 case 'upgrade':
-                    // Funnel stage 2: user clicked through to Stripe checkout
-                    vscode.env.openExternal(vscode.Uri.parse(UPGRADE_URL));
+                    // Funnel stage 2: user clicked through to checkout
+                    vscode.commands.executeCommand('freebird.upgrade', 'pro');
                     trackEvent('upgrade_clicked');
                     break;
-                case 'upgrade-local':
-                    // Same funnel stage, Xendit path — Stripe doesn't support
-                    // Indonesia/Vietnam's local e-wallet rails at all.
-                    vscode.env.openExternal(vscode.Uri.parse(XENDIT_CHECKOUT_URL));
-                    trackEvent('upgrade_clicked_local');
-                    break;
                 case 'upgrade-templates':
-                    if (TEMPLATES_UPGRADE_URL) {
-                        vscode.env.openExternal(vscode.Uri.parse(TEMPLATES_UPGRADE_URL));
-                    } else {
-                        vscode.window.showInformationMessage('Freebird Template Library purchasing isn\'t set up yet.');
-                    }
+                    vscode.commands.executeCommand('freebird.upgrade', 'templates');
                     trackEvent('template_upgrade_clicked');
                     break;
                 case 'install-ollama':
@@ -635,8 +625,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     `${getCloudEditsRemaining(this.context)}/${DAILY_CLOUD_LIMIT} cloud edits left today (Gemini Flash) — resets daily.`,
                     `After cloud edits: falls back to local Ollama if available. Your own API key (BYOK) is always free and unmetered.`,
                     `Free Agent-mode runs left: ${getAgentTrialRunsLeft(this.context, BYOK_BACKENDS.has(vscode.workspace.getConfiguration('freebird').get<string>('backend', 'cloud')))} — try one with \`/agent <request>\`.`,
-                    `[Upgrade to Pro](${UPGRADE_URL}) for unlimited cloud edits and unlimited Agent mode, or ` +
-                    `[pay with local methods](${XENDIT_CHECKOUT_URL}) (Vietnam/Indonesia e-wallets).`,
+                    `[Upgrade to Pro](${UPGRADE_URL}) for unlimited cloud edits and unlimited Agent mode.`,
                     ''
                 );
             } else {
@@ -990,8 +979,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 served = false;
                 response =
                     `**Too many requests** — you've hit the fallback rate limit (20/hr).\n\n` +
-                    `[Upgrade to Pro](${UPGRADE_URL}) (or [pay with local methods](${XENDIT_CHECKOUT_URL}) ` +
-                    `for Vietnam/Indonesia) for unlimited access, or install ` +
+                    `[Upgrade to Pro](${UPGRADE_URL}) for unlimited access, or install ` +
                     `[Ollama](https://ollama.com) for unlimited free local AI.`;
             } else {
                 trackEvent('api_error', err?.code || 'unknown');
