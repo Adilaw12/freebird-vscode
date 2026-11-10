@@ -21,6 +21,9 @@ export const EXTENSION_ID = 'TenLabs.freebird-ai';
 const STRIPE_TEMPLATES_URL = 'https://buy.stripe.com/3cI6oJ3SdgUu9ys1ylfAc04';
 // Used inside chat markdown links, where we can't run code. With Paddle on these are
 // deep links back into the extension (handled in extension.ts), which then run openUpgrade().
+/** The public checkout page. Opened with ?plan= when the buyer is not signed in; a signed link (?t=) is added when they are. */
+export const CHECKOUT_PAGE_URL = 'https://ten-labs.com.au/freebird-upgrade.html';
+
 export const UPGRADE_URL = PADDLE_CHECKOUT_ENABLED ? `vscode://${EXTENSION_ID}/upgrade?plan=pro` : `${API_BASE}/upgrade`;
 export const TEMPLATES_UPGRADE_URL = PADDLE_CHECKOUT_ENABLED ? `vscode://${EXTENSION_ID}/upgrade?plan=templates` : STRIPE_TEMPLATES_URL;
 
@@ -335,7 +338,7 @@ export async function startTrial(
  * cancel, change their card, or download invoices. Only works for Stripe-paid
  * licenses; trials and other providers get an error explaining that.
  */
-export async function openBillingPortal(licenseKey: string): Promise<{ url?: string; error?: string; code?: string }> {
+export async function openBillingPortal(licenseKey: string): Promise<{ url?: string; update?: string | null; cancel?: string | null; error?: string; code?: string }> {
     try {
         const res = await fetch(`${API_BASE}/api/billing-portal`, {
             method: 'POST',
@@ -343,11 +346,11 @@ export async function openBillingPortal(licenseKey: string): Promise<{ url?: str
             body: JSON.stringify({ key: licenseKey }),
             signal: AbortSignal.timeout(10_000)
         });
-        const data = await res.json() as { url?: string; error?: string; code?: string };
+        const data = await res.json() as { url?: string; update?: string | null; cancel?: string | null; error?: string; code?: string };
         if (!res.ok || !data.url) {
             return { error: data.error ?? 'Could not open billing.', code: data.code };
         }
-        return { url: data.url };
+        return { url: data.url, update: data.update, cancel: data.cancel };
     } catch (err: any) {
         return { error: err?.message ?? 'Network error opening billing.' };
     }
@@ -390,9 +393,28 @@ export async function openUpgrade(context: vscode.ExtensionContext, plan: Upgrad
         return;
     }
 
-    let session = await getStoredSession(context)
-        ?? await signInForPurchase(context, 'Sign in with GitHub to save your plan to your account (no license key to paste)');
-    if (!session) return;
+    // Signing in is optional: it saves the plan to the GitHub account and switches the extension on
+    // by itself. Without it the buyer pays on the plain page and pastes the license key once.
+    const openPlainCheckout = async () => {
+        
+        await vscode.env.openExternal(vscode.Uri.parse(`${CHECKOUT_PAGE_URL}?plan=${encodeURIComponent(plan)}`));
+        vscode.window.showInformationMessage(
+            'After you pay, the confirmation shows your license key. Then run "Freebird: Activate License" and paste it.'
+        );
+    };
+
+    let session = await getStoredSession(context);
+    if (!session) {
+        const pick = await vscode.window.showInformationMessage(
+            'Sign in with GitHub to save your plan to your account (no license key to paste), or continue without signing in.',
+            'Sign in with GitHub', 'Continue without signing in'
+        );
+        if (!pick) return;
+        if (pick === 'Sign in with GitHub') {
+            session = await signInForPurchase(context, 'Sign in with GitHub to save your plan to your account (no license key to paste)');
+        }
+        if (!session) { await openPlainCheckout(); return; }
+    }
 
     const requestLink = (s: GithubSession) => fetch(`${API_BASE}/api/link-token`, {
         method: 'POST',
@@ -407,7 +429,7 @@ export async function openUpgrade(context: vscode.ExtensionContext, plan: Upgrad
             // The saved sign-in expired: sign in again once.
             await clearSession(context);
             session = await signInForPurchase(context, 'Your Freebird sign-in expired. Sign in with GitHub to continue');
-            if (!session) return;
+            if (!session) { await openPlainCheckout(); return; }
             res = await requestLink(session);
         }
         const data = await res.json().catch(() => ({})) as { url?: string; error?: string; code?: string };
@@ -424,9 +446,16 @@ export async function openUpgrade(context: vscode.ExtensionContext, plan: Upgrad
             onLicenseChanged.fire();
             return;
         }
-        vscode.window.showErrorMessage(data.error ?? 'Could not start checkout. Please try again, or email support@ten-labs.com.au.');
+        if (res.status === 403) {
+            // Region block: never route around it.
+            vscode.window.showErrorMessage(data.error ?? 'Checkout is not available in your region.');
+            return;
+        }
+        vscode.window.showWarningMessage(data.error ?? 'Could not start the account-linked checkout. Continuing without signing in.');
+        await openPlainCheckout();
     } catch {
-        vscode.window.showErrorMessage('Could not reach Freebird to start checkout. Check your connection and try again.');
+        vscode.window.showWarningMessage('Could not reach Freebird to start the account-linked checkout. Continuing without signing in.');
+        await openPlainCheckout();
     }
 }
 

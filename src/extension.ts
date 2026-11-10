@@ -444,16 +444,24 @@ export async function activate(context: vscode.ExtensionContext) {
 
             trackEvent('manage_subscription_clicked');
             const result = await openBillingPortal(licenseKey);
+            if (result.update || result.cancel) {
+                // Paddle: let the person pick between updating the card and cancelling.
+                const items: { label: string; url: string }[] = [];
+                if (result.update) items.push({ label: '$(credit-card) Update payment method', url: result.update });
+                if (result.cancel) items.push({ label: '$(close) Cancel subscription', url: result.cancel });
+                const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Manage your Freebird subscription' });
+                if (pick) vscode.env.openExternal(vscode.Uri.parse(pick.url));
+                return;
+            }
             if (result.url) {
                 vscode.env.openExternal(vscode.Uri.parse(result.url));
                 return;
             }
 
-            // Trials and non-Stripe licenses have nothing to open here, so say that
-            // rather than showing a generic error.
-            if (result.code === 'NO_STRIPE_CUSTOMER') {
+            // Trials have nothing to open here, so say that rather than showing a generic error.
+            if (result.code === 'NO_SUBSCRIPTION' || result.code === 'NO_STRIPE_CUSTOMER') {
                 vscode.window.showInformationMessage(
-                    'This license is not linked to a Stripe subscription, so there is nothing to manage here. Use Freebird: Send Feedback if you need help.'
+                    'This license has no paid subscription to manage here. Use Freebird: Send Feedback if you need help.'
                 );
                 return;
             }
