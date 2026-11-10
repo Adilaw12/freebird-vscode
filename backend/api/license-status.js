@@ -10,15 +10,9 @@ import { verifySession } from '../lib/authToken.js';
 import { isLicenseActive, hasTemplateLibraryAccess } from '../lib/license.js';
 import { githubLicenseKey } from '../lib/licenseResolve.js';
 import { handleCors } from '../lib/cors.js';
+import { resolveManageLinks } from '../lib/paddleManage.js';
 
 const redis = Redis.fromEnv();
-
-// Paddle's own update-card / cancel links for the subscription that sets the plan.
-function manageLinks(license) {
-    const subs = Object.values(license.paddleSubscriptions ?? {}).filter(s => s.status !== 'cancelled');
-    const sub = subs.find(s => s.plan === license.plan) ?? subs[0];
-    return sub?.manage ?? null;
-}
 
 export default async function handler(req, res) {
     if (handleCors(req, res)) return;
@@ -47,6 +41,6 @@ export default async function handler(req, res) {
         isTeamOwner: license.plan === 'team' && license.teamOwnerKey != null && license.githubId === String(session.sub) && license.teamOwnerKey === license.key,
         email: license.email ?? null,
         expiresAt: license.expiresAt ?? null,
-        billing: manageLinks(license)
+        billing: await resolveManageLinks(license, { redis })
     });
 }

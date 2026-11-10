@@ -7,8 +7,11 @@
 
 import Stripe from 'stripe';
 import { Redis } from '@upstash/redis';
+import { resolveManageLinks } from '../lib/paddleManage.js';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+// Built on first use, so the endpoint still works for Paddle once Stripe is switched off.
+let stripeClient = null;
+const getStripe = () => (stripeClient ??= new Stripe(process.env.STRIPE_SECRET_KEY));
 const redis  = Redis.fromEnv();
 
 // Same origin rules as validate.js: the extension sends no Origin, and webviews
@@ -43,14 +46,21 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: 'Billing service unavailable' });
     }
 
-    // Trials and Xendit-paid licenses have no Stripe customer to open a portal for.
+    // Paddle subscriptions: Paddle's own update-card and cancel links.
+    if (license && Object.keys(license.paddleSubscriptions ?? {}).length > 0) {
+        const manage = await resolveManageLinks(license, { redis });
+        if (manage) return res.status(200).json({ url: manage.update ?? manage.cancel, update: manage.update, cancel: manage.cancel });
+        return res.status(502).json({ error: 'Could not load your subscription links. Please try again in a moment.' });
+    }
+
+    // Trials have no subscription to open a portal for.
     if (!license?.stripeCustomerId) {
-        return res.status(404).json({ error: 'No Stripe subscription is linked to this license.', code: 'NO_STRIPE_CUSTOMER' });
+        return res.status(404).json({ error: 'No subscription is linked to this license.', code: 'NO_SUBSCRIPTION' });
     }
 
     const appUrl = process.env.APP_URL || 'https://freebird-backend.vercel.app';
     try {
-        const session = await stripe.billingPortal.sessions.create({
+        const session = await getStripe().billingPortal.sessions.create({
             customer: license.stripeCustomerId,
             return_url: `${appUrl}/upgrade`
         });
