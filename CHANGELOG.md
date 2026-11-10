@@ -2,6 +2,15 @@
 
 ## \[Unreleased]
 
+## \[0.15.6] — 2026-11-10
+
+### Changed
+
+* **Payments move to Paddle.** Upgrade now opens a Paddle checkout instead of Stripe, so cards and local payment methods that failed before (including in India and Indonesia) work. Pro is $9.90 a month or $99 a year, Team is $25 a month for 5 seats, and the Template Library is $3 a month. Paddle is the seller of record and sends the receipt. (Backend change: already deployed.)
+* **Signing in is optional when you buy.** Sign in with GitHub and your plan is saved to your account, with no key to paste. Or skip it: after paying, the confirmation page shows a license key to paste into `Freebird: Activate License`.
+* **Manage Subscription uses Paddle.** It offers Update payment method and Cancel subscription. Trials have nothing to manage and say so.
+* **Xendit is removed.** Its checkout, webhook and recharge code are gone.
+
 ### Fixed
 
 * **Failures now say what went wrong.** A dropped connection, an unreachable network, a server error and a provider error each get their own name in the error message and in the counts, instead of all being filed as "unknown". "The AI provider returned an error" and "Free tier is temporarily at capacity" are no longer reported as "took too long".

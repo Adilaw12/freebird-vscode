@@ -16,7 +16,7 @@ export const API_BASE    = 'https://freebird-backend.vercel.app';
  * account with no key to paste. Flip to true once Paddle is live (sandbox testing:
  * build a dev copy with it on). See openUpgrade() below.
  */
-export const PADDLE_CHECKOUT_ENABLED = false;
+export const PADDLE_CHECKOUT_ENABLED = true;
 export const EXTENSION_ID = 'TenLabs.freebird-ai';
 const STRIPE_TEMPLATES_URL = 'https://buy.stripe.com/3cI6oJ3SdgUu9ys1ylfAc04';
 // Used inside chat markdown links, where we can't run code. With Paddle on these are
