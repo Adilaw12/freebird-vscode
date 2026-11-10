@@ -8,6 +8,14 @@ export function paddleBase(env = process.env.PADDLE_ENV) {
     return env === 'sandbox' ? 'https://sandbox-api.paddle.com' : 'https://api.paddle.com';
 }
 
+/** Sandbox portal links live on a sandbox-* host; live ones do not. */
+export function linksMatchEnv(manage, env = process.env.PADDLE_ENV) {
+    const urls = [manage?.update, manage?.cancel].filter(Boolean);
+    if (urls.length === 0) return false;
+    const wantSandbox = env === 'sandbox';
+    return urls.every(u => /\/\/sandbox-/.test(u) === wantSandbox);
+}
+
 /** GET /subscriptions/{id} -> { update, cancel } or null. Never throws. */
 export async function fetchManagementUrls(subId, { apiKey = process.env.PADDLE_API_KEY, env = process.env.PADDLE_ENV, fetchImpl = fetch } = {}) {
     if (!apiKey || !subId) return null;
@@ -30,13 +38,14 @@ export async function fetchManagementUrls(subId, { apiKey = process.env.PADDLE_A
  * Links for the subscription that sets the licence's plan. Uses the saved copy,
  * otherwise fetches and saves it. Returns null when there is nothing to manage.
  */
-export async function resolveManageLinks(license, { redis, fetchUrls = fetchManagementUrls } = {}) {
+export async function resolveManageLinks(license, { redis, fetchUrls = fetchManagementUrls, env = process.env.PADDLE_ENV } = {}) {
     if (!license) return null;
     const entries = Object.entries(license.paddleSubscriptions ?? {}).filter(([, s]) => s.status !== 'cancelled');
     const picked = entries.find(([, s]) => s.plan === license.plan) ?? entries[0];
     if (!picked) return null;
     const [subId, sub] = picked;
-    if (sub.manage) return sub.manage;
+    // A saved link from the other environment (a sandbox test licence in live) is never returned.
+    if (sub.manage && linksMatchEnv(sub.manage, env)) return sub.manage;
 
     const manage = await fetchUrls(subId);
     if (!manage) return null;

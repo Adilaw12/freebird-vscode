@@ -1,5 +1,5 @@
 // test/paddle-manage.test.js — management links fetched from Paddle and saved.
-const { fetchManagementUrls, resolveManageLinks, paddleBase } = await import('../lib/paddleManage.js');
+const { fetchManagementUrls, resolveManageLinks, paddleBase, linksMatchEnv } = await import('../lib/paddleManage.js');
 
 let total = 0, failed = 0;
 const check = (l, c) => { total++; if (!c) failed++; console.log(`${c ? 'PASS' : 'FAIL'} — ${l}`); };
@@ -50,6 +50,30 @@ check('missing management_urls -> null', (await fetchManagementUrls('sub_1', { a
     const m = await resolveManageLinks(l, { redis, fetchUrls: async () => ({ update: 'u', cancel: 'c' }) });
     check('links still returned if the record changed meanwhile', m.update === 'u');
     check('and the changed record is not overwritten', Object.keys((await redis.get(`license:${l.key}`)).paddleSubscriptions).length === 0);
+}
+
+const sbx = { update: 'https://sandbox-customer-portal.paddle.com/cpl_x?a=1', cancel: 'https://sandbox-customer-portal.paddle.com/cpl_x?a=2' };
+const liv = { update: 'https://customer-portal.paddle.com/cpl_y?a=1', cancel: 'https://customer-portal.paddle.com/cpl_y?a=2' };
+check('sandbox links match sandbox env only', linksMatchEnv(sbx, 'sandbox') && !linksMatchEnv(sbx, 'production'));
+check('live links match production env only', linksMatchEnv(liv, 'production') && !linksMatchEnv(liv, 'sandbox'));
+check('empty links match nothing', !linksMatchEnv(null, 'production') && !linksMatchEnv({}, 'sandbox'));
+{
+    const redis = makeRedis(); const l = lic({ sub_1: { plan: 'pro', status: 'active', manage: sbx } });
+    await redis.set(`license:${l.key}`, l);
+    let calls = 0;
+    const m = await resolveManageLinks(l, { redis, env: 'production', fetchUrls: async () => { calls++; return liv; } });
+    check('stale sandbox link in production is refetched', m.update === liv.update && calls === 1);
+    check('and the live link replaces the saved sandbox one', (await redis.get(`license:${l.key}`)).paddleSubscriptions.sub_1.manage.update === liv.update);
+}
+{
+    const l = lic({ sub_1: { plan: 'pro', status: 'active', manage: sbx } });
+    const m = await resolveManageLinks(l, { env: 'production', fetchUrls: async () => null });
+    check('stale link and Paddle cannot supply a new one -> null, never the sandbox link', m === null);
+}
+{
+    const l = lic({ sub_1: { plan: 'pro', status: 'active', manage: liv } });
+    let calls = 0; const m = await resolveManageLinks(l, { env: 'production', fetchUrls: async () => { calls++; return null; } });
+    check('matching saved link is used without calling Paddle', m.update === liv.update && calls === 0);
 }
 console.log(`\n${total - failed}/${total} checks passed`);
 if (failed > 0) process.exit(1);
