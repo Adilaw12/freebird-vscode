@@ -313,13 +313,13 @@ export function isValidEmail(value: string): boolean {
 export async function startTrial(
     context: vscode.ExtensionContext,
     machineId: string,
-    email?: string
+    email: string
 ): Promise<StartTrialResult> {
     try {
         const res = await fetch(`${API_BASE}/api/start-trial`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ machineId, ...(email && { email }) }),
+            body: JSON.stringify({ machineId, email }),
             signal: AbortSignal.timeout(10_000)
         });
 
