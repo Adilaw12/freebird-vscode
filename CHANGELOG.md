@@ -2,6 +2,10 @@
 
 ## \[Unreleased]
 
+### Changed
+
+* **Pro tab completions are capped at 200 a day** (was 1,000). At the old cap, a heavy user cost more in model fees than the $9.90 price. At the cap, completions pause until midnight UTC, and the message points to Ollama, which has no limit.
+
 ## \[0.15.6] — 2026-11-10
 
 ### Changed
