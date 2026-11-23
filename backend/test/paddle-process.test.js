@@ -33,7 +33,7 @@ const mk = () => {
         deps(extra = {}) {
             return {
                 redis: this.redis, prices,
-                now: () => new Date(Date.UTC(2026, 10, 9, 1, 0, clock++)).toISOString(),
+                now: () => new Date(Date.now() + clock++ * 1000).toISOString(),
                 fetchEmail: async () => 'buyer@example.com',
                 countDaily: async n => { counts[n] = (counts[n] ?? 0) + 1; },
                 ...extra
@@ -42,7 +42,8 @@ const mk = () => {
     };
 };
 let n = 0;
-const at = i => new Date(Date.UTC(2026, 10, 9, 1, 0, i)).toISOString();
+// Event times are relative to now, so the 7-day grace period is judged from the present.
+const at = i => new Date(Date.now() + i * 1000).toISOString();
 const ev = (event_type, data, i) => ({ event_id: `evt_${++n}`, event_type, occurred_at: at(i), data });
 const link = (id, login = 'dev') => ({ linkToken: signLinkToken({ githubId: id, login, plan: 'pro' }) });
 

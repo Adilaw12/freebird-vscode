@@ -106,6 +106,9 @@ async function withConnectTimeout(ms, doFetch) {
 }
 
 export default async function handler(req, res) {
+    // Timing marks, logged once per request, to find where the time goes (completions feel slow).
+    const t0 = Date.now();
+    const marks = {};
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -256,6 +259,7 @@ export default async function handler(req, res) {
     const dailyLimit = isCompletion ? COMPLETION_DAILY_LIMIT : DAILY_LIMIT;
     const ipDailyLimit = isCompletion ? COMPLETION_IP_DAILY_LIMIT : IP_DAILY_LIMIT;
     let sessionUsed = 0, ipUsed = 0;
+    marks.beforeQuota = Date.now() - t0;
 
     if (!unmetered && !agentTrialReserved) {
         const result = await reserveQuota(redis, quotaKeys, {
@@ -428,6 +432,7 @@ export default async function handler(req, res) {
             }
         }
 
+        marks.beforeUpstream = Date.now() - t0;
         if (!upstream) {
             const result = await withConnectTimeout(30_000, signal => fetchGeminiWithFallback(
                 'streamGenerateContent',
@@ -495,6 +500,7 @@ export default async function handler(req, res) {
             }
         }
 
+        marks.upstreamHeaders = Date.now() - t0;
         const reader  = upstream.body.getReader();
         const splitter = createLineSplitter(); // see lib/sseLines.js for why chunks aren't parsed in isolation
 
@@ -537,6 +543,8 @@ export default async function handler(req, res) {
             });
         }
 
+        marks.total = Date.now() - t0;
+        console.log("chat-timing", JSON.stringify({ isCompletion, provider, ...marks }));
         res.end();
     } catch (err) {
         console.error('Chat handler error:', err);
