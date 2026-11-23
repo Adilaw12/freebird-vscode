@@ -47,7 +47,7 @@ const COMPLETION_IP_DAILY_LIMIT = 1000;
 // Pro/Team/trial completions skip the free bucket, but still get a per-license
 // ceiling so one runaway editor can't generate unbounded cost. Completions are
 // routed to Gemini for paid users too (Haiku is for chat and agent work).
-const PRO_COMPLETION_DAILY_LIMIT = 1000;
+const PRO_COMPLETION_DAILY_LIMIT = 200;
 // isTabCompletion is client-supplied, so a modified client could label a chat
 // message as a "completion" to use the larger bucket. Capping output length
 // for that bucket makes it useless for real chat (completions request 128).
