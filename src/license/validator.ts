@@ -17,7 +17,10 @@ export const API_BASE    = 'https://freebird-backend.vercel.app';
  * build a dev copy with it on). See openUpgrade() below.
  */
 export const PADDLE_CHECKOUT_ENABLED = true;
-export const EXTENSION_ID = 'TenLabs.freebird-ai';
+// Read from this build's own package.json, so a copy published under another publisher name
+// (e.g. TenLabsAU on Open VSX) gets deep links that reach itself.
+const ownPackage = require('../../package.json') as { publisher: string; name: string };
+export const EXTENSION_ID = `${ownPackage.publisher}.${ownPackage.name}`;
 const STRIPE_TEMPLATES_URL = 'https://buy.stripe.com/3cI6oJ3SdgUu9ys1ylfAc04';
 // Used inside chat markdown links, where we can't run code. With Paddle on these are
 // deep links back into the extension (handled in extension.ts), which then run openUpgrade().
@@ -310,13 +313,13 @@ export function isValidEmail(value: string): boolean {
 export async function startTrial(
     context: vscode.ExtensionContext,
     machineId: string,
-    email?: string
+    email: string
 ): Promise<StartTrialResult> {
     try {
         const res = await fetch(`${API_BASE}/api/start-trial`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ machineId, ...(email && { email }) }),
+            body: JSON.stringify({ machineId, email }),
             signal: AbortSignal.timeout(10_000)
         });
 
@@ -403,18 +406,11 @@ export async function openUpgrade(context: vscode.ExtensionContext, plan: Upgrad
         );
     };
 
+    // Default is the plain checkout. Asking for GitHub sign-in before payment lost most of the
+    // people who reached it (CHANGELOG: sign-in step lost ~86%). Signed-in users keep the
+    // one-click path below.
     let session = await getStoredSession(context);
-    if (!session) {
-        const pick = await vscode.window.showInformationMessage(
-            'Sign in with GitHub to save your plan to your account (no license key to paste), or continue without signing in.',
-            'Sign in with GitHub', 'Continue without signing in'
-        );
-        if (!pick) return;
-        if (pick === 'Sign in with GitHub') {
-            session = await signInForPurchase(context, 'Sign in with GitHub to save your plan to your account (no license key to paste)');
-        }
-        if (!session) { await openPlainCheckout(); return; }
-    }
+    if (!session) { await openPlainCheckout(); return; }
 
     const requestLink = (s: GithubSession) => fetch(`${API_BASE}/api/link-token`, {
         method: 'POST',

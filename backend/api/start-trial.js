@@ -31,11 +31,14 @@ export default async function handler(req, res) {
     }
     const safeMachineId = machineId.trim().slice(0, 48);
 
-    // Optional. Anything that isn't a plausible address is dropped, not rejected,
-    // so a typo never blocks the trial itself.
+    // Required: the trial is the only way to reach the user after they leave the
+    // editor (reminders, performance reports, help). An invalid address is refused.
     const email = typeof rawEmail === 'string' && rawEmail.trim().length <= 254 && EMAIL_PATTERN.test(rawEmail.trim())
         ? rawEmail.trim().toLowerCase()
         : null;
+    if (!email) {
+        return res.status(400).json({ error: 'Enter a valid email address to start the trial.', code: 'EMAIL_REQUIRED' });
+    }
 
     const trialMarkerKey = `trial:machine:${safeMachineId}`;
 

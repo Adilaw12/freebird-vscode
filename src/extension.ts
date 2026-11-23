@@ -363,24 +363,24 @@ export async function activate(context: vscode.ExtensionContext) {
         }),
 
         vscode.commands.registerCommand('freebird.startTrial', async () => {
-            // Asked before the trial starts so trial reminders can reach the user
-            // later. Enter on an empty box skips it; Esc cancels starting the trial.
+            // The email is required: it is the only way to reach a trial user after
+            // they leave the editor (reminders, performance reports, help). Esc cancels.
             const emailInput = await vscode.window.showInputBox({
                 title: 'Start your free 7-day Pro trial',
-                prompt: 'Email for trial reminders and help (optional). Press Enter to skip.',
+                prompt: 'Enter your email to start the trial. We use it only for your trial reminders and help with Freebird.',
                 placeHolder: 'you@example.com',
                 ignoreFocusOut: true,
                 validateInput: value => {
                     const trimmed = value.trim();
-                    return trimmed === '' || isValidEmail(trimmed) ? undefined : 'Enter a valid email, or leave this empty to skip.';
+                    return isValidEmail(trimmed) ? undefined : 'Enter a valid email address to start the trial.';
                 }
             });
             if (emailInput === undefined) {
                 trackEvent('trial_start_cancelled');
                 return;
             }
-            const email = emailInput.trim() || undefined;
-            trackEvent(email ? 'trial_email_given' : 'trial_email_skipped');
+            const email = emailInput.trim();
+            trackEvent('trial_email_given');
 
             await vscode.window.withProgress(
                 { location: vscode.ProgressLocation.Notification, title: 'Starting your Pro trial…', cancellable: false },
